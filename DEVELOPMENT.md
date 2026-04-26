@@ -18,17 +18,22 @@ That's it. Nothing else needs to be installed.
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/YOUR_TEAM_REPO/tree-notes.git
+git clone https://github.com/KJ793/tree-notes.git
 cd tree-notes
 ```
 
-### 2. Set up your environment variables
+### 2. Switch to the dev branch
+```bash
+git checkout dev
+```
+
+### 3. Set up your environment variables
 ```bash
 cp .env.example .env
 ```
 You do not need to change anything in `.env` for local development. The default values will work out of the box.
 
-### 3. Start everything
+### 4. Start everything
 ```bash
 docker compose up -d
 ```
@@ -40,7 +45,7 @@ This will start four services:
 | Database | PostgreSQL | localhost:5432 |
 | pgAdmin | Database browser UI | http://localhost:5050 |
 
-### 4. Set up the database
+### 5. Set up the database
 Run this once after your first `docker compose up`:
 ```bash
 docker compose run backend alembic upgrade head
