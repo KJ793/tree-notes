@@ -1,4 +1,4 @@
-# TreeNotes — Development Setup Guide
+# TreeNotes - Development Setup Guide
 
 This guide will get the full TreeNotes development environment running on your machine. You do not need to install Python, PostgreSQL, or any other dependencies manually. Everything runs inside Docker.
 
@@ -9,8 +9,6 @@ This guide will get the full TreeNotes development environment running on your m
 The only thing you need to install is **Docker Desktop**:
 - Download it here: https://www.docker.com/products/docker-desktop
 - Once installed, open Docker Desktop and wait until it says **"Docker Desktop is running"** in the system tray
-
-That's it. Nothing else needs to be installed.
 
 ---
 
@@ -42,7 +40,7 @@ This will start four services:
 |---------|-----------|-------------------|
 | Frontend | HTML/CSS/JS served by Nginx | http://localhost:8080 |
 | Backend | FastAPI (Python) | http://localhost:8000 |
-| Database | PostgreSQL | localhost:5432 |
+| Database | PostgreSQL | http://localhost:5432 |
 | pgAdmin | Database browser UI | http://localhost:5050 |
 
 ### 5. Set up the database
@@ -64,7 +62,7 @@ If you want to stop everything AND wipe the database:
 ```bash
 docker compose down -v
 ```
-⚠️ The `-v` flag deletes all data. Only use this if you want a completely fresh start.
+The `-v` flag deletes all data. Only use this if you want a completely fresh start.
 
 ---
 
