@@ -17,18 +17,15 @@ class OllamaResponse(TypedDict):
     response: str
     done: bool
 
-
-def call_phi35(prompt: str) -> str:  # this function returns a string datatype
+def call_phi35(prompt: str) -> str:
     model = "phi3.5"
-    url = "http://host.docker.internal:11434/api/generate"
+    url = "http://ollama:11434/api/generate"
     payload = {"model": model, "prompt": prompt, "stream": False}
 
-    r = requests.post(url, json=payload)
-    r.raise_for_status()  # confirm HTTP status code good: 200-299; bad:400+ and will raise exception HTTPError
+    r = requrests.post(url, json=payload)
+    r.raise_for_status()
 
-    # cast the response .json() dict with structure of OllamaResponse class -> avoid ambiguity of type Any
     data = cast(OllamaResponse, r.json())
-
     return data["response"]
 
 

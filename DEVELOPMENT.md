@@ -83,6 +83,52 @@ pgAdmin lets you visually browse the database. Useful for checking your data dur
 
 ---
 
+## Accessing Ollama Models via Docker
+
+### How it works
+Goal: Have two separate Docker container: 1 for the backend server; 1 for the ollama.
+Ideally, all team members would have Nvidia and the Nvidia Container Toolkit, plus Ollama service. Having two containers avoids this requirement however, and if you don't have Nvidia hardware, you can still develop on the system without needing to run the second Ollama container.
+
+### Requirements
+1: NVIDIA GPU
+2: NVIDIA Container Toolkit (installed). For Linux: `sudo apt-get install -y nvidia-container-toolkit`
+3: Ensure your `docker-compose.yml` file is updated to include Ollama service components, volumes, and requirements (as per GitHub push)
+The Dockerfile is fine as is, the backend container will simply call: `http://ollama:11434` and we don't need to make any adjustments here.
+
+### Have your Docker include Ollama
+
+First, make sure your Ollama service is turned off. For Linux: `sudo systemctl disable ollama` and verify with `sudo systemctl status ollama`.
+
+Next, ensure your yml file is up to date with Ollama-relevant code. NOTE: YAML files use spaces -> DO NOT use Tabs as these will cause parsing errors during compilation.
+
+Then, run `docker compose up --build` and this should create your two containers. You can confirm using `docker ps` and multiple containers should appear, including one called "treenotes_ollama".
+
+We must provide instruction to the the Nvidia Container Toolkit to run inside docker.
+For Linux: `sudo nvidia-ctk runtime configure --runtime=docker`
+Restart Docker: `sudo systemctl restart docker`
+<Important>: To confirm GPU passthrough via the Toolkit on Linux: `docker run --rm --gpus all nvidia/cuda:<version> nvidia-smi`. This command should give you the GPU/s visible via Docker, their Driver, and their CUDA if available. If no GPU's listed, you've got a problem. Make sure your GPU is being used by your system in general.
+
+Now that your docker compose has a separate Ollama Container with GPU access via NVIDIA's toolkit, we can build the docker stack:
+Linux: `docker compose up --build` (this will start the entire application, backend, frontend, postgres, pgadmin, and the GPU container
+
+Now that the full docker stack is running, we can install the AI Model of your choice:
+`docker exec -it treenotes_ollama ollama pull phi3.5`
+--> Replace "phi3.5" with the model of your choice. Keep in mind the size of your GPU; make sure to leave a few GB for overhead.
+--> Side Note: the command "ollama pull <model_name>" is how you install your model via the Ollama service. The part "docker exec -it" says this is a command you want to run, "treenotes_ollama" specific inside which container to run the command, and the final part is the command you want to run inside that docker container.
+
+To confirm your docker container has the model stored:
+`docker exec -it treenotes_ollama ollama list`
+You should see something like:
+NAME             ID              SIZE      MODIFIED
+phi3.5:latest    61819fb370a3    2.2 GB    2 minutes ago
+
+To confirm everything is running correctly, run `docker ps`. This should give you all the active containers, including one called "treenotes_ollama" and its active port :11434.
+
+### Starting Only Ollama
+Run `docker compose up ollama` should run only the containerised Ollama service.
+Run `docker compose up backend ollama` should run both the backend and Ollama service.
+---
+
 ## For the Database & DevOps Role
 
 ### Running migrations

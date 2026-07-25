@@ -18,9 +18,12 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT}/${POSTGRES_DB}
+      - OLLAMA_URL=http://ollama:11434
     depends_on:
       db:
         condition: service_healthy
+      ollama:
+        condition: service_started
     volumes:
       - ./backend:/app/backend
     extra_hosts:
@@ -60,5 +63,19 @@ services:
       db:
         condition: service_healthy
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: treenotes_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
 volumes:
   postgres_data:
+  ollama:
