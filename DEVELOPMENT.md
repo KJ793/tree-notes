@@ -86,34 +86,63 @@ pgAdmin lets you visually browse the database. Useful for checking your data dur
 ## Accessing Ollama Models via Docker
 
 ### How it works
-Goal: Have two separate Docker container: 1 for the backend server; 1 for the ollama.
+**Goal:** Have two separate Docker container: 1 for the backend server; 1 for the ollama.
+
 Ideally, all team members would have Nvidia and the Nvidia Container Toolkit, plus Ollama service. Having two containers avoids this requirement however, and if you don't have Nvidia hardware, you can still develop on the system without needing to run the second Ollama container.
 
 ### Requirements
-1: NVIDIA GPU
-2: NVIDIA Container Toolkit (installed). For Linux: `sudo apt-get install -y nvidia-container-toolkit`
-3: Ensure your `docker-compose.yml` file is updated to include Ollama service components, volumes, and requirements (as per GitHub push)
-The Dockerfile is fine as is, the backend container will simply call: `http://ollama:11434` and we don't need to make any adjustments here.
+1. NVIDIA GPU
+2. NVIDIA Container Toolkit (installed).
+For Linux:
+```bash
+sudo apt-get install -y nvidia-container-toolkit
+```
+3. Ensure your *docker-compose.yml* file is updated to include Ollama service components, volumes, and requirements (as per GitHub push)
+4. The Dockerfile is fine as is, the backend container will simply call: "http://treenotes_ollama:11434" and we don't need to make any adjustments here.
 
 ### Have your Docker include Ollama
 
-First, make sure your Ollama service is turned off. For Linux: `sudo systemctl disable ollama` and verify with `sudo systemctl status ollama`.
+First, make sure your Ollama service is turned off.
+For Linux:
+```bash
+sudo systemctl disable ollama
+```
+and verify with
+```bash
+sudo systemctl status ollama
+```
 
 Next, ensure your yml file is up to date with Ollama-relevant code. NOTE: YAML files use spaces -> DO NOT use Tabs as these will cause parsing errors during compilation.
 
-Then, run `docker compose up --build` and this should create your two containers. You can confirm using `docker ps` and multiple containers should appear, including one called "treenotes_ollama".
+Then, run
+```bash
+docker compose up --build
+```
+and this should create your two containers. You can confirm using `docker ps` and multiple containers should appear, including one called "treenotes_ollama".
 
 We must provide instruction to the the Nvidia Container Toolkit to run inside docker.
-For Linux: `sudo nvidia-ctk runtime configure --runtime=docker`
-Restart Docker: `sudo systemctl restart docker`
-<Important>: To confirm GPU passthrough via the Toolkit on Linux: `docker run --rm --gpus all nvidia/cuda:<version> nvidia-smi`. This command should give you the GPU/s visible via Docker, their Driver, and their CUDA if available. If no GPU's listed, you've got a problem. Make sure your GPU is being used by your system in general.
+For Linux:
+```bash
+sudo nvidia-ctk runtime configure --runtime=docker
+```
+Restart Docker:
+```bash
+sudo systemctl restart docker
+```
+**Important**: To confirm GPU passthrough via the Toolkit on Linux:
+```bash
+docker run --rm --gpus all nvidia/cuda:<version> nvidia-smi
+```
+This command should give you the GPU/s visible via Docker, their Driver, and their CUDA if available. If no GPU's listed, you've got a problem. Make sure your GPU is being used by your system in general.
 
 Now that your docker compose has a separate Ollama Container with GPU access via NVIDIA's toolkit, we can build the docker stack:
-Linux: `docker compose up --build` (this will start the entire application, backend, frontend, postgres, pgadmin, and the GPU container
+Linux: `docker compose up --build` (this will start the entire application, backend, frontend, postgres, pgadmin, and the GPU container.
 
 Now that the full docker stack is running, we can install the AI Model of your choice:
-`docker exec -it treenotes_ollama ollama pull phi3.5`
-`docker exec -it treenotes_ollama ollama pull qwen2.5-coder`
+```bash
+docker exec -it treenotes_ollama ollama pull phi3.5
+docker exec -it treenotes_ollama ollama pull qwen2.5-coder
+```
 --> Replace "phi3.5" or "qwen2.5-coder" with the model of your choice. Keep in mind the size of your GPU; make sure to leave a few GB for runtime overhead.
 --> In this case, we are using two different models for two different roles:
 ----> qwen2.5-coder is trained on code, documentation, and structured formats. Coder-models are far more consistent at obeying schemas, staying inside JSON, and following strict formatting rules. Therefore, Qwen2.5-Coder is used to return structured JSON, semantic scoring, and snake_case syntax.
@@ -122,17 +151,21 @@ Now that the full docker stack is running, we can install the AI Model of your c
 Side Note: the command "ollama pull <model_name>" is how you install your model via the Ollama service directly on your machine. The part "docker exec -it" says this is a command you want to run inside docker, "treenotes_ollama" is specific to in which container to run the command, and the final part is the command you want to run inside that docker container. In our case, we want ollama to pull (download) a model into our docker container.
 
 To confirm your docker container has the model stored:
-`docker exec -it treenotes_ollama ollama list`
+```bash
+docker exec -it treenotes_ollama ollama list
+```
 You should see something like:
-NAME                    ID              SIZE      MODIFIED
-qwen2.5-coder:latest    dae161e27b0e    4.7 GB    2 minutes ago
-phi3.5:latest           61819fb370a3    2.2 GB    3 minutes ago
+|NAME | ID | SIZE | MODIFIED|
+| ----------------| ----------- | -------------- | --------------|
+|qwen2.5-coder:latest | dae161e27b0e | 4.7 GB | 2 minutes ago |
+|phi3.5:latest | 61819fb370a3 | 2.2 GB | 3 minutes ago |
 
-To confirm everything is running correctly, run `docker ps`. This should give you all the active containers, including one called "treenotes_ollama" and its active port :11434.
+To confirm everything is running correctly, run:
+```bash
+docker ps
+```
+This should give you all the active containers, including one called **treenotes_ollama** and its active port **11434**.
 
-### Starting Only Ollama
-Run `docker compose up ollama` should run only the containerised Ollama service.
-Run `docker compose up backend ollama` should run both the backend and Ollama service.
 ---
 
 ## For the Database & DevOps Role
