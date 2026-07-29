@@ -113,14 +113,20 @@ Linux: `docker compose up --build` (this will start the entire application, back
 
 Now that the full docker stack is running, we can install the AI Model of your choice:
 `docker exec -it treenotes_ollama ollama pull phi3.5`
---> Replace "phi3.5" with the model of your choice. Keep in mind the size of your GPU; make sure to leave a few GB for overhead.
---> Side Note: the command "ollama pull <model_name>" is how you install your model via the Ollama service. The part "docker exec -it" says this is a command you want to run, "treenotes_ollama" specific inside which container to run the command, and the final part is the command you want to run inside that docker container.
+`docker exec -it treenotes_ollama ollama pull qwen2.5-coder`
+--> Replace "phi3.5" or "qwen2.5-coder" with the model of your choice. Keep in mind the size of your GPU; make sure to leave a few GB for runtime overhead.
+--> In this case, we are using two different models for two different roles:
+----> qwen2.5-coder is trained on code, documentation, and structured formats. Coder-models are far more consistent at obeying schemas, staying inside JSON, and following strict formatting rules. Therefore, Qwen2.5-Coder is used to return structured JSON, semantic scoring, and snake_case syntax.
+----> Phi3.5 is trained heavily on natural language and tends to add explanations, commentary, and conversational filler. This makes it great for chat-style interactions, but unreliable for strict JSON schemas. Therefore, Phi3.5 is used for summary and conversational responses.
+
+Side Note: the command "ollama pull <model_name>" is how you install your model via the Ollama service directly on your machine. The part "docker exec -it" says this is a command you want to run inside docker, "treenotes_ollama" is specific to in which container to run the command, and the final part is the command you want to run inside that docker container. In our case, we want ollama to pull (download) a model into our docker container.
 
 To confirm your docker container has the model stored:
 `docker exec -it treenotes_ollama ollama list`
 You should see something like:
-NAME             ID              SIZE      MODIFIED
-phi3.5:latest    61819fb370a3    2.2 GB    2 minutes ago
+NAME                    ID              SIZE      MODIFIED
+qwen2.5-coder:latest    dae161e27b0e    4.7 GB    2 minutes ago
+phi3.5:latest           61819fb370a3    2.2 GB    3 minutes ago
 
 To confirm everything is running correctly, run `docker ps`. This should give you all the active containers, including one called "treenotes_ollama" and its active port :11434.
 

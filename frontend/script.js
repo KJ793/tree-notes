@@ -3,7 +3,7 @@
 // --------------------------------------------------------------------------
 
 async function ai() {
-	console.log("AI called");
+	alert("Please check browser console log for AI output.")
 
 	const textContainer = document.querySelector("#text .container");
 	const prompt = textContainer.innerText.trim();
@@ -21,7 +21,8 @@ async function ai() {
 
 	const data = await response.json();
 
-	alert("AI says:\n\n" + data.output);
+	// alert("AI says:\n\n" + data.output);
+	console.log("AI says:\n", JSON.stringify(data.output, null, 2));
 
 	// use data.output to create nodes and links
 	// store data.output into the database
