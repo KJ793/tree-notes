@@ -1,6 +1,5 @@
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
-import DashboardHeader from "./components/DashboardHeader";
 import DashboardContent from "./components/DashboardContent";
 
 function Dashboard() {
@@ -12,10 +11,6 @@ function Dashboard() {
         <Sidebar />
 
         <section className="dashboard-main">
-          <DashboardHeader />
-
-          <p className="dashboard-welcome">Welcome back!</p>
-
           <DashboardContent />
         </section>
       </div>
