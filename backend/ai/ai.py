@@ -31,6 +31,7 @@ class Concept(TypedDict):
 class ConceptGraphResponse(TypedDict):
     concepts: list[Concept]
 
+
 ### Simple Prompts for use in Frontend Testing
 
 # Roses grow best in sunny gardens. Bees are attracted to their bright colors and sweet fragrance. When bees visit roses, they help pollinate the flowers, allowing new blooms to form. Without enough sunlight or pollination, roses struggle to grow strong and healthy.
@@ -38,6 +39,7 @@ class ConceptGraphResponse(TypedDict):
 # Cacti store water in their thick stems to survive in hot deserts. Their spines protect them from animals and help reduce water loss. When rainfall occurs, cacti absorb moisture quickly, allowing them to grow new stems. Without enough sunlight, cacti become weak and struggle to thrive.
 
 # Volcanoes erupt when pressure builds beneath the Earth’s crust. Lava flows from the crater, destroying plants and reshaping the landscape. Ash clouds rise into the sky, affecting air quality and blocking sunlight. After an eruption, minerals in the lava help enrich the soil, allowing new plants to grow.
+
 
 concept_extraction_template = """
 You are an AI that extracts concepts and relationships from text.
@@ -150,7 +152,6 @@ JSON:
 Your Text to analyse:
 """
 
-
 def generate_graph(prompt: str) -> str:
     url = "http://treenotes_ollama:11434/api/generate"
     developed_prompt = concept_extraction_template + "\n<<<\n" + prompt + "\n>>>"
@@ -170,10 +171,11 @@ def generate_graph(prompt: str) -> str:
 
     return cast(ConceptGraphResponse, parsed)
 
-
 @router.post("/generate")
 def generate(req: GenerateRequest):
+	print("Backend received prompt:", req.prompt)
     output = generate_graph(req.prompt)
+    print("Backend returning output:", output)
     return {"output": output}
 
 
@@ -186,7 +188,6 @@ def generate_summary(prompt: str) -> str:
 
     data = cast(OllamaResponse, r.json())
     return data["response"]
-
 
 @router.post("/summarise")
 def summarise(req: GenerateRequest):
