@@ -1,0 +1,288 @@
+*{
+  box-sizing: border-box;
+}
+
+body{
+  background: linear-gradient(180deg, #08111f 0%,#0b1428 60%,#111827 100%
+  );
+}
+
+
+.maincontent {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: center;
+  min-height: 70vh;
+
+}
+
+.herosection{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 520px;
+}
+
+.herosection h1 {
+  font-size: 64px;
+  line-height: 1.05;
+  margin-bottom: 10px;
+  font-weight: 700;
+  letter-spacing: -2px;
+
+}
+
+.herosection h1 span {
+  color: #6f6ce8;
+}
+
+.herosection p {
+ margin: 0;
+ max-width: 460px;
+ margin-top: 18px;
+ text-align: left;
+ font-size: 20px;
+ line-height: 1.6;
+ color: #a8b1c4;
+}
+
+.logincard{
+  width: 100%;
+  max-width: 480px;
+  padding: 48px;
+  background:#0f1323;
+  border: 1px solid #2f3654;
+  border-radius: 18px;
+  box-shadow:0 15px 40px rgba(0,0,0,.45);
+}
+
+.logincard h2 {
+  margin: 0 0 8px;
+  font-size: 30px;
+}
+
+.loginsubtitle {
+  margin: 0 0 24px;
+  color: #b5bccb;
+}
+
+.loginsection{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding-top: 30px;
+  
+
+}
+
+.logincard form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.logincard input {
+  width: 100%;
+  padding: 14px 16px;
+  background:#090b14;
+
+  border-radius: 6px;
+  border: 1px solid #4c46d7;
+  color:white;
+  outline:none;
+}
+
+.logincard input:focus{
+    border-color:#716cff;
+
+    box-shadow:0 0 12px rgba(110,104,255,.35);
+}
+
+.navbar{
+
+display: flex;
+align-items: center;
+justify-content: space-between;
+padding: 24px 0;
+}
+
+.navlinks{
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.navlinks a {
+  color: white;
+  text-decoration: none;
+}
+
+.navlinks button {
+  padding: 10px 22px;
+  border: none;
+  border-radius: 7px;
+  background: #635bdf;
+  color: white;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.loginpage {
+  width: 100%;
+  margin: 0;
+  padding: 10px 40px;
+}
+
+.loginbutton {
+  width: 100%;
+  padding: 14px;
+  margin-top: 10px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    #6966f3,
+    #2ccc63
+  );
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+
+  cursor: pointer;
+  transition: background 0.4s ease;
+}
+
+.loginbutton:hover {
+  background: #5548d8;
+}
+
+.logo h2 {
+  margin: 0;
+  font-size: 34px;
+
+  
+}
+.logo p{
+    margin-top:4px;
+    color:#9ea6b8;
+    font-size:15px;
+}
+
+.forgotpassword{
+  align-self: flex-end;
+  color: #c5cad6;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.divider{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.divider span {
+  flex: 1;
+  height: 1px;
+  background: #454b73;
+}
+
+.divider p {
+  margin: 0;
+  font-size: 13px;
+  color: #c5cad6;
+}
+
+.googlebutton{
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #4c46d7;
+  border-radius: 8px;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+}
+
+.footer{
+    text-align:center;
+    color:#9ca3af;
+    font-size:14px;
+    padding:30px 0;
+}
+
+.graphpreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 24px;
+}
+
+
+/* Dashboard */
+
+.dashboard-layout {
+  display: flex;
+  align-items: flex-start;
+}
+
+.sidebar {
+  width: 260px;
+  min-width: 260px;
+  padding: 30px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sidebar button,
+.sidebar a {
+  width: 100%;
+  text-align: left;
+}
+
+.dashboard-main {
+  flex: 1;
+  padding: 40px;
+}
+
+.welcome-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 60px;
+  padding: 50px;
+  border-radius: 18px;
+  background: #161d2c;
+}
+
+.welcome-text {
+  flex: 1;
+  text-align: left;
+}
+
+.welcome-text ul {
+  padding-left: 24px;
+}
+
+.welcome-text h1 {
+  margin: 0 0 30px;
+}
+
+.welcome-image {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.welcome-image img {
+  width: 100%;
+  max-width: 320px;
+}
