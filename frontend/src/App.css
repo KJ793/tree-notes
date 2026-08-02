@@ -286,3 +286,58 @@ padding: 24px 0;
   width: 100%;
   max-width: 320px;
 }
+
+
+.note-workspace{
+
+  width: 100%;
+
+}
+
+.note-title{
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 15px;
+}
+
+.notes-layout{
+  display: flex;
+  gap: 20px;
+}
+
+.raw-notes, 
+.graph-panel{
+  flex: 1;
+  padding: 15px;
+  border: 1px solid #ccc;
+}
+
+.text-area{
+  width: 100%;
+  min-height: 250px;
+}
+
+.summary-panel{
+  margin-top: 20px;
+  padding: 15px;
+  border: 1px solid #ccc;
+
+
+}
+
+.summary-header{
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+
+}
+
+.summary-content{
+  display: flex;
+  gap: 10px;
+}
+
+.summary-content textarea {
+  width: 50%;
+  min-height: 100px;
+}
