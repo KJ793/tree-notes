@@ -1,12 +1,14 @@
 from typing import cast
 
-import requests, json, re
+import requests, json
 from fastapi import APIRouter
 from .models import GenerateGraph, GenerateSummary, SummaryResponse, ConceptGraphResponse
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
-ollama_url = "http://treenotes_ollama:11434/api/generate"
+ollama_url = "http://ollama:11434/api/generate"
+ollama_model = "qwen2.5-coder:14b"
+# ollama_model = "qwen2.5-coder:latest"
 
 ### Simple Prompts for use in Frontend Testing
 
@@ -20,20 +22,21 @@ ollama_url = "http://treenotes_ollama:11434/api/generate"
     # Spiders (order Araneae) are air-breathing arthropods that have eight limbs, chelicerae with fangs generally able to inject venom, and spinnerets that extrude silk. They are the largest order of arachnids and rank seventh in total species diversity among all orders of organisms. Spiders are found worldwide on every continent except Antarctica, and have become established in nearly every land habitat. As of January 2026, 53,680 spider species in 139 families have been recorded by taxonomists. However, there has been debate among scientists about how families should be classified, with over 20 different classifications proposed since 1900. Anatomically, spiders (as with all arachnids) differ from other arthropods in that the usual body segments are fused into two tagmata, the cephalothorax or prosoma, and the opisthosoma, or abdomen, and joined by a small, cylindrical pedicel. However, as there is currently neither paleontological nor embryological evidence that spiders ever had a separate thorax-like division, there exists an argument against the validity of the term cephalothorax, which means fused cephalon (head) and the thorax. Similarly, arguments can be formed against the use of the term "abdomen", as the opisthosoma of all spiders contains a heart and respiratory organs, organs atypical of an abdomen. Unlike insects, spiders do not have antennae. In all except the most primitive group, the Mesothelae, spiders have the most centralized nervous systems of all arthropods, as all their ganglia are fused into one mass in the cephalothorax. Unlike most arthropods, spiders have no extensor muscles in their limbs and instead extend them by hydraulic pressure. Their abdomens bear appendages, modified into spinnerets that extrude silk from up to six types of glands. Spider webs vary widely in size, shape and the amount of sticky thread used. It now appears that the spiral orb web may be one of the earliest forms, and spiders that produce tangled cobwebs are more abundant and diverse than orb-weaver spiders. Spider-like arachnids with silk-producing spigots (Uraraneida) appeared in the Devonian period, about 386 million years ago, but these animals apparently lacked spinnerets. True spiders have been found in Carboniferous rocks from 318 to 299 million years ago and are very similar to the most primitive surviving suborder, the Mesothelae. The main groups of modern spiders, Mygalomorphae and Araneomorphae, first appeared in the Triassic period, more than 200 million years ago. The species Bagheera kiplingi was described as herbivorous in 2008, but all other known species are predators, mostly preying on insects and other spiders, although a few large species also take birds and lizards. An estimated 25 million tons of spiders kill 400–800 million tons of prey every year. Spiders use numerous strategies to capture prey: trapping it in sticky webs, lassoing it with sticky bolas, mimicking the prey to avoid detection, or running it down. Most detect prey mainly by sensing vibrations, but the active hunters have acute vision and hunters of the genus Portia show signs of intelligence in their choice of tactics and ability to develop new ones. Spiders' guts are too narrow to take solids, so they liquefy their food by flooding it with digestive enzymes. They also grind food with the bases of their pedipalps, as arachnids do not have the mandibles that crustaceans and insects have.  To avoid being eaten by the females, which are typically much larger, male spiders identify themselves as potential mates by a variety of complex courtship rituals. Males of most species survive a few matings, limited mainly by their short life spans. Females weave silk egg cases, each of which may contain hundreds of eggs. Females of many species care for their young, for example by carrying them around or by sharing food with them. A minority of species are social, building communal webs that may house anywhere from a few to 50,000 individuals. Social behavior ranges from precarious toleration, as in the widow spiders, to cooperative hunting and food-sharing. Although most spiders live for at most two years, tarantulas and other mygalomorph spiders can live for over 20 years. While the venom of a few species is dangerous to humans, scientists are now researching the use of spider venom in medicine and as non-polluting pesticides. Spider silk provides a combination of lightness, strength and elasticity superior to synthetic materials, and spider silk genes have been inserted into mammals and plants to see if these can be used as silk factories. As a result of their wide range of behaviors, spiders have become common symbols in art and mythology, symbolizing various combinations of patience, cruelty and creative powers. An irrational fear of spiders is called arachnophobia.
 )
 
-###
+### ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def extract_json(data: dict) -> dict:
-    raw = data.get("response", "").strip()
+### WARM UP OLLAMA ---> PRELOAD
 
-    try:
-        return json.loads(raw) # direct json parse
-    except Exception:
-        # extract object from messy output
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if not match:
-            raise ValueError(f"Model did not return JSON: {raw}")
-        return json.loads(match.group(0))
+def warm_ollama():
+    print("RUNNING WARM-UP...")
+    resp = requests.post(ollama_url, json={
+        "model": ollama_model,
+        "prompt": "Warm-up prompt",
+        "stream": False
+    })
+    _ = resp.json() # forces Ollama to load fully
+    return
 
+### Prompt Templates ~~~~~~~~~~~~~~~
 
 concept_extraction_template = """
 You are an AI that extracts concepts and relationships from text.
@@ -81,30 +84,6 @@ JSON:
 
 Your Text to analyse:
 """
-
-def generate_graph(prompt: str) -> str:
-    developed_prompt = concept_extraction_template + "\n<<<\n" + prompt + "\n>>>"
-
-    payload = {
-        "model": "qwen2.5-coder",
-        "prompt": developed_prompt,
-        "stream": False
-    }
-
-    r = requests.post(ollama_url, json=payload)
-    r.raise_for_status()
-
-    data = r.json()
-
-    parsed = json.loads(data.get("response", "").strip().replace("```json", "").replace("```", "").strip())
-
-    return cast(ConceptGraphResponse, parsed)
-
-@router.post("/generate")
-def generate(req: GenerateGraph):
-	output = generate_graph(req.rawData)
-	return {"output": output}
-
 
 summary_generation_template = """
 You are a news journalist whose responsible for providing concise, detailed, and accurate summaries derived from 3 distinct sources of information. You use this information to produce your singular summary on the topic.
@@ -178,6 +157,7 @@ Your Response:
 
 Your 3 Sources to evaluate:
 """
+
 (
     # summary_template = """
     # You will generate a concise and accurate summary using three possible sources of information:
@@ -347,12 +327,43 @@ Your 3 Sources to evaluate:
     # """
 )
 
+### ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+### AI Generate Graph JSON ~~~~~~~~~
+
+def generate_graph(prompt: str) -> str:
+    developed_prompt = concept_extraction_template + "\n<<<\n" + prompt + "\n>>>"
+
+    payload = {
+        "model": ollama_model,
+        "prompt": developed_prompt,
+        "stream": False
+    }
+
+    r = requests.post(ollama_url, json=payload)
+    r.raise_for_status()
+
+    data = r.json()
+
+    parsed = json.loads(data.get("response", "").strip().replace("```json", "").replace("```", "").strip())
+
+    return cast(ConceptGraphResponse, parsed)
+
+@router.post("/generate")
+def generate(req: GenerateGraph):
+	return {"output": generate_graph(req.rawData)}
+
+
+### ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+## AI Generate Summary Content ~~~~~
+
 def minify_json(json_str: str) -> str:
     try:
         obj = json.loads(json_str)
         return json.dumps(obj, separators=(',', ':'))
     except Exception:
-        return json_str # in case the model (Qwen) returned JSON malformed
+        return json_str # in case the model returned JSON malformed
 
 def generate_summary(raw_data: str, graph_json: str, user_summary: str) -> SummaryResponse:
     compact_graph_json = minify_json(graph_json)
@@ -364,7 +375,7 @@ def generate_summary(raw_data: str, graph_json: str, user_summary: str) -> Summa
     )
 
     payload = {
-        "model": "qwen2.5-coder",
+        "model": ollama_model,
         "prompt": developed_prompt,
         "stream": False
     }
@@ -380,3 +391,8 @@ def generate_summary(raw_data: str, graph_json: str, user_summary: str) -> Summa
 @router.post("/summarise")
 def summarise(req: GenerateSummary):
     return generate_summary(req.rawData, req.graphJson, req.userSummary)
+
+### ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
