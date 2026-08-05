@@ -1,0 +1,5 @@
+# Keep the host's node_modules out of the image. It is built for Windows, so
+# copying it over the Linux install strips the platform-specific Rolldown
+# binding that `vite build` needs. Also keeps 122MB out of the build context.
+node_modules
+dist

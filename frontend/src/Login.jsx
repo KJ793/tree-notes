@@ -1,13 +1,19 @@
 import "./App.css";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import treeGraph from "./assets/graph.png";
+import { login } from "./api";
 
 function Login(){
+
+const navigate = useNavigate();
 
 const [email, setEmail] = useState("");
 
 const [password, setPassword] = useState("");
+
+const [error, setError] = useState("");
 
 
 
@@ -17,10 +23,16 @@ return(
   <main className="loginpage">
     <nav className="navbar">
       <div className="logo">
+        {/* Served from public/ rather than imported: a missing file renders as
+            a broken image instead of failing the build. alt is empty because
+            the wordmark beside it already names the app. */}
+        <img src="/logo.png" alt="" className="login-logo" />
         <div className="logotext">
-        <h2>TreeNotes</h2>
-        <p>Organise. Connect. Remember.</p>
-      </div>
+          <h2>
+            Tree<span className="brand-accent">Notes</span>
+          </h2>
+          <p>Organise. Connect. Remember.</p>
+        </div>
       </div>
        <div className="navlinks">
         <a href="#">Features</a>
@@ -36,7 +48,7 @@ return(
       <section className="herosection">
         <h1>
           Organize Ideas, <br />
-          grow <span>Knowledge</span>
+          grow <span className="brand-accent">Knowledge</span>
         </h1>
 
         <p>
@@ -51,11 +63,15 @@ return(
       <section className="loginsection">
         <div className="logincard">
 
-          <h2>Welcome Back!</h2>
+          <h2>
+            Welcome <span className="brand-accent">Back!</span>
+          </h2>
           <p className="loginsubtitle">
             Login to continue to TreeNotes.
           </p>
         <form onSubmit={handleSubmit}>
+
+    {error && <p className="loginerror">{error}</p>}
 
     <label htmlFor="email">Email</label>
 
@@ -106,17 +122,18 @@ return(
 
 )
 
-function handleSubmit(event){
+async function handleSubmit(event){
   event.preventDefault();
+  setError("");
 
-
-  const loginData = {
-    email:  email,
-    password: password, 
-
-  }; 
-console.log(loginData)
-
+  try {
+    const user = await login(email, password);
+    localStorage.setItem("isLoggedIn", "true");
+    localStorage.setItem("user", JSON.stringify(user));
+    navigate("/notes");
+  } catch (err) {
+    setError("Invalid email or password");
+  }
 }
 
 }

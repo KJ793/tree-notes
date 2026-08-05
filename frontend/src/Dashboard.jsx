@@ -1,6 +1,7 @@
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
-import DashboardContent from "./components/DashboardContent";
+import Editor from "./components/Editor";
+import GraphPanel from "./components/GraphPanel";
 
 function Dashboard() {
   return (
@@ -11,7 +12,8 @@ function Dashboard() {
         <Sidebar />
 
         <section className="dashboard-main">
-          <DashboardContent />
+          <Editor />
+          <GraphPanel />
         </section>
       </div>
     </main>

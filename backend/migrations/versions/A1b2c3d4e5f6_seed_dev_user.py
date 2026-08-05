@@ -1,9 +1,5 @@
-"""seed dev user
-Inserts a single placeholder user (id=1) so that note rows — whose user_id
-column is NOT NULL — can be created by the API before authentication is
-implemented.
+#seeded dev user
 
-"""
 from typing import Sequence, Union
 
 from alembic import op
@@ -29,7 +25,6 @@ users_table = sa.table(
 
 
 def upgrade() -> None:
-    """Insert the dev user row."""
     op.bulk_insert(
         users_table,
         [
@@ -43,8 +38,7 @@ def upgrade() -> None:
         ],
     )
 
-    # Bump the users_id_seq past the manually-inserted row so future inserts
-    # via the API don't collide on id=1.
+
     op.execute(
         "SELECT setval('users_id_seq', "
         "(SELECT COALESCE(MAX(id), 1) FROM users))"
@@ -52,5 +46,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove the dev user row."""
     op.execute("DELETE FROM users WHERE id = 1")
