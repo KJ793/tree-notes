@@ -1,4 +1,4 @@
-# TreeNotes — Development Setup Guide
+# TreeNotes - Development Setup Guide
 
 This guide will get the full TreeNotes development environment running on your machine. You do not need to install Python, PostgreSQL, or any other dependencies manually. Everything runs inside Docker.
 
@@ -10,7 +10,7 @@ The only thing you need to install is **Docker Desktop**:
 - Download it here: https://www.docker.com/products/docker-desktop
 - Once installed, open Docker Desktop and wait until it says **"Docker Desktop is running"** in the system tray
 
-That's it. Nothing else needs to be installed.
+> **Note for AI Integration role:** Ollama is the one exception — it runs outside Docker and needs to be installed separately. See the [AI / Ollama Setup](#ai--ollama-setup) section below.
 
 ---
 
@@ -42,7 +42,7 @@ This will start four services:
 |---------|-----------|-------------------|
 | Frontend | HTML/CSS/JS served by Nginx | http://localhost:8080 |
 | Backend | FastAPI (Python) | http://localhost:8000 |
-| Database | PostgreSQL | localhost:5432 |
+| Database | PostgreSQL | http://localhost:5432 |
 | pgAdmin | Database browser UI | http://localhost:5050 |
 
 ### 5. Set up the database
@@ -51,6 +51,34 @@ Run this once after your first `docker compose up`:
 docker compose run backend alembic upgrade head
 ```
 This creates all the database tables. You only need to do this once, or any time a new migration is added.
+
+---
+
+## AI / Ollama Setup
+
+Ollama runs **outside Docker** because it needs direct access to your GPU. Only the person working on AI integration needs to do this.
+
+### 1. Install Ollama
+Download and install Ollama from: https://ollama.com/download
+
+### 2. Start Ollama
+- **Windows / Mac:** Ollama starts automatically as a background service after installation. You should see it in your system tray.
+- **Linux:** Run `ollama serve` in a terminal.
+
+Ollama listens on port `11434` by default. The backend will reach it at the URL set in your `.env` file (`OLLAMA_URL=http://host.docker.internal:11434`).
+
+### 3. Pull a model
+Download the model the team is using:
+```bash
+ollama pull llama3.2
+```
+Check with the AI lead if you are unsure which model to use.
+
+### 4. Verify Ollama is running
+```bash
+curl http://localhost:11434
+```
+You should see a short response from Ollama confirming it is running.
 
 ---
 
@@ -64,7 +92,7 @@ If you want to stop everything AND wipe the database:
 ```bash
 docker compose down -v
 ```
-⚠️ The `-v` flag deletes all data. Only use this if you want a completely fresh start.
+The `-v` flag deletes all data. Only use this if you want a completely fresh start.
 
 ---
 
