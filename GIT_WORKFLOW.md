@@ -121,7 +121,7 @@ Thumbs.db
 
 ### One-time cleanup (DevOps only — already done)
 
-> **You do not need to run this.** It was performed once by DevOps on `dev` on **09/08/2026** to untrack the build artifacts that had already been committed. It is recorded in the commit history and must not be repeated — running it again on another branch just creates duplicate cleanup commits. It's documented here only so everyone understands what happened.
+> **You do not need to run this.** It was performed once by DevOps on `dev` on **[fill in date]** to untrack the build artifacts that had already been committed. It is recorded in the commit history and must not be repeated — running it again on another branch just creates duplicate cleanup commits. It's documented here only so everyone understands what happened.
 
 For reference, the one-time command was:
 
@@ -157,11 +157,3 @@ When Git says `CONFLICT` / `Automatic merge failed`:
 5. When all files are resolved: `git commit` to finish the merge.
 
 If it's a big or scary one, `git merge --abort` cancels the whole thing and puts you back exactly where you started — then ask for help before retrying.
-
----
-
-## 7. Our current dev-backend / ai-dev conflict
-
-For the specific conflict we're facing now: the two branch owners should resolve it **together**, using `dev` as the common base, and merge in small pieces rather than all at once. The frontend restructuring (moving backend calls out of the shared `.jsx` components into a separate module) will cut down how often branches collide on the same files in future.
-
-Going forward, rules 2 and 3 above (sync with `dev` daily, keep PRs small) are what stop this from happening again.
