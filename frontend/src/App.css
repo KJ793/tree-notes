@@ -341,3 +341,163 @@ padding: 24px 0;
   width: 50%;
   min-height: 100px;
 }
+
+/* Navbar */
+
+.dashboard-navbar {
+  width: 100%;
+  height: 105px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 18px 42px 18px 30px;
+
+  box-sizing: border-box;
+
+  background: #050817;
+
+  color: white;
+}
+
+
+.dashboard-brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+
+  color: white;
+  text-decoration: none;
+}
+
+
+.dashboard-brand-mark {
+  width: 48px;
+  height: 48px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  border: 2px solid #655df4;
+  border-radius: 9px;
+
+  background:
+    linear-gradient(
+      145deg,
+      #242073,
+      #101735
+    );
+
+  color: #54d4a5;
+
+  font-size: 27px;
+  font-weight: 700;
+
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease;
+}
+
+
+.dashboard-brand-text {
+  display: flex;
+  flex-direction: column;
+
+  line-height: 1.05;
+}
+
+
+.dashboard-brand-text strong {
+  color: #f7f8ff;
+
+  font-size: 25px;
+  font-weight: 700;
+}
+
+
+.dashboard-brand-text small {
+  margin-top: 5px;
+
+  color: #979eaf;
+
+  font-size: 14px;
+  font-weight: 400;
+
+  letter-spacing: 0.1px;
+}
+
+.dashboard-brand-logo {
+  width: 53px;
+  height: 61px;
+
+  object-fit: contain;
+
+  flex-shrink: 0;
+}
+
+
+.dashboard-brand:hover .dashboard-brand-mark {
+  transform: translateY(-1px);
+
+  border-color: #827cff;
+}
+
+.profile-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+
+  padding: 5px 7px;
+
+  border-radius: 10px;
+
+  color: #f7f8ff;
+  text-decoration: none;
+
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+
+.profile-nav-link:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+
+.profile-nav-avatar {
+  width: 43px;
+  height: 43px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  border: 2px solid #ee706d;
+  border-radius: 50%;
+
+  background: #e4e5e8;
+
+  color: #242839;
+
+  font-size: 12px;
+  font-weight: 700;
+
+  overflow: hidden;
+}
+
+
+.profile-nav-name {
+  color: #f7f8ff;
+
+  font-size: 21px;
+  font-weight: 600;
+
+  white-space: nowrap;
+}
