@@ -5,8 +5,9 @@ import { useState } from "react";
 import NoteWorkspace from "./components/NoteWorkspace"; 
 
 function Dashboard() {
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [notesExpanded, setNotesExpanded] = useState(false);
   const [selectedNote, setSelectedNote] = useState(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
     <main className="dashboard-page">
@@ -14,9 +15,17 @@ function Dashboard() {
 
       <div className="dashboard-layout">
         <Sidebar
-          expanded={sidebarExpanded}
-          onToggle={() => setSidebarExpanded(!sidebarExpanded)}
-          onSelectNote={setSelectedNote}
+        notesExpanded={notesExpanded}
+        onNotesToggle={() =>
+            setNotesExpanded((current) => !current)
+        }
+        onSelectNote={setSelectedNote}
+
+        sidebarCollapsed={sidebarCollapsed}
+        onSidebarToggle={() =>
+            setSidebarCollapsed((current) => !current)
+        }
+
         />
 
         <section className="dashboard-main">

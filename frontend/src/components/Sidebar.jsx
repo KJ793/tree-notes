@@ -1,13 +1,38 @@
-function Sidebar({ expanded, onToggle, onSelectNote }) {
+import {
+  House,
+  NotebookText,
+  Network,
+  Search,
+  Tags,
+  Settings,
+  ChevronRight,
+  ChevronLeft,
+  ChevronsRight,
+} from "lucide-react";
+
+
+function Sidebar({
+  notesExpanded,
+  onNotesToggle,
+  sidebarCollapsed,
+  onSidebarToggle,
+  onSelectNote,
+}) {
   return (
-    <aside className="sidebar">
+   <aside
+  className={`sidebar ${
+    sidebarCollapsed
+      ? "sidebar-collapsed"
+      : "sidebar-expanded"
+  }`}
+>
       <h2>TreeNotes</h2>
 
-      <button onClick={onToggle}>
+      <button type="button" onClick={onNotesToggle}>
         Dashboard
-      </button>
+      </button>     
 
-      {expanded && (
+      {notesExpanded && (
         <div>
           <button
             onClick={() =>
@@ -42,6 +67,25 @@ function Sidebar({ expanded, onToggle, onSelectNote }) {
       <button>Search</button>
       <button>Tags</button>
       <button>Settings</button>
+
+
+
+
+      <button
+      className="sidebar-toggle-button"
+      type="button"
+      onClick={onSidebarToggle}
+      >
+        {sidebarCollapsed ? (
+            <ChevronsRight size={20} strokeWidth={1.8} />
+        ) : (
+            <>
+            <ChevronLeft size={19} strokeWidth={1.8} />
+            <span>Collapse</span>
+            </>
+        )}
+
+      </button>
     </aside>
   );
 }

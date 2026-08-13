@@ -1,10 +1,12 @@
+@import url('https://googleapis.com');
 *{
   box-sizing: border-box;
 }
 
 body{
-  background: linear-gradient(180deg, #08111f 0%,#0b1428 60%,#111827 100%
-  );
+  background: #0B0F1F;
+  min-height: 100vh;
+  margin: 0;
 }
 
 
@@ -234,7 +236,32 @@ padding: 24px 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
+
+  overflow: hidden;
+
+  transition:
+  width 0.25s ease,
+  min-width 0.25s ease;
 }
+
+.sidebar-expanded {
+  width: 260px;
+  min-width: 260px;
+}
+
+.sidebar-collapsed {
+  width: 72px;
+  min-width: 72px;
+}
+
+.sidebar-toggle-button{
+
+  color: #ffffff;
+
+  border: none;
+
+}
+
 
 .sidebar nav {
   display: flex;
@@ -341,3 +368,153 @@ padding: 24px 0;
   width: 50%;
   min-height: 100px;
 }
+
+.content-heading{
+  line-height: 50px;
+}
+
+
+  /* App navbar*/
+
+.app-navbar {
+  width: 100%;
+  height: 82px;
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 0 36px;
+
+  background: #0B0F1F;
+  margin-top: 10px;
+
+}
+
+/* ---------- LEFT ---------- */
+
+.app-branding {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.app-logo {
+  width: 54px;
+  height: 64px;
+  object-fit: contain;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.app-brand-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start ;
+  margin-left: -10px;
+  margin-top: 24px;
+  
+  
+}
+
+.applogo-title {
+  font-size: 22px;
+  font-weight: bold;
+  color: #ffffff;
+  line-height: 1px;
+  font-family: 'Poppins', sans-serif;
+  font-size: 24px;
+}
+
+.applogo-tagline {
+  margin-top: -2px;
+  font-weight: light;
+  font-size: 14px;
+
+  color: #94A3B8;
+}
+
+.workspace-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  margin-left: 60px;
+  padding: 8px 0;
+
+  border: none;
+  background: transparent;
+
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+
+
+
+
+.app-navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+
+}
+
+.navbar-action-button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+
+  padding: 8px 4px;
+
+  border: none;
+  background: transparent;
+
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+
+.navbar-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  margin-left: 60px;
+
+  border: none;
+  background: transparent;
+
+  cursor: pointer;
+}
+
+.profile-avatar {
+  width: 42px;
+  height: 42px;
+
+  border-radius: 50%;
+  border: 1px solid #c85b63;
+  background: #d9d9d9;
+
+  display: inline-block;
+  flex: 0 0 42px;
+  justify-content: center;
+  align-items: center;
+
+  color: white;
+  font-weight: bold;
+}
+
+.profile-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: white;
+}
+
