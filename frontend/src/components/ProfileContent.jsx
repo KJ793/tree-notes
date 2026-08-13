@@ -6,6 +6,7 @@ const initialProfile = {
   displayName: "Ali H",
   email: "ali.h@example.com",
   bio: "Building connected notes and turning scattered ideas into useful knowledge.",
+  memberSince: "2026",
 };
 
 const emptyPasswordForm = {
@@ -13,6 +14,55 @@ const emptyPasswordForm = {
   newPassword: "",
   confirmPassword: "",
 };
+
+// Backend
+// Function for retrieving user details
+async function getLoggedInUserDetails() {
+  
+  // BACKEND TODO:
+
+  // Frontend mock data until the backend is connected.
+  return initialProfile;
+}
+
+// Backend
+// Function for saving updated user details
+async function saveLoggedInUserDetails(profileData) {
+
+  // BACKEND TODO:
+
+  // Frontend mock response until the backend is connected.
+  return {
+    success: true,
+    profile: profileData,
+  };
+}
+
+// Backend
+// Function for changing the logged-in user's password
+async function changeLoggedInUserPassword(oldPassword, newPassword) {
+
+  // BACKEND TODO:
+
+  // Frontend placeholder until the backend is connected.
+  return {
+    backendConnected: false,
+    success: false,
+  };
+}
+
+// Backend
+// Function for updating the user's profile photo
+async function updateLoggedInUserProfilePhoto(photoFile) {
+
+  // BACKEND TODO:
+
+  return {
+    backendConnected: false,
+    success: false,
+    photoFile,
+  };
+}
 
 function ProfileContent() {
   const [profile, setProfile] = useState(initialProfile);
@@ -23,6 +73,30 @@ function ProfileContent() {
   const [passwordForm, setPasswordForm] = useState(emptyPasswordForm);
   const [passwordMessage, setPasswordMessage] = useState(null);
 
+  // Load the currently logged-in user's profile when this page opens.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadUserDetails() {
+      try {
+        const userDetails = await getLoggedInUserDetails();
+
+        if (!cancelled && userDetails) {
+          setProfile(userDetails);
+        }
+      } catch (error) {
+        console.error("Unable to load profile:", error);
+      }
+    }
+
+    loadUserDetails();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Close the password modal when the user presses Escape.
   useEffect(() => {
     if (!passwordModalOpen) {
       return undefined;
@@ -51,11 +125,20 @@ function ProfileContent() {
     setSaved(false);
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
 
-    // Frontend-only feedback for now. This is where a future API request will go.
-    setSaved(true);
+    try {
+      // Backend call is isolated inside saveLoggedInUserDetails().
+      const result = await saveLoggedInUserDetails(profile);
+
+      if (result?.success) {
+        setSaved(true);
+      }
+    } catch (error) {
+      console.error("Unable to save profile:", error);
+      setSaved(false);
+    }
   }
 
   function openPasswordModal() {
@@ -82,7 +165,7 @@ function ProfileContent() {
     setPasswordMessage(null);
   }
 
-  function handlePasswordSubmit(event) {
+  async function handlePasswordSubmit(event) {
     event.preventDefault();
 
     const { oldPassword, newPassword, confirmPassword } = passwordForm;
@@ -119,13 +202,44 @@ function ProfileContent() {
       return;
     }
 
-    // Frontend-only for now. Do not log or store passwords in localStorage.
-    // A future backend request should securely verify oldPassword and update
-    // the account password using only oldPassword and newPassword.
-    setPasswordMessage({
-      type: "success",
-      text: "Password details are valid. Connect this form to the backend to apply the change.",
-    });
+    try {
+      // Backend call is isolated inside changeLoggedInUserPassword().
+      // confirmPassword is intentionally not sent to the backend.
+      const result = await changeLoggedInUserPassword(
+        oldPassword,
+        newPassword
+      );
+
+      if (!result.backendConnected) {
+        setPasswordMessage({
+          type: "success",
+          text: "Password details are valid. Backend connection is still required to apply the change.",
+        });
+        return;
+      }
+
+      if (result.success) {
+        setPasswordMessage({
+          type: "success",
+          text: result.message || "Password updated successfully.",
+        });
+
+        setPasswordForm(emptyPasswordForm);
+        return;
+      }
+
+      setPasswordMessage({
+        type: "error",
+        text: result.message || "Unable to update password.",
+      });
+    } catch (error) {
+      console.error("Unable to update password:", error);
+
+      setPasswordMessage({
+        type: "error",
+        text: "Unable to update password. Please try again.",
+      });
+    }
   }
 
   return (
@@ -156,7 +270,7 @@ function ProfileContent() {
         <div className="profile-identity-copy">
           <h2 id="profile-name">{profile.displayName || "TreeNotes user"}</h2>
           <p>{profile.email}</p>
-          <span>Member since 2026</span>
+          <span>Member since {profile.memberSince || "2026"}</span>
         </div>
 
         <button className="profile-secondary-button" type="button">
