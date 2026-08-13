@@ -1,7 +1,55 @@
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import treeNotesLogo from "../assets/logo.png";
 
 function Navbar() {
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+
+  const profileMenuRef = useRef(null);
+  const navigate = useNavigate();
+
+  function toggleProfileMenu() {
+    setProfileMenuOpen((current) => !current);
+  }
+
+  function closeProfileMenu() {
+    setProfileMenuOpen(false);
+  }
+
+  function handleLogout() {
+    setProfileMenuOpen(false);
+
+    // Later, when authentication is implemented,
+    // remove the user's login token/session here.
+
+    navigate("/");
+  }
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        profileMenuRef.current &&
+        !profileMenuRef.current.contains(event.target)
+      ) {
+        setProfileMenuOpen(false);
+      }
+    }
+  
+      function handleEscape(event) {
+      if (event.key === "Escape") {
+        setProfileMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
   return (
     <header className="dashboard-navbar">
 
@@ -22,19 +70,92 @@ function Navbar() {
         </div>
       </Link>
 
-      <Link
-        className="profile-nav-link"
-        to="/profile"
-        aria-label="Open profile"
+      <div
+        className="profile-menu-container"
+        ref={profileMenuRef}
       >
-        <span className="profile-nav-avatar">
-          AH
-        </span>
+        <button
+          className={`profile-nav-trigger ${
+            profileMenuOpen ? "profile-nav-trigger-open" : ""
+          }`}
+          type="button"
+          onClick={toggleProfileMenu}
+          aria-haspopup="menu"
+          aria-expanded={profileMenuOpen}
+        >
+          <span className="profile-nav-avatar">
+            AH
+          </span>
 
-        <span className="profile-nav-name">
-          Ali H
-        </span>
-      </Link>
+          <span className="profile-nav-name">
+            Ali H
+          </span>
+
+          <span
+            className={`profile-nav-chevron ${
+              profileMenuOpen
+                ? "profile-nav-chevron-open"
+                : ""
+            }`}
+            aria-hidden="true"
+          >
+            ▾
+          </span>
+        </button>
+
+
+        {profileMenuOpen && (
+          <div
+            className="profile-dropdown"
+            role="menu"
+          >
+            <div className="profile-dropdown-header">
+              <span className="profile-dropdown-avatar">
+                AH
+              </span>
+
+              <div>
+                <strong>Ali H</strong>
+              </div>
+            </div>
+
+            <div className="profile-dropdown-divider" />
+
+            <Link
+              className="profile-dropdown-item"
+              to="/profile"
+              role="menuitem"
+              onClick={closeProfileMenu}
+            >
+              <span
+                className="profile-dropdown-icon"
+                aria-hidden="true"
+              >
+                ♙
+              </span>
+
+              <span>Profile</span>
+            </Link>
+
+            <button
+              className="profile-dropdown-item profile-dropdown-logout"
+              type="button"
+              role="menuitem"
+              onClick={handleLogout}
+            >
+              <span
+                className="profile-dropdown-icon"
+                aria-hidden="true"
+              >
+                ↪
+              </span>
+
+              <span>Log out</span>
+            </button>
+          </div>
+        )}
+
+      </div>
 
     </header>
   );
