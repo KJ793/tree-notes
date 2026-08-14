@@ -5,9 +5,104 @@ import treeGraph from "./assets/graph.png";
 
 function Login(){
 
+// << FRONTEND DEV >> //
+// Stores email entered by user //
 const [email, setEmail] = useState("");
 
+// Stores password entered by user //
 const [password, setPassword] = useState("");
+
+// Handles login loading state //
+const [loading, setLoading] = useState(false);
+
+// Handles login errors //
+const [error, setError] = useState("");
+
+async function handleSubmit(event) {
+
+    event.preventDefault();
+
+    // << FRONTEND DEV >> //
+    // Build login data from form values //
+
+    const loginData = {
+      email: email,
+      password: password,
+    };
+
+    setLoading(true);
+    setError("");
+
+
+    try {
+
+      // << BACKEND CONNECTION GOES HERE KYLE / DAMON >> //
+      // Frontend provides: {
+      //  email: string,
+      //   password: string
+      // }
+
+
+      const response = await fetch("/api/login", {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify(loginData),
+      });
+
+
+      // << BACKEND AUTH STUFF >> //
+      // Backend validates email and password //
+
+      if (!response.ok) {
+        throw new Error("Login failed.");
+      }
+
+
+      // << BACKEND RESPONSE >> //
+      // Expected response structure:
+      //
+      // {
+      //   user: {
+      //     id: number/string,
+      //     email: string,
+      //     name: string
+      //   }
+      // }
+
+      const data = await response.json();
+
+
+      // << FRONTEND DEV >> //
+      // Login successful //
+      // User data can later be stored in app/auth state //
+      // Redirect to dashboard will go here //
+
+      console.log("Logged in user:", data);
+
+
+    } catch (error) {
+
+      // << FRONTEND DEV >> //
+      // Login error handling //
+
+      console.error("Login error:", error);
+
+      setError(
+        "Unable to login. Please check your email and password."
+      );
+
+    } finally {
+
+      // Stop loading whether login succeeds or fails //
+
+      setLoading(false);
+    }
+  }
+
 
 
 
@@ -15,6 +110,9 @@ return(
   
   
   <main className="loginpage">
+    {/* << FRONTEND DEV >> */}
+    {/* Login page navigation */}
+
     <nav className="navbar">
       <div className="logo">
         <div className="logotext">
@@ -27,11 +125,13 @@ return(
         <a href="#">Docs</a>
         <a href="#">GitHub</a>
 
-        <button>Login</button>
+        <button type="button">Login</button>
        </div>
 
     </nav>
     <section className="maincontent">
+        {/* << FRONTEND DEV >> */}
+        {/* Login page hero section */}
 
       <section className="herosection">
         <h1>
@@ -48,6 +148,8 @@ return(
         </div>
 
       </section>
+
+      {/* << LOGIN FORM >> */}
       <section className="loginsection">
         <div className="logincard">
 
@@ -67,10 +169,21 @@ return(
     <label htmlFor="password">Password</label>
 
     <input type="password" placeholder="password" id="password" onChange={(event) => setPassword(event.target.value)} required/>
+    {/* << FRONTEND LOGIN DISPLAY >> */}
+
+    {error && (
+        <p className="login-error">
+            {error}
+        </p>
+    )}
 
 
-    <button type="submit" className="loginbutton">
-      Login
+    <button type="submit" className="loginbutton" disabled={loading}>
+        {loading
+            ? "Logging in..."
+            : "Login"
+        }
+
     </button>
 
     <a href="#" className="forgotpassword">
@@ -82,6 +195,10 @@ return(
       <p>Or</p>
       <span></span>
     </div>
+
+    {/* << GOOGLE AUTH CONNECTION >> */}
+    {/* Backend/auth integration will go here later */}
+
 
     <button type="button" className="googlebutton">
       Continue with Google
@@ -106,20 +223,11 @@ return(
 
 )
 
-function handleSubmit(event){
-  event.preventDefault();
 
-
-  const loginData = {
-    email:  email,
-    password: password, 
-
-  }; 
-console.log(loginData)
 
 }
 
-}
+
 
 
 

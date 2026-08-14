@@ -25,15 +25,35 @@ function Sidebar({
       ? "sidebar-collapsed"
       : "sidebar-expanded"
   }`}
+  
 >
+
+    
+    
+{/* << FRONTEND DEV >> */}
       <h2>TreeNotes</h2>
 
+ {/* << FRONTEND DEV >> */}
+ {/* Controls whether the dashboard note list is expanded */}
       <button type="button" onClick={onNotesToggle}>
         Dashboard
       </button>     
 
+
+    {/* << NOTES DATA CONNECTION >> */}
+    {/* Backend should provide the user's saved notes */}
+      {/* Expected note structure:
+          {
+            id: number/string,
+            title: string,
+            content: string
+          }
+      */}
+
       {notesExpanded && (
         <div>
+          {/* << TEMPORARY FRONTEND NOTE >> */}
+          
           <button
             onClick={() =>
               onSelectNote({
@@ -62,6 +82,9 @@ function Sidebar({
         </div>
       )}
 
+    {/* << FRONTEND NAVIGATION >> */}
+    {/* These buttons will later connect to their pages /routes */}
+
       <button>Notes</button>
       <button>Graph</button>
       <button>Search</button>
@@ -70,6 +93,8 @@ function Sidebar({
 
 
 
+    {/* << FRONTEND DEV >> */}
+    {/* Controls the width / collapsed state of the entire sidebar */}
 
       <button
       className="sidebar-toggle-button"
