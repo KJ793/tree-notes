@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import "./ProfileContent.css";
 
+// Stores the initial profile data for the logged-in user. This is a placeholder until the backend is connected.
 const initialProfile = {
   fullName: "Ali H",
   displayName: "Ali H",
@@ -9,6 +10,7 @@ const initialProfile = {
   memberSince: "2026",
 };
 
+// Stores the initial state of the password change form. This is used to reset the form when the modal is closed.
 const emptyPasswordForm = {
   oldPassword: "",
   newPassword: "",
@@ -18,20 +20,54 @@ const emptyPasswordForm = {
 // Backend
 // Function for retrieving user details
 async function getLoggedInUserDetails() {
-  
-  // BACKEND TODO:
+  /*
+    BACKEND TODO:
 
-  // Frontend mock data until the backend is connected.
+    Replace the mock return below with an authenticated API
+    request for the currently logged-in user.
+
+    Example:
+
+    const response = await fetch("/api/profile", {
+      method: "GET",
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      throw new Error("Unable to retrieve user profile.");
+    }
+
+    return await response.json();
+  */
   return initialProfile;
 }
 
 // Backend
 // Function for saving updated user details
 async function saveLoggedInUserDetails(profileData) {
+  /*
+    BACKEND TODO:
 
-  // BACKEND TODO:
+    Replace the mock return below with an authenticated API
+    request that sends the updated profile to the backend.
 
-  // Frontend mock response until the backend is connected.
+    Example:
+
+    const response = await fetch("/api/profile", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify(profileData),
+    });
+
+    if (!response.ok) {
+      throw new Error("Unable to save user profile.");
+    }
+
+    return await response.json();
+  */
   return {
     success: true,
     profile: profileData,
@@ -41,10 +77,41 @@ async function saveLoggedInUserDetails(profileData) {
 // Backend
 // Function for changing the logged-in user's password
 async function changeLoggedInUserPassword(oldPassword, newPassword) {
+  /*
+    BACKEND TODO:
 
-  // BACKEND TODO:
+    Replace the mock return below with an authenticated API
+    request.
 
-  // Frontend placeholder until the backend is connected.
+    The backend should:
+      1. Identify the currently logged-in user.
+      2. Verify oldPassword securely.
+      3. Hash newPassword.
+      4. Update the stored password.
+      5. Return success or an error message.
+
+    Example:
+
+    const response = await fetch("/api/profile/password", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        oldPassword,
+        newPassword,
+      }),
+    });
+
+    const result = await response.json();
+
+    return {
+      backendConnected: true,
+      success: response.ok,
+      message: result.message,
+    };
+  */
   return {
     backendConnected: false,
     success: false,
@@ -54,8 +121,15 @@ async function changeLoggedInUserPassword(oldPassword, newPassword) {
 // Backend
 // Function for updating the user's profile photo
 async function updateLoggedInUserProfilePhoto(photoFile) {
+  /*
+    BACKEND TODO:
 
-  // BACKEND TODO:
+    This can later upload the selected profile image to the
+    backend. The backend can then store the image or image URL
+    against the currently logged-in user.
+
+    This function is not wired to a file picker yet.
+  */
 
   return {
     backendConnected: false,

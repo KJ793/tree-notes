@@ -2,11 +2,134 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import treeNotesLogo from "../assets/logo.png";
 
+const initialNavbarUser = {
+  displayName: "Ali H",
+  initials: "AH",
+  profileImage: null,
+};
+
+// Backend
+// Function for retrieving logged-in user's navbar details
+async function getLoggedInUserNavbarDetails() {
+  /*
+    BACKEND TODO:
+
+    Replace the mock return below with an authenticated API
+    request for the currently logged-in user.
+
+    The backend should return only the information required
+    by the navbar, for example:
+
+    {
+      displayName: "Ali H",
+      initials: "AH",
+      profileImage: "https://..."
+    }
+
+    Example:
+
+    const response = await fetch("/api/user/navbar", {
+      method: "GET",
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      throw new Error("Unable to retrieve logged-in user.");
+    }
+
+    return await response.json();
+  */
+
+  // Frontend mock data until backend is connected.
+  return initialNavbarUser;
+}
+
+// Backend
+// Function for logging out the currently logged-in user
+async function logoutLoggedInUser() {
+  /*
+    BACKEND TODO:
+
+    Replace the mock return below with a request to the
+    backend logout endpoint.
+
+    The backend should invalidate/delete the current user's
+    session or authentication cookie.
+
+    Example:
+
+    const response = await fetch("/api/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      throw new Error("Unable to log out.");
+    }
+
+    return {
+      backendConnected: true,
+      success: true,
+    };
+  */
+
+  // Frontend placeholder until authentication is connected.
+  return {
+    backendConnected: false,
+    success: true,
+  };
+}
+
+// Backend
+// Function for retrieving the user's profile image
+async function getLoggedInUserProfileImage() {
+  /*
+    BACKEND TODO:
+
+    This may not need its own API endpoint if profileImage
+    is already returned by getLoggedInUserNavbarDetails().
+
+    Keep this function only if profile images are retrieved
+    separately from the backend.
+  */
+
+  return null;
+}
+
 function Navbar() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
+  const [navbarUser, setNavbarUser] = useState(initialNavbarUser);
+
   const profileMenuRef = useRef(null);
   const navigate = useNavigate();
+
+  // Load the logged-in user's navbar information.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadNavbarUser() {
+      try {
+        const userDetails =
+          await getLoggedInUserNavbarDetails();
+
+        if (!cancelled && userDetails) {
+          setNavbarUser(userDetails);
+        }
+      } catch (error) {
+        console.error(
+          "Unable to load navbar user details:",
+          error
+        );
+      }
+    }
+
+    loadNavbarUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function toggleProfileMenu() {
     setProfileMenuOpen((current) => !current);
@@ -16,13 +139,22 @@ function Navbar() {
     setProfileMenuOpen(false);
   }
 
-  function handleLogout() {
-    setProfileMenuOpen(false);
+  async function handleLogout() {
+    try {
+      const result = await logoutLoggedInUser();
 
-    // Later, when authentication is implemented,
-    // remove the user's login token/session here.
+      /*
+        Until the backend is connected, the mock function
+        still allows us to demonstrate logout navigation.
+      */
+      if (result?.success) {
+        setProfileMenuOpen(false);
 
-    navigate("/");
+        navigate("/");
+      }
+    } catch (error) {
+      console.error("Unable to log out:", error);
+    }
   }
 
   useEffect(() => {
@@ -84,11 +216,19 @@ function Navbar() {
           aria-expanded={profileMenuOpen}
         >
           <span className="profile-nav-avatar">
-            AH
+            {navbarUser.profileImage ? (
+              <img
+                src={navbarUser.profileImage}
+                alt=""
+                className="profile-nav-avatar-image"
+              />
+            ) : (
+              navbarUser.initials
+            )}
           </span>
 
           <span className="profile-nav-name">
-            Ali H
+            {navbarUser.displayName}
           </span>
 
           <span
@@ -111,11 +251,21 @@ function Navbar() {
           >
             <div className="profile-dropdown-header">
               <span className="profile-dropdown-avatar">
-                AH
+                {navbarUser.profileImage ? (
+                  <img
+                    src={navbarUser.profileImage}
+                    alt=""
+                    className="profile-dropdown-avatar-image"
+                  />
+                ) : (
+                  navbarUser.initials
+                )}
               </span>
 
               <div>
-                <strong>Ali H</strong>
+                <strong>
+                  {navbarUser.displayName}
+                </strong>
               </div>
             </div>
 
