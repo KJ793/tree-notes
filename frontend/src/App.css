@@ -24,14 +24,17 @@ body{
   max-width: 520px;
 }
 
-/* index.css colours bare headings near-black, unreadable on the dark page. */
 .herosection h1 {
-  color: #f3f4f6;
   font-size: 64px;
   line-height: 1.05;
   margin-bottom: 10px;
   font-weight: 700;
   letter-spacing: -2px;
+
+}
+
+.herosection h1 span {
+  color: #6f6ce8;
 }
 
 .herosection p {
@@ -54,11 +57,8 @@ body{
   box-shadow:0 15px 40px rgba(0,0,0,.45);
 }
 
-/* index.css colours bare headings near-black, which is unreadable on this
-   dark card. */
 .logincard h2 {
   margin: 0 0 8px;
-  color: #f3f4f6;
   font-size: 30px;
 }
 
@@ -157,26 +157,11 @@ padding: 24px 0;
   background: #5548d8;
 }
 
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
 .logo h2 {
   margin: 0;
-  color: #f3f4f6;
   font-size: 34px;
-  line-height: 1;
-}
 
-/* Sized against the whole text block - the 34px wordmark plus the tagline
-   beneath it - rather than the heading alone. */
-.login-logo {
-  flex: none;
-  width: 88px;
-  height: 88px;
-  object-fit: contain;
+  
 }
 .logo p{
     margin-top:4px;
@@ -237,42 +222,18 @@ padding: 24px 0;
 
 /* Dashboard */
 
-/* Pins the page to the viewport so the editor can size itself against the space
-   that is actually left, rather than overflowing and forcing a scroll. */
-.dashboard-page {
-  display: flex;
-  flex-direction: column;
-  height: 100dvh;
-  overflow: hidden;
-}
-
 .dashboard-layout {
   display: flex;
-  align-items: stretch;
-  flex: 1;
-  min-height: 0;
+  align-items: flex-start;
 }
 
 .sidebar {
   width: 260px;
   min-width: 260px;
-  /* The heading beside it starts 32px down (24px .dashboard-main padding plus
-     8px on the content block). The wordmark sits centred inside the 58px brand
-     block, about 17px from its top, where the 34px heading's glyphs start only
-     ~3px down - so the block is raised by that 14px difference to put the two
-     lines of text level. The nav buttons follow from there. */
-  padding: 18px 20px 30px;
+  padding: 30px 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  overflow-y: auto;
-}
-
-/* index.css colours bare h2 near-black, which is unreadable on the dark
-   background. */
-.sidebar h2 {
-  color: #f3f4f6;
-  margin-bottom: 10px;
 }
 
 .sidebar nav {
@@ -285,43 +246,11 @@ padding: 24px 0;
 .sidebar a {
   width: 100%;
   text-align: left;
-  padding: 10px 14px;
-  background: transparent;
-  border: 1px solid #263043;
-  border-radius: 8px;
-  color: #c5cad6;
-  font: inherit;
-  font-size: 15px;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.sidebar button:hover,
-.sidebar a:hover {
-  background: #161d2c;
-  border-color: #4c46d7;
-  color: #f3f4f6;
-}
-
-/* Editor and graph panel sit side by side, using the horizontal room a 1080p
-   screen has to spare instead of stacking and pushing the page past the fold. */
 .dashboard-main {
   flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: stretch;
-  gap: 20px;
-  padding: 24px 32px;
-  overflow: auto;
-}
-
-.dashboard-main > #content {
-  flex: 1;
-  min-width: 0;
-  /* Not stretched: a full-height table hands the extra height to its rows
-     rather than to the divs inside them, which opened a gap between the panes
-     and the dashed rule below them. Its own row heights govern instead. */
-  align-self: flex-start;
+  padding: 40px;
 }
 
 .welcome-card {

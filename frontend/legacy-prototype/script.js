@@ -12,87 +12,33 @@ let bin = [];
 // Counter for the total number of boxes created. Used to assign unique IDs.
 let totalBoxes = 1;
 
-// --------------------------------------------------------------------------
-// Initialization
-// --------------------------------------------------------------------------
-
-/**
- * Wires up the prototype against the current DOM. Called by the React host
- * once the editor markup has mounted. Safe to call again after a remount,
- * since all state is rebuilt from scratch.
- */
-function initPrototype() {
-    // Reset state so a remount doesn't inherit stale box references.
-    boxes = new Map();
-    totalBoxes = 1;
-
-    // Get the first DOM element with the class "box". This is the initial box.
-    const seed = document.querySelectorAll(".box")[0];
-
-    // Attach a listener to the seed box to handle pasting images directly into it.
-    listenForImagePaste(seed);
-
-    // Make the initial seed box draggable using the makeDraggable function.
-    makeDraggable(seed);
-
-    // Attach event listeners to the buttons within the box toolbar.
-    boxToolbarListeners();
-
-    // Add the seed box to the 'boxes' Map. The key is the box's ID, and the
-    // value is an object containing the box element itself and an empty
-    // array to store the IDs of the boxes this one is linked to.
-    boxes.set(seed.id, {
-        box: seed,
-        lines: []
-    });
-
-    initTextContextMenu();
-    initLinkDropdown();
-    initCanvasPan();
-}
+// Get the first DOM element with the class "box". This is likely the initial box.
+const seed = document.querySelectorAll(".box")[0];
 
 // --------------------------------------------------------------------------
-// Canvas Panning
+// Event Listeners Attached on Initialization
 // --------------------------------------------------------------------------
 
-/**
- * Lets the user drag the empty canvas to pan around, the way a whiteboard
- * works. Implemented by moving the container's scroll position rather than
- * transforming its contents, so it composes with the existing zoom and leaves
- * every box's stored coordinates untouched.
- */
-function initCanvasPan() {
-    const container = document.querySelector("#tree .container");
-    let panning = false;
-    let startX, startY, startLeft, startTop;
+// Attach a listener to the seed box to handle pasting images directly into it.
+listenForImagePaste(seed);
 
-    container.addEventListener("mousedown", (e) => {
-        // Boxes have their own drag handler, and the toolbar needs its clicks.
-        if (e.target.closest(".box") || e.target.closest(".canvas-tools")) return;
+// Make the initial seed box draggable using the makeDraggable function.
+makeDraggable(seed);
 
-        panning = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        startLeft = container.scrollLeft;
-        startTop = container.scrollTop;
-        container.style.cursor = "grabbing";
+// Attach event listeners to the buttons within the box toolbar.
+boxToolbarListeners();
 
-        // Stops the drag from turning into a text selection.
-        e.preventDefault();
-    });
+// --------------------------------------------------------------------------
+// Initialization of the 'boxes' Map with the Seed Box
+// --------------------------------------------------------------------------
 
-    window.addEventListener("mousemove", (e) => {
-        if (!panning) return;
-        container.scrollLeft = startLeft - (e.clientX - startX);
-        container.scrollTop = startTop - (e.clientY - startY);
-    });
-
-    window.addEventListener("mouseup", () => {
-        if (!panning) return;
-        panning = false;
-        container.style.cursor = "";
-    });
-}
+// Add the seed box to the 'boxes' Map. The key is the box's ID,
+// and the value is an object containing the box element itself and an empty
+// Map to store the IDs of the lines connected to this box.
+boxes.set(seed.id, {
+    box: seed,
+    lines: []
+});
 
 // --------------------------------------------------------------------------
 // Zoom Functionality
@@ -104,22 +50,8 @@ function initCanvasPan() {
  */
 function zoom(times) {
     const canvas = document.getElementById("zoom");
-    const container = document.querySelector("#tree .container");
-    const scale = (new DOMMatrix(canvas.style.transform)).a || 1;
-    const next = scale * times;
-
-    // Whatever sits in the middle of the pane should stay there afterwards,
-    // rather than the view sliding towards the canvas origin.
-    const centreX = container.scrollLeft + container.clientWidth / 2;
-    const centreY = container.scrollTop + container.clientHeight / 2;
-
-    canvas.style.transform = `scale(${next})`;
-
-    // transform-origin is the top-left corner, so painted positions scale
-    // linearly and the old centre simply moves by the ratio of the two scales.
-    const ratio = next / scale;
-    container.scrollLeft = centreX * ratio - container.clientWidth / 2;
-    container.scrollTop = centreY * ratio - container.clientHeight / 2;
+    const scale = (new DOMMatrix(canvas.style.transform)).a;
+    canvas.style.transform = `scale(${scale * times})`;
 }
 
 // --------------------------------------------------------------------------
@@ -136,15 +68,16 @@ function makeDraggable(box) {
     let offsetX, offsetY;
 
     // Event listener for when the box loses focus (blur event).
-    // Updates connected lines, since the box height may have changed while
-    // it was being edited.
+    // Resets the box height and updates connected lines.
     box.addEventListener("blur", () => {
+        box.style.height = "7px";
         updateLinesPosition(box);
     });
 
     // Event listener for when the box is clicked.
     // Shows the toolbar associated with the clicked box.
     box.addEventListener("click", () => {
+        box.style.height = "fit-content";
         const toolbar = document.getElementById('toolbar');
         const rect = box.getBoundingClientRect();
         toolbar.style.left = rect.right + 'px';
@@ -153,12 +86,6 @@ function makeDraggable(box) {
         colorPicker.value = colorToHex(box.style.backgroundColor);
         toolbar.style.display = 'block';
         document.getElementById("toolbar").dataset.boxId = box.id;
-
-        // Lets the React graph panel react to the selection without this script
-        // needing to know anything about it.
-        window.dispatchEvent(new CustomEvent("box-selected", {
-            detail: { id: box.id }
-        }));
     });
 
     // Event listener for when the mouse button is pressed down on the box.
@@ -198,17 +125,8 @@ function makeDraggable(box) {
  * @param {HTMLElement} box - The reference box to which the new block will be connected.
  */
 function addBlock(box) {
-    // Place the new box clear of the parent's right edge. getBoxCoords() gives
-    // the parent's centre, which is what lines need but would drop the new box
-    // on top of the parent and hide its text.
-    const gap = 40;
-    const x = box.offsetLeft + box.offsetWidth + gap;
-
-    // Stagger downwards so several children of the same parent don't stack.
-    const existingChildren = boxes.get(box.id).lines.length;
-    const y = box.offsetTop + existingChildren * (box.offsetHeight + 20);
-
-    const newBox = createNewBlock(x, y);
+    [x1, y1] = getBoxCoords(box);
+    const newBox = createNewBlock(x1, y1);
     newLine(box, newBox);
 }
 
@@ -242,33 +160,6 @@ function createNewBlock(x = 0, y = 20, content = "New Box") {
         lines: []
     });
     return newBox;
-}
-
-/**
- * Creates a box in the middle of whatever part of the canvas is on screen.
- * createNewBlock() alone always spawns at (0, 20), which is both hidden behind
- * the toolbar overlaying that corner and, once zoomed out, a long way from
- * wherever the user is actually looking.
- * @returns {HTMLElement} The newly created box.
- */
-function createBlockInView() {
-    const container = document.querySelector("#tree .container");
-    const canvas = document.getElementById("zoom");
-    const scale = (new DOMMatrix(canvas.style.transform)).a || 1;
-
-    // transform-origin is the top-left corner, so a canvas coordinate paints at
-    // coordinate x scale. Dividing inverts that to find the coordinate sitting
-    // at the centre of the visible area.
-    const centreX = (container.scrollLeft + container.clientWidth / 2) / scale;
-    const centreY = (container.scrollTop + container.clientHeight / 2) / scale;
-
-    // Offset by roughly half a box so it straddles the centre, and keep it
-    // clear of the toolbar. The floors are divided by scale too, so they mean
-    // the same number of on-screen pixels at every zoom level.
-    const x = Math.max(centreX - 75, 20 / scale);
-    const y = Math.max(centreY - 20, 60 / scale);
-
-    return createNewBlock(x, y);
 }
 
 /**
@@ -346,7 +237,7 @@ function updateLinesPosition(box) {
  */
 function deleteLine(line) {
     const [a, b] = line.id.split("_");
-    [...boxes.values()].forEach(item => {
+    boxes.values().forEach(item => {
         item.lines = item.lines.filter(id => id!==a && id!==b)
     });
     line.remove();
@@ -487,23 +378,6 @@ function removeSpan(span) {
 }
 
 /**
- * Builds a readable label for a box from the text the user typed into it.
- * @param {HTMLElement} box - The box element to label.
- * @returns {string} The box's own text, or "Box# <id>" if it is empty.
- */
-function boxLabel(box) {
-    // Clone so the hidden "#2" footer can be dropped without touching the real
-    // box. A textContent string replace would also strip a legitimate "#2" the
-    // user had typed themselves.
-    const clone = box.cloneNode(true);
-    clone.querySelectorAll(".boxFooter").forEach(el => el.remove());
-
-    const text = clone.textContent.trim().replace(/\s+/g, " ");
-    if (!text) return "Box# " + box.id;
-    return text.length > 30 ? text.slice(0, 30) + "..." : text;
-}
-
-/**
  * Updates the options in the link dropdown within the text toolbar.
  * @param {string} link - The ID of the box that should be marked as selected, if any.
  */
@@ -515,9 +389,7 @@ function updateBoxList(link) {
         const option = document.createElement("option");
         option.value = box.id;
         option.selected = link == box.id ? "selected" : "";
-        option.textContent = boxLabel(box);
-        // Keeps the id reachable on hover, since two boxes can share a label.
-        option.title = "Box# " + box.id;
+        option.innerHTML = "Box# " + box.id;
         dropdown.appendChild(option);
 
         // Add glow effect on mouseenter/mouseleave for dropdown options
@@ -556,7 +428,6 @@ function getLink(e) {
  * Event listener for the "text" element's context menu (right-click).
  * Prevents the default context menu and displays a custom text toolbar.
  */
-function initTextContextMenu() {
 document.getElementById("text").addEventListener("contextmenu", (e) => {
     e.preventDefault();
 
@@ -610,7 +481,6 @@ document.getElementById("text").addEventListener("contextmenu", (e) => {
         toolbar.style.display = 'none';
     }
 });
-}
 
 // --------------------------------------------------------------------------
 // Toolbar Visibility Management (General)
@@ -692,12 +562,11 @@ function addGlow(span, color) {
 // --------------------------------------------------------------------------
 
 // Toggle the dropdown visibility when the button is hovered over
-function initLinkDropdown() {
 document.querySelector(".dropdown-button").addEventListener('mouseover', e => {
     const container = document.querySelector(".dropdown-content");
     container.innerHTML = "";
     const boxId = container.parentNode.parentNode.dataset.boxId;
-    const allIds = [...boxes.keys()];
+    const allIds = boxes.keys();
     const conectedIds = [...boxes.get(boxId).lines];
 
 
@@ -721,9 +590,7 @@ document.querySelector(".dropdown-button").addEventListener('mouseover', e => {
         });
 
         if (l == boxId) return;
-        element.textContent = boxLabel(boxes.get(l).box);
-        // Keeps the id reachable on hover, since two boxes can share a label.
-        element.title = "Box# " + l;
+        element.innerHTML = "Box# " + l;
 
         if (+boxId < +l) {
             // Add lines connecting box ids
@@ -740,7 +607,7 @@ document.querySelector(".dropdown-button").addEventListener('mouseover', e => {
 
         conectedIds.forEach(e => {
             if (l == e) {
-                element.textContent += " ✅";
+                element.innerHTML += " ✅";
                 conectedIds.shift();
                 // set connection status
                 element.dataset.c = 1;
@@ -754,7 +621,6 @@ document.querySelector(".dropdown-button").addEventListener('mouseover', e => {
 document.querySelector("#link").addEventListener('mouseleave', e => {
     e.target.classList.remove("show");
 });
-}
 
 // --------------------------------------------------------------------------
 // Color Conversion Functions
@@ -840,104 +706,4 @@ function hslToHex(h, s, l) {
     g = Math.round((g + m) * 255);
     b = Math.round((b + m) * 255);
     return `#${(1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1).toUpperCase()}`;
-}
-
-// --------------------------------------------------------------------------
-// Canvas Persistence
-// --------------------------------------------------------------------------
-
-/**
- * Captures the current canvas as a plain object suitable for JSON storage.
- * @returns {{boxes: object[], lines: string[][]}} The serialized canvas.
- */
-function serializeCanvas() {
-    const result = { boxes: [], lines: [] };
-
-    boxes.forEach((entry, id) => {
-        const box = entry.box;
-        result.boxes.push({
-            id: id,
-            x: box.offsetLeft,
-            y: box.offsetTop,
-            color: colorToHex(box.style.backgroundColor || "#f1f1f1"),
-            content: box.innerHTML,
-        });
-    });
-
-    document.querySelectorAll(".line").forEach(line => {
-        result.lines.push(line.id.split("_"));
-    });
-
-    return result;
-}
-
-/**
- * Rebuilds the canvas from a previously serialized object, replacing whatever
- * is currently on it.
- * @param {{boxes: object[], lines: string[][]}} data - Output of serializeCanvas().
- */
-function restoreCanvas(data) {
-    if (!data || !data.boxes || !data.boxes.length) return;
-
-    const container = document.getElementById("boxes");
-    container.innerHTML = "";
-    document.getElementById("lines").innerHTML = "";
-    boxes = new Map();
-    totalBoxes = 0;
-
-    data.boxes.forEach(item => {
-        const box = document.createElement("div");
-        box.id = item.id;
-        box.className = "box";
-        box.style.position = "absolute";
-        box.style.left = `${item.x}px`;
-        box.style.top = `${item.y}px`;
-        box.style.backgroundColor = item.color || "#f1f1f1";
-        box.innerHTML = item.content;
-        box.contentEditable = true;
-        container.appendChild(box);
-
-        makeDraggable(box);
-        listenForImagePaste(box);
-        boxes.set(box.id, {
-            box: box,
-            lines: []
-        });
-
-        // Keep the counter ahead of restored ids so new boxes don't collide.
-        if (+item.id > totalBoxes) totalBoxes = +item.id;
-    });
-
-    (data.lines || []).forEach(([a, b]) => {
-        if (boxes.has(a) && boxes.has(b)) newLine(a, b);
-    });
-}
-
-/**
- * Clears the canvas back to a single seed box, as it appears on first load.
- */
-function resetCanvas() {
-    const container = document.getElementById("boxes");
-    container.innerHTML = "";
-    document.getElementById("lines").innerHTML = "";
-    boxes = new Map();
-    totalBoxes = 1;
-
-    const seed = document.createElement("div");
-    seed.id = "1";
-    seed.className = "box";
-    seed.style.position = "absolute";
-    seed.style.left = "100px";
-    seed.style.top = "100px";
-    seed.style.backgroundColor = "#f1f1f1";
-    seed.textContent = "Seed";
-    seed.contentEditable = true;
-    container.appendChild(seed);
-
-    makeDraggable(seed);
-    listenForImagePaste(seed);
-    boxes.set(seed.id, {
-        box: seed,
-        lines: []
-    });
 }
