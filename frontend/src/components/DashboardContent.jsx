@@ -3,9 +3,9 @@ function DashboardContent() {
     <div className="dashboard-content">
       <div className="welcome-card">
         <div className="welcome-text">
-          <h1>
-            Select a Note to stsart <br />
-            Organising <span>Knowledge</span>
+          <h1 className="content-heading">
+            Select a Note to start <br />
+            Organising <span className="content-heading">Knowledge</span>
           </h1>
 
           <h2>TreeNotes is:</h2>
@@ -30,4 +30,4 @@ function DashboardContent() {
   );
 }
 
-export default DashboardContent;
+export default DashboardContent;    

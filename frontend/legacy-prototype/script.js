@@ -198,7 +198,7 @@ function newLine(box1, box2) {
     newLine.setAttribute('id', id);
 
     // Add box ids to line lists
-
+    
     const box1Lines = boxes.get(box1.id).lines;
     if (!box1Lines.includes(box2.id)) box1Lines.push(box2.id);
 

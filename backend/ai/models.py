@@ -2,11 +2,16 @@ from typing import TypedDict
 from pydantic import BaseModel
 
 class GenerateGraph(BaseModel):
-    rawData: str
+    rawNotes: str
+
+
+class SearchGraph(BaseModel):
+    search_input: str
+    graphJson: str
 
 
 class GenerateSummary(BaseModel):
-    rawData: str
+    rawNotes: str
     graphJson: str
     userSummary: str
 
