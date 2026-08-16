@@ -1,80 +1,117 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import {
+  House,
+  NotebookText,
+  Network,
+  Search,
+  Tags,
+  Settings,
+  ChevronRight,
+  ChevronLeft,
+  ChevronsRight,
+} from "lucide-react";
 
-function Sidebar() {
-  const navigate = useNavigate();
-  const [confirming, setConfirming] = useState(false);
 
-  useEffect(() => {
-    if (!confirming) return;
-
-    function onKeyDown(event) {
-      if (event.key === "Escape") setConfirming(false);
-    }
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [confirming]);
-
-  function handleLogout() {
-    localStorage.removeItem("isLoggedIn");
-    localStorage.removeItem("user");
-    // replace: the back button would otherwise return to a page that only
-    // bounces straight back to the login screen.
-    navigate("/", { replace: true });
-  }
-
+function Sidebar({
+  notesExpanded,
+  onNotesToggle,
+  sidebarCollapsed,
+  onSidebarToggle,
+  onSelectNote,
+}) {
   return (
-    <>
-      <aside className="sidebar">
-        <h2 className="sidebar-brand">
-          {/* Served from public/ rather than imported: a missing file renders as
-              a broken image instead of failing the build. alt is empty because
-              the wordmark beside it already names the app. */}
-          <img src="/logo.png" alt="" className="brand-logo" />
-          <span className="brand-text">
-            Tree<span className="brand-accent">Notes</span>
-          </span>
-        </h2>
+   <aside
+  className={`sidebar ${
+    sidebarCollapsed
+      ? "sidebar-collapsed"
+      : "sidebar-expanded"
+  }`}
+  
+>
 
-        <button onClick={() => navigate("/notes")}>Notes</button>
-        <button onClick={() => navigate("/graph")}>Groups</button>
-        <button>Search</button>
-        <button>Tags</button>
-        <button>Settings</button>
+    
+    
+{/* << FRONTEND DEV >> */}
+      <h2>TreeNotes</h2>
 
-        <button className="sidebar-logout" onClick={() => setConfirming(true)}>
-          Log out
-        </button>
-      </aside>
+ {/* << FRONTEND DEV >> */}
+ {/* Controls whether the dashboard note list is expanded */}
+      <button type="button" onClick={onNotesToggle}>
+        Dashboard
+      </button>     
 
-      {/* A sibling of the sidebar rather than a child: the overlay is fixed, so
-          it must not be confined by the sidebar's own scrolling. */}
-      {confirming && (
-        <div
-          className="app-modal"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) setConfirming(false);
-          }}
-        >
-          <div
-            className="app-modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Log out?"
+
+    {/* << NOTES DATA CONNECTION >> */}
+    {/* Backend should provide the user's saved notes */}
+      {/* Expected note structure:
+          {
+            id: number/string,
+            title: string,
+            content: string
+          }
+      */}
+
+      {notesExpanded && (
+        <div>
+          {/* << TEMPORARY FRONTEND NOTE >> */}
+          
+          <button
+            onClick={() =>
+              onSelectNote({
+                id: 1,
+                title: "Introduction to TreeNotes",
+                content:
+                  "TreeNotes is an open-source note-taking application.",
+              })
+            }
           >
-            <h2 className="app-modal-question">Are you sure you want to logout?</h2>
+            Introduction to TreeNotes
+          </button>
 
-            <div className="app-modal-actions">
-              <button onClick={handleLogout}>Yes</button>
-              <button className="modal-secondary" onClick={() => setConfirming(false)}>
-                No
-              </button>
-            </div>
-          </div>
+          <button
+            onClick={() =>
+              onSelectNote({
+                id: 2,
+                title: "Introduction to LLMs",
+                content:
+                  "Large language models can process and generate text.",
+              })
+            }
+          >
+            Introduction to LLMs
+          </button>
         </div>
       )}
-    </>
+
+    {/* << FRONTEND NAVIGATION >> */}
+    {/* These buttons will later connect to their pages /routes */}
+
+      <button>Notes</button>
+      <button>Graph</button>
+      <button>Search</button>
+      <button>Tags</button>
+      <button>Settings</button>
+
+
+
+    {/* << FRONTEND DEV >> */}
+    {/* Controls the width / collapsed state of the entire sidebar */}
+
+      <button
+      className="sidebar-toggle-button"
+      type="button"
+      onClick={onSidebarToggle}
+      >
+        {sidebarCollapsed ? (
+            <ChevronsRight size={20} strokeWidth={1.8} />
+        ) : (
+            <>
+            <ChevronLeft size={19} strokeWidth={1.8} />
+            <span>Collapse</span>
+            </>
+        )}
+
+      </button>
+    </aside>
   );
 }
 
