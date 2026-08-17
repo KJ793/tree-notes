@@ -81,6 +81,9 @@ function SummaryPanel({rawNotes}) {
             // Changing name for this response as we have multiple await fetch responses on this page and response.status can get confusing
             const data = await aiResponse.json();
 
+            // {   summary: "AI generated summary text" } //
+
+
             // << frontend dev >> //
             // Save returned AI summary into state //
 

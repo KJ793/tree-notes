@@ -125,14 +125,14 @@ return (
             )}
 
             <button onClick={generateGraph} disabled={loading}>
+
                 {loading ? "Generating..." : "Generate Graph"}
             </button>
 
-
         </div>
-
     </section>
-
+            </div>
+            </section>
 );
     
 }

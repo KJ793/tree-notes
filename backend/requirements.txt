@@ -5,3 +5,5 @@ alembic
 psycopg2-binary
 python-dotenv
 requests
+passlib
+bcrypt==4.0.1
