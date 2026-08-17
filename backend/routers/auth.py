@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
-from database import get_db
-from models import User
-from schemas import LoginRequest, LoginResponse
+from backend.database import get_db
+from backend.models import User
+from backend.schemas import LoginRequest, LoginResponse
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
