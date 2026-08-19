@@ -16,7 +16,6 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT}/${POSTGRES_DB}
-      - OLLAMA_URL=http://ollama:11434
     depends_on:
       db:
         condition: service_healthy
@@ -24,6 +23,7 @@ services:
         condition: service_started
     volumes:
       - ./backend:/app/backend
+      - /var/run/docker.sock:/var/run/docker.sock
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -70,11 +70,7 @@ services:
       - "11434:11434"
     volumes:
       - ollama:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities: [gpu]
+    # GPU CONFIG MOVED TO docker-compose.override.yml
 
 volumes:
   postgres_data:

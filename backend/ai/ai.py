@@ -1,14 +1,17 @@
 from typing import cast
 
-import requests, json
+import requests, json, subprocess, os
 from fastapi import APIRouter
 from .models import GenerateGraph, SearchGraph, GenerateSummary, SummaryResponse, ConceptGraphResponse
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
-ollama_url = "http://ollama:11434/api/generate"
-ollama_model = "qwen2.5-coder:14b"
-# ollama_model = "qwen2.5-coder:latest"
+OLLAMA_URL = os.getenv("OLLAMA_URL")
+SMALL_MODEL = os.getenv("SMALL_MODEL_NAME")
+LARGE_MODEL = os.getenv("LARGE_MODEL_NAME")
+EXPLICIT_MODEL = os.getenv("OLLAMA_MODEL")
+
+ACTIVE_MODEL = SMALL_MODEL
 
 ### Simple Prompts for use in Frontend Testing
 
@@ -24,14 +27,31 @@ ollama_model = "qwen2.5-coder:14b"
 
 ### WARM UP OLLAMA ---> PRELOAD
 
+def detect_vram_gb():
+    try:
+        output = subprocess.check_output(
+            ["docker", "exec", "ollama", "nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"]
+        )
+        return int(output.decode().strip()) // 1024
+    except Exception:
+        return 0
+
 def warm_ollama():
-    print("RUNNING WARM-UP...")
-    resp = requests.post(ollama_url, json={
-        "model": ollama_model,
+    global ACTIVE_MODEL
+
+    if EXPLICIT_MODEL:
+        ACTIVE_MODEL = EXPLICIT_MODEL
+    else:
+        if detect_vram_gb() >= 12:
+            ACTIVE_MODEL = LARGE_MODEL
+
+    resp = requests.post(OLLAMA_URL, json={
+        "model": ACTIVE_MODEL,
         "prompt": "Warm-up prompt",
         "stream": False
     })
     _ = resp.json() # forces Ollama to load fully
+
     return
 
 ### Prompt Templates ~~~~~~~~~~~~~~~
@@ -220,12 +240,12 @@ def generate_graph(prompt: str) -> str:
     developed_prompt = concept_extraction_template + "\n<<<\n" + prompt + "\n>>>"
 
     payload = {
-        "model": ollama_model,
+        "model": ACTIVE_MODEL,
         "prompt": developed_prompt,
         "stream": False
     }
 
-    r = requests.post(ollama_url, json=payload)
+    r = requests.post(OLLAMA_URL, json=payload)
     r.raise_for_status()
 
     data = r.json()
@@ -260,12 +280,12 @@ def generate_summary(raw_data: str, graph_json: str, user_summary: str) -> Summa
     )
 
     payload = {
-        "model": ollama_model,
+        "model": ACTIVE_MODEL,
         "prompt": developed_prompt,
         "stream": False
     }
 
-    r = requests.post(ollama_url, json=payload)
+    r = requests.post(OLLAMA_URL, json=payload)
     r.raise_for_status()
 
     data = r.json()
@@ -289,12 +309,12 @@ def search_graph(search_input: str, json_graph: str) -> int:
     )
 
     payload = {
-        "model": ollama_model,
+        "model": ACTIVE_MODEL,
         "prompt": developed_prompt,
         "stream": False
     }
 
-    r = requests.post(ollama_url, json=payload)
+    r = requests.post(OLLAMA_URL, json=payload)
     r.raise_for_status()
 
     data = r.json()

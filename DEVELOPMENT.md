@@ -148,7 +148,7 @@ Then, run
 ```bash
 docker compose up --build
 ```
-and this should create your two containers. You can confirm using `docker ps` and multiple containers should appear, including one called "treenotes_ollama".
+and this should create your two containers. You can confirm using `docker ps` and multiple containers should appear, including one called "ollama".
 
 We must provide instruction to the the Nvidia Container Toolkit to run inside docker. For Linux:
 
@@ -179,19 +179,39 @@ this will start the entire application, backend, frontend, postgres, pgadmin, an
 
 Now that the full docker stack is running, we can install the AI Model of your choice:
 ```bash
-docker exec -it treenotes_ollama ollama pull qwen2.5-coder:14b
-docker exec -it treenotes_ollama ollama pull qwen2.5-coder
+docker exec -it ollama ollama pull qwen2.5-coder:14b
+docker exec -it ollama ollama pull qwen2.5-coder
 ```
 - Replace "qwen2.5-coder:14b" or "qwen2.5-coder" with the model of your choice. Keep in mind the size of your GPU; make sure to leave a few GB for runtime overhead.
+- Using alternative models will also require an adjustment in the environment variables.
 - In this case, we are using two different models for two different situations:
 1. If your system does not have an NVIDIA GPU, or your NVIDIA GPU is no more than 8GB VRAM, it is recommended that you only implement qwen2.5-coder, with an approximate size of 4.7GB, which should leave ample room for runtime overhead.
 2. If your system has an NVIDIA GPU with at least 12GB VRAM, the larger qwen2.5-coder:14b model will provide better responses and consume over 9GB of your VRAM, so having at least 12GB will leave you with runtime overhead capacity.
 
-*Side Note:* the command "ollama pull <model_name>" is how you install your model via the Ollama service directly on your machine. The part "docker exec -it" says this is a command you want to run inside docker, "treenotes_ollama" is specific to in which container to run the command, and the final part is the command you want to run inside that docker container. In our case, we want ollama to pull (download) a model into our docker container.
+*Side Note:* the command "ollama pull <model_name>" is how you install your model via the Ollama service directly on your machine. The part "docker exec -it" says this is a command you want to run inside docker, "ollama" is specific to in which container to run the command, and the final part is the command you want to run inside that docker container. In our case, we want ollama to pull (download) a model into our docker container.
+
+### Quick Detour for those with a Dedicated NVidia GPU...
+
+Additionally, if you computer system has a dedicated NVIDIA GPU, you should create a new file in the /root/ directory:
+
+**docker-compose.override.yml**
+```yaml
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+```
+
+This file type is **gitignored** and will only apply to your local machine. Docker Compose will automatically merge it with the main `docker-compose.yml` file and enable GPU passthrough for the Ollama service.
+
+### Joining back to the main path and resuming setup...
 
 To confirm your docker container has the model stored:
 ```bash
-docker exec -it treenotes_ollama ollama list
+docker exec -it ollama ollama list
 ```
 You should see something like:
 |NAME | ID | SIZE | MODIFIED|
@@ -203,7 +223,7 @@ To confirm everything is running correctly, run:
 ```bash
 docker ps
 ```
-This should give you all the active containers, including one called **treenotes_ollama** and its active port **11434**.
+This should give you all the active containers, including one called **ollama** and its active port **11434**.
 
 ### Important!!!
 * Go to the tree-notes/backend/ai/ai.py file, On line **10-11**, you must comment out the `ollama_model` variable that you are not using. By default, the application uses the 14b version, so if you decide to not use this version, please swap the comments.
