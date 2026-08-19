@@ -42,8 +42,8 @@ function SearchBar({ onSearch }) {
 
 
       {/* << SEARCH CONNECTION >> */}
-      {/* Parent component decides what happens with searchTerm */}
-      {/* Backend search connection can be added there later */}
+      {/* Parent component decides what happens with searchterm */}
+      {/* Backend search connection can be added here later */}
 
       <button type="submit">
         Search
