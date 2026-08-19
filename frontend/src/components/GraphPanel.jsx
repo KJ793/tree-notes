@@ -1,4 +1,5 @@
-import {useState} from 'react';
+import {useRef, useEffect ,useState} from 'react';
+import cytoscape from 'cytoscape';
 
 function GraphPanel({rawNotes}) {
     
@@ -11,6 +12,12 @@ function GraphPanel({rawNotes}) {
 
     //error state for graph generation(if returned by AI)//
     const [error, setError] = useState("");
+
+    // << CYTOSCAPE FRONTEND >> //
+    // References the HTML div where Cytoscape will render the graph //
+    const graphContainerRef = useRef(null);
+
+
 
 
     async function generateGraph() {
@@ -51,6 +58,14 @@ function GraphPanel({rawNotes}) {
                 throw new Error("Graph generation failed. Please try again.");
 
         }
+
+        // <<frontend dev cytoscape>> // 
+
+        useEffect(() => {
+            if (graphData && graphContainerRef.current) {   
+                return;
+            }
+        }, [graphData]);
 
         // Hans AI RESPONSE //
 
@@ -120,13 +135,11 @@ return (
                JSON display with the real Cytoscape graph.
             */}
 
-            {graphData && (
-                <div className="graph-container">
-                    {/* Render the Cytoscape graph here */}
-
-                    <pre>{JSON.stringify(graphData, null, 2)}</pre>
-                </div>
-            )}
+            <div
+                ref={graphContainerRef}
+                className="graph-container"
+            >
+            </div>
 
             <button onClick={generateGraph} disabled={loading}>
 
