@@ -774,13 +774,15 @@ padding: 24px 0;
 
 .profile-dropdown-icon {
   width: 20px;
+  height: 20px;
 
   display: flex;
+  align-items: center;
   justify-content: center;
 
-  color: #aaa6ff;
+  flex-shrink: 0;
 
-  font-size: 17px;
+  color: #aaa6ff;
 }
 
 
