@@ -30,7 +30,11 @@ function GraphPanel({rawNotes}) {
         if (!rawNotes || rawNotes.trim() === "") {
             setError("Please write some notes before generating a graph.");
             return;
-        } 
+        }
+
+    
+
+
 
         setLoading(true);
         setError("");
@@ -59,13 +63,7 @@ function GraphPanel({rawNotes}) {
 
         }
 
-        // <<frontend dev cytoscape>> // 
-
-        useEffect(() => {
-            if (graphData && graphContainerRef.current) {   
-                return;
-            }
-        }, [graphData]);
+         
 
         // Hans AI RESPONSE //
 
@@ -106,7 +104,90 @@ function GraphPanel({rawNotes}) {
 
     }
 
+    const testGraphData = {
+    nodes: [
+        { data: { id: "1", label: "React" } },
+        { data: { id: "2", label: "JavaScript" } },
+        { data: { id: "3", label: "Components" } },
+    ],
+
+    edges: [
+        { data: { id: "e1", source: "1", target: "2" } },
+        { data: { id: "e2", source: "1", target: "3" } },
+    ],
+    };
+
+    setGraphData(testGraphData);
+    return;
+
+
+
+
 }
+
+// <<frontend dev cytoscape>> // 
+
+        useEffect(() => {
+            if (!graphData || !graphContainerRef.current) {   
+                return;
+            }
+
+
+            const cy = cytoscape({
+                container: graphContainerRef.current,
+                elements:[
+                    ...graphData.nodes, 
+                    ...graphData.edges, 
+                ],
+
+                layout: {
+                    name: 'cose',
+                    animate: true,
+                    fit: true,
+                    padding: 50,
+                },
+                
+                style: [
+                    {
+                        selector: 'node',
+                        style: {
+                            'background-color': '#6366F1',
+                            'label': 'data(label)',
+                            'color': '#fff',
+                            'text-valign': 'center',
+                            'text-halign': 'center',    
+                            'font-size': '12px',    
+                        },  
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'width': 2, 
+                            'line-color': '#64748b',
+                            'target-arrow-color': '#64748b',    
+                            'target-arrow-shape': 'triangle',
+                            'curve-style': 'bezier',
+                        },
+
+
+                        
+
+
+                    },
+                
+                ]
+            });
+            cy.one("layoutstop", () => {
+                cy.resize();
+                cy.fit(cy.elements(), 50);
+            });
+
+            return () => {
+                cy.destroy();
+            };
+
+        }, [graphData]);
+
 
 // <<frontend dev >> //
 // page structure and rendering from data and function above //
