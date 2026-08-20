@@ -65,11 +65,36 @@ function GraphPanel({rawNotes}) {
 
          
 
-        // Hans AI RESPONSE //
+            // HANS AI GRAPH INTEGRATION //
+            // HANS RECIEVES RAW NOTES FROM BACKEND AND RETURNS GRAPH JSON //
 
-        // Hans receives rawNotes from backend //
-        
-        // Hans must return graph information as JSON //
+            // AI/BACKEND MUS RETURN GRAPH IN JSON FORMAT LIKE BELOW //
+            // {
+            //     nodes: [
+            //         { data: { id: "1", label: "Node 1" } },
+            //         { data: { id: "2", label: "Node 2" } },
+            //     ],
+            //     edges: [
+            //         { data: { id: "e1", source: "1", target: "2" } },
+            //     ],
+            // }
+
+            // NODE REQUIREMENTS //
+            // Id is unique for each node
+            // Label is the text displayed on the node
+
+            // EDGE REQUIREMENTS //
+            // Id is unique for each edge
+            // Source is the id of the source node
+            // Target is the id of the target node
+
+            // <<frontend dev >> //
+            // frontend expects:
+            // graphData.nodes
+            // graphData.edges
+            // which will be used by cytoscape to render the graph//
+            // As per current set up no more chnages from frontend side are required for graph rendering//
+            // We will continue to add stlying but it should not affect the graph rendering as long as the graphData format is maintained//
 
         const data = await response.json();
 
@@ -77,7 +102,7 @@ function GraphPanel({rawNotes}) {
         // save returned graph json to graphData state for rendering in graph panel//
         setGraphData(data);
 
-        // later cytoscape will use this data as  graphData.node and graphData.edges to render the graph//
+        //cytoscape uses this data as  graphData.node and graphData.edges to render the graph//
 
     } catch (error) {
 
@@ -103,7 +128,7 @@ function GraphPanel({rawNotes}) {
 
 
     }
-
+// we will remove this test graph data once the backend is integrated and working properly//
     const testGraphData = {
     nodes: [
         { data: { id: "1", label: "React" } },
