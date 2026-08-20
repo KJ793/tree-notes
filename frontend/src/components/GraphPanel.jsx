@@ -53,12 +53,17 @@ function GraphPanel({rawNotes}) {
         }
 
         // Hans AI RESPONSE //
-
         // Hans receives rawNotes from backend //
-        
         // Hans must return graph information as JSON //
+        const aiResponse = await fetch("http://localhost:8000/ai/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rawNotes: rawNotes })
+        })
 
-        const data = await response.json();
+        // const data = await response.json();
+        // Changing name for this response as we have multiple await fetch responses on this page and response.status can get confusing
+        const data = await aiResponse.json();
 
         // <<frontend dev >> //
         // save returned graph json to graphData state for rendering in graph panel//
@@ -79,15 +84,6 @@ function GraphPanel({rawNotes}) {
     } finally {
         // stop loading state after graph generation attempt and failed//
         setLoading(false);
-
-
-
-        
-
-
-        
-
-
 
     }
 
@@ -133,14 +129,8 @@ return (
                 {loading ? "Generating..." : "Generate Graph"}
             </button>
 
-
-            </div>
-
-            </section>
-
-            
-
-
+        </div>
+    </section>
 );
     
 }

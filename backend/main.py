@@ -12,7 +12,10 @@ docker compose run backend alembic current
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import auth, groups, notes
+from backend.routers import auth, groups, notes
+
+from backend.ai.ai import router as ai_router
+from backend.ai.ai import warm_ollama
 
 app = FastAPI(
         title = "Treenotes APi",
@@ -35,6 +38,11 @@ app.add_middleware(
 def health() -> dict:
     return {"status": "ok"}
 
+@app.on_event("startup") # warm load the Ollama model on startup
+def on_startup():
+    warm_ollama()
+
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(notes.router, prefix="/notes", tags=["notes"])
 app.include_router(groups.router, prefix="/groups", tags=["groups"])
+app.include_router(ai_router)

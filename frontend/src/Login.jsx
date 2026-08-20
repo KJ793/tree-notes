@@ -43,7 +43,8 @@ async function handleSubmit(event) {
       // }
 
 
-      const response = await fetch("/api/login", {
+      // const response = await fetch("/api/login", {
+      const response = await fetch("http://localhost:8000/auth/login", {
         method: "POST",
 
         headers: {
