@@ -1,0 +1,380 @@
+.note-workspace {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  color: #f4f6fb;
+  text-align: left;
+}
+
+/* ---------------------------------------------------------
+   Note title
+   --------------------------------------------------------- */
+
+.note-workspace .note-title {
+  width: 100%;
+  height: 46px;
+  margin: 0;
+  padding: 0 24px;
+
+  border: 1px solid #22334d;
+  border-radius: 9px;
+  outline: none;
+
+  background: #111a2b;
+  color: #f5f7fb;
+
+  font: inherit;
+  font-size: 21px;
+  font-weight: 400;
+
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+}
+
+.note-workspace .note-title:hover {
+  border-color: #304765;
+}
+
+.note-workspace .note-title:focus {
+  border-color: #6864ef;
+  background: #131e31;
+  box-shadow: 0 0 0 3px rgba(104, 100, 239, 0.11);
+}
+
+/* ---------------------------------------------------------
+   Main Raw Notes + Graph row
+   --------------------------------------------------------- */
+
+.note-workspace .notes-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.28fr) minmax(340px, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.note-workspace .raw-notes,
+.note-workspace .graph-panel {
+  min-width: 0;
+  min-height: 480px;
+  padding: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  overflow: hidden;
+
+  border: 1px solid #2d4668;
+  border-radius: 10px;
+
+  background: #111a2b;
+
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+/* Panel headings */
+
+.note-workspace .raw-notes > h2,
+.note-workspace .graph-panel > h2 {
+  min-height: 48px;
+  margin: 0;
+  padding: 13px 22px 11px;
+
+  display: flex;
+  align-items: center;
+
+  border-bottom: 1px solid #263a56;
+
+  color: #f5f6fb;
+
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.2px;
+}
+
+/* ---------------------------------------------------------
+   Raw Notes editor
+   --------------------------------------------------------- */
+
+.note-workspace .raw-notes {
+  padding-bottom: 16px;
+}
+
+.note-workspace .text-area {
+  width: auto;
+  min-height: 390px;
+  flex: 1;
+
+  margin: 16px;
+  padding: 22px 24px;
+
+  resize: none;
+  outline: none;
+
+  border: 1px solid #314867;
+  border-radius: 7px;
+
+  background: #192335;
+  color: #eef1f7;
+
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.55;
+
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.note-workspace .text-area::placeholder {
+  color: #778399;
+}
+
+.note-workspace .text-area:focus {
+  border-color: #6864ef;
+  box-shadow: 0 0 0 3px rgba(104, 100, 239, 0.09);
+}
+
+/* ---------------------------------------------------------
+   Graph panel
+   --------------------------------------------------------- */
+
+.note-workspace .graph-placeholder {
+  position: relative;
+  flex: 1;
+  min-height: 420px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+
+  padding: 18px;
+
+  color: #8f9bb0;
+  text-align: center;
+}
+
+.note-workspace .graph-placeholder > p {
+  margin: 10px 0 6px;
+  color: #8f9bb0;
+  font-size: 14px;
+}
+
+.note-workspace .graph-container {
+  width: 100%;
+  height: auto;
+  min-height: 320px;
+  flex: 1;
+
+  position: relative;
+  overflow: hidden;
+
+  border-radius: 6px;
+  background: #111a2b;
+}
+
+.note-workspace .graph-placeholder > button {
+  align-self: flex-end;
+
+  margin-top: 10px;
+  padding: 8px 14px;
+
+  border: 1px solid #514bd0;
+  border-radius: 7px;
+
+  background: #625df0;
+  color: #ffffff;
+
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+
+  cursor: pointer;
+
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    transform 0.16s ease;
+}
+
+.note-workspace .graph-placeholder > button:hover:not(:disabled) {
+  background: #746ff5;
+  border-color: #746ff5;
+  transform: translateY(-1px);
+}
+
+.note-workspace .graph-placeholder > button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.note-workspace .graph-error {
+  color: #ff8e94;
+}
+
+/* ---------------------------------------------------------
+   Summary panel
+   --------------------------------------------------------- */
+
+.note-workspace .summary-panel {
+  margin: 0;
+  padding: 7px;
+
+  overflow: hidden;
+
+  border: 1px solid #243956;
+  border-radius: 9px;
+
+  background: #111a2b;
+}
+
+.note-workspace .summary-header {
+  min-height: 33px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin: 0 0 5px;
+  padding: 0;
+}
+
+.note-workspace .summary-header > div {
+  display: flex;
+  align-items: center;
+}
+
+.note-workspace .summary-header button {
+  min-height: 29px;
+  padding: 5px 9px;
+
+  border: 1px solid #334765;
+  border-radius: 4px;
+
+  background: transparent;
+  color: #c7cedb;
+
+  font: inherit;
+  font-size: 13px;
+
+  cursor: pointer;
+}
+
+/* Treat AI Summary as the currently selected tab for now. */
+.note-workspace .summary-header > div button:first-child {
+  border-color: #6864ef;
+  background: #6864ef;
+  color: #ffffff;
+}
+
+.note-workspace .summary-header > div button + button {
+  margin-left: -1px;
+}
+
+/* Regenerate is visually quieter than the tabs. */
+.note-workspace .summary-header > button {
+  margin-right: 8px;
+  border-color: transparent;
+  background: transparent;
+  color: #c9cfda;
+}
+
+.note-workspace .summary-header > button:hover:not(:disabled) {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.note-workspace .summary-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.note-workspace .summary-content textarea {
+  width: 100%;
+  min-height: 95px;
+  padding: 10px 12px;
+
+  resize: vertical;
+  outline: none;
+
+  border: 1px solid #314867;
+  border-radius: 5px;
+
+  background: #111a2b;
+  color: #e9edf5;
+
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.note-workspace .summary-content textarea:focus {
+  border-color: #6864ef;
+  box-shadow: 0 0 0 2px rgba(104, 100, 239, 0.08);
+}
+
+.note-workspace .summary-content textarea::placeholder {
+  color: #7e899d;
+}
+
+.note-workspace .summary-content textarea[readonly] {
+  color: #d2d8e3;
+}
+
+.note-workspace .summary-error {
+  margin: 4px 8px 8px;
+  color: #ff8e94;
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------------
+   Scrollbars inside the workspace
+   --------------------------------------------------------- */
+
+.note-workspace textarea::-webkit-scrollbar {
+  width: 7px;
+}
+
+.note-workspace textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.note-workspace textarea::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background: #35445d;
+}
+
+/* ---------------------------------------------------------
+   Responsive layout
+   --------------------------------------------------------- */
+
+@media (max-width: 1100px) {
+  .note-workspace .notes-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .note-workspace .raw-notes,
+  .note-workspace .graph-panel {
+    min-height: 420px;
+  }
+}
+
+@media (max-width: 720px) {
+  .note-workspace {
+    gap: 12px;
+  }
+
+  .note-workspace .note-title {
+    height: 42px;
+    padding: 0 16px;
+    font-size: 17px;
+  }
+
+  .note-workspace .summary-content {
+    grid-template-columns: 1fr;
+  }
+}

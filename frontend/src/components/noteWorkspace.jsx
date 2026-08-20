@@ -1,6 +1,7 @@
 import {useState} from "react";
 import GraphPanel from "./GraphPanel";
 import SummaryPanel from "./SummaryPanel";
+import "./NoteWorkspace.css";
 
 function NoteWorkspace({ note }) {
 
