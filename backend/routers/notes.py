@@ -13,7 +13,7 @@ DEV_USER_ID = 1
 router = APIRouter()
 
 @router.post(
-    "/",
+    "",
     response_model=NoteResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -26,7 +26,7 @@ def create_note(payload: NoteCreate, db: Session = Depends(get_db)) -> Note:
     return note
 
 
-@router.get("/", response_model=List[NoteResponse])
+@router.get("", response_model=List[NoteResponse])
 def list_notes(
         skip: int = 0,
         limit: int = 100,

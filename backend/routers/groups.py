@@ -18,7 +18,7 @@ DEV_USER_ID = 1
 router = APIRouter()
 
 
-@router.post("/", response_model=GroupResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=GroupResponse, status_code=status.HTTP_201_CREATED)
 def create_group(payload: GroupCreate, db: Session = Depends(get_db)) -> Group:
     name = payload.name.strip()
     if not name:
@@ -49,7 +49,7 @@ def create_group(payload: GroupCreate, db: Session = Depends(get_db)) -> Group:
     return group
 
 
-@router.get("/", response_model=List[GroupResponse])
+@router.get("", response_model=List[GroupResponse])
 def list_groups(db: Session = Depends(get_db)) -> List[Group]:
     return (
         db.query(Group)

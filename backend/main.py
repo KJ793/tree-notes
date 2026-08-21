@@ -2,12 +2,19 @@
 to run:
 docker compose down -v (wipes database)
 docker compose up -d --build
-docker compose run backend alembic upgrade head
-curl.exe http://localhost:8000/health
+docker compose run --rm backend alembic -c backend/alembic.ini upgrade head
+curl.exe http://localhost:8000/health        (backend direct)
+curl.exe http://localhost:8080/api/health    (through the nginx proxy)
 http://localhost:8000/docs
 verify with:
-docker compose run backend alembic current
+docker compose run --rm backend alembic -c backend/alembic.ini current
+
+alembic needs -c because the code lives at /app/backend while `docker compose
+run` starts in /app, so alembic.ini is not in the working directory.
 """
+
+import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,11 +45,26 @@ app.add_middleware(
 def health() -> dict:
     return {"status": "ok"}
 
+# Same payload as /health, but reachable through the nginx proxy, which only
+# forwards paths under /api. Use this to smoke test the browser-to-backend path.
+@app.get("/api/health", tags=["meta"])
+def api_health() -> dict:
+    return {"status": "ok"}
+
 @app.on_event("startup") # warm load the Ollama model on startup
 def on_startup():
-    warm_ollama()
+    if os.getenv("AI_WARMUP", "true").lower() != "true":
+        return
+    try:
+        warm_ollama()
+    except Exception as exc:
+        # An unreachable or still-loading Ollama must not stop the API from
+        # serving: every other route would go down with it.
+        logging.getLogger("uvicorn.error").warning("Ollama warm-up skipped: %s", exc)
 
-app.include_router(auth.router, prefix="/auth", tags=["auth"])
-app.include_router(notes.router, prefix="/notes", tags=["notes"])
-app.include_router(groups.router, prefix="/groups", tags=["groups"])
+# Mounted under /api because the frontend issues same-origin relative calls to
+# /api/*, which nginx forwards here with the prefix intact.
+app.include_router(auth.router, prefix="/api", tags=["auth"])
+app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
+app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
 app.include_router(ai_router)
