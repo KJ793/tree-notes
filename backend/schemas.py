@@ -79,7 +79,13 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class LoginResponse(BaseModel):
+class UserPublic(BaseModel):
     id: int
-    username: str
     email: str
+    # The frontend reads this as "name"; the column is called username.
+    name: str
+
+
+class LoginResponse(BaseModel):
+    # Nested under "user" because that is the shape Login.jsx documents.
+    user: UserPublic

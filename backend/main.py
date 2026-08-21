@@ -18,6 +18,7 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from backend.routers import auth, groups, notes
 
@@ -39,6 +40,25 @@ app.add_middleware(
     allow_credentials = True,
     allow_methods = ["*"],
     allow_headers = ["*"],
+)
+
+DEV_SESSION_SECRET = "dev-only-insecure-session-secret"
+SESSION_SECRET = os.getenv("SESSION_SECRET", DEV_SESSION_SECRET)
+if SESSION_SECRET == DEV_SESSION_SECRET:
+    logging.getLogger("uvicorn.error").warning(
+        "SESSION_SECRET is unset; falling back to the insecure development "
+        "default. Set a real secret before deploying."
+    )
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key = SESSION_SECRET,
+    session_cookie = "treenotes_session",
+    # The frontend reaches the API same-origin through nginx, so lax is
+    # sufficient and avoids the SameSite=None; Secure requirement that
+    # cross-origin credentialed requests would impose over plain http.
+    same_site = "lax",
+    https_only = False,
 )
 
 @app.get("/health", tags=["meta"])

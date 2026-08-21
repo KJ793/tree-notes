@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models import Group, Note, NoteLink
+from backend.dependencies import get_current_user
+from backend.models import Group, Note, NoteLink, User
 from backend.schemas import (
     GraphResponse,
     GroupCreate,
@@ -13,13 +14,15 @@ from backend.schemas import (
     LinkResponse,
 )
 
-DEV_USER_ID = 1
-
 router = APIRouter()
 
 
 @router.post("", response_model=GroupResponse, status_code=status.HTTP_201_CREATED)
-def create_group(payload: GroupCreate, db: Session = Depends(get_db)) -> Group:
+def create_group(
+        payload: GroupCreate,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+) -> Group:
     name = payload.name.strip()
     if not name:
         raise HTTPException(
@@ -27,7 +30,11 @@ def create_group(payload: GroupCreate, db: Session = Depends(get_db)) -> Group:
             detail="Group name cannot be empty",
         )
 
-    existing = db.query(Group).filter(Group.name == name).first()
+    existing = (
+        db.query(Group)
+        .filter(Group.user_id == current_user.id, Group.name == name)
+        .first()
+    )
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -35,14 +42,14 @@ def create_group(payload: GroupCreate, db: Session = Depends(get_db)) -> Group:
         )
 
     if payload.parent_id is not None:
-        parent = _get_group(db, payload.parent_id)
+        parent = _get_group(db, payload.parent_id, current_user.id)
         if parent is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Parent group {payload.parent_id} not found",
             )
 
-    group = Group(name=name, parent_id=payload.parent_id, user_id=DEV_USER_ID)
+    group = Group(name=name, parent_id=payload.parent_id, user_id=current_user.id)
     db.add(group)
     db.commit()
     db.refresh(group)
@@ -50,27 +57,33 @@ def create_group(payload: GroupCreate, db: Session = Depends(get_db)) -> Group:
 
 
 @router.get("", response_model=List[GroupResponse])
-def list_groups(db: Session = Depends(get_db)) -> List[Group]:
+def list_groups(
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+) -> List[Group]:
     return (
         db.query(Group)
-        .filter(Group.user_id == DEV_USER_ID)
+        .filter(Group.user_id == current_user.id)
         .order_by(Group.name)
         .all()
     )
 
 
 @router.get("/graph", response_model=GraphResponse)
-def read_graph(db: Session = Depends(get_db)) -> GraphResponse:
+def read_graph(
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+) -> GraphResponse:
 
     groups = (
         db.query(Group)
-        .filter(Group.user_id == DEV_USER_ID)
+        .filter(Group.user_id == current_user.id)
         .order_by(Group.name)
         .all()
     )
     notes = (
         db.query(Note)
-        .filter(Note.user_id == DEV_USER_ID)
+        .filter(Note.user_id == current_user.id)
         .order_by(Note.title)
         .all()
     )
@@ -86,8 +99,12 @@ def read_graph(db: Session = Depends(get_db)) -> GraphResponse:
 
 
 @router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_group(group_id: int, db: Session = Depends(get_db)) -> None:
-    group = _get_group(db, group_id)
+def delete_group(
+        group_id: int,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+) -> None:
+    group = _get_group(db, group_id, current_user.id)
     if group is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -95,10 +112,10 @@ def delete_group(group_id: int, db: Session = Depends(get_db)) -> None:
         )
 
 
-    held = _descendant_ids(db, group_id)
+    held = _descendant_ids(db, group_id, current_user.id)
     note_count = (
         db.query(Note)
-        .filter(Note.user_id == DEV_USER_ID, Note.group_id.in_(held))
+        .filter(Note.user_id == current_user.id, Note.group_id.in_(held))
         .count()
     )
     if note_count:
@@ -115,15 +132,19 @@ def delete_group(group_id: int, db: Session = Depends(get_db)) -> None:
 
 
 @router.post("/links", response_model=LinkResponse, status_code=status.HTTP_201_CREATED)
-def create_link(payload: LinkCreate, db: Session = Depends(get_db)) -> NoteLink:
+def create_link(
+        payload: LinkCreate,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+) -> NoteLink:
     if payload.note_a_id == payload.note_b_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="A note cannot be linked to itself",
         )
 
-    note_a = _get_note(db, payload.note_a_id)
-    note_b = _get_note(db, payload.note_b_id)
+    note_a = _get_note(db, payload.note_a_id, current_user.id)
+    note_b = _get_note(db, payload.note_b_id, current_user.id)
     if note_a is None or note_b is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -155,36 +176,48 @@ def create_link(payload: LinkCreate, db: Session = Depends(get_db)) -> NoteLink:
 
 
 @router.delete("/links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_link(link_id: int, db: Session = Depends(get_db)) -> None:
+def delete_link(
+        link_id: int,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+) -> None:
     link = db.query(NoteLink).filter(NoteLink.id == link_id).first()
     if link is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Link {link_id} not found",
         )
+
+    # A link is only reachable by the user who owns both of its endpoints.
+    if _get_note(db, link.note_a_id, current_user.id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Link {link_id} not found",
+        )
+
     db.delete(link)
     db.commit()
 
 
-def _get_group(db: Session, group_id: int) -> Group | None:
+def _get_group(db: Session, group_id: int, user_id: int) -> Group | None:
     return (
         db.query(Group)
-        .filter(Group.id == group_id, Group.user_id == DEV_USER_ID)
+        .filter(Group.id == group_id, Group.user_id == user_id)
         .first()
     )
 
 
-def _get_note(db: Session, note_id: int) -> Note | None:
+def _get_note(db: Session, note_id: int, user_id: int) -> Note | None:
     return (
         db.query(Note)
-        .filter(Note.id == note_id, Note.user_id == DEV_USER_ID)
+        .filter(Note.id == note_id, Note.user_id == user_id)
         .first()
     )
 
 
-def _descendant_ids(db: Session, group_id: int) -> List[int]:
+def _descendant_ids(db: Session, group_id: int, user_id: int) -> List[int]:
 #Find children ids
-    groups = db.query(Group).filter(Group.user_id == DEV_USER_ID).all()
+    groups = db.query(Group).filter(Group.user_id == user_id).all()
     children: dict[int, List[int]] = {}
     for group in groups:
         children.setdefault(group.parent_id, []).append(group.id)

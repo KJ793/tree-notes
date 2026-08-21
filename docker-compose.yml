@@ -28,6 +28,9 @@ services:
       # Set to false to skip the Ollama warm-up on startup, which --reload
       # otherwise re-runs on every code change.
       - AI_WARMUP=true
+      # Signs the session cookie. Falls back to a known dev value so the
+      # stack runs out of the box; override in .env before deploying.
+      - SESSION_SECRET=${SESSION_SECRET:-dev-only-insecure-session-secret}
     depends_on:
       db:
         condition: service_healthy
