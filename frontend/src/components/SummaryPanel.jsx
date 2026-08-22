@@ -63,17 +63,34 @@ function SummaryPanel({rawNotes}) {
             // << HANS AI RESPONSE >> //
             // Hans receives rawNotes from backend //
             // Hans must return AI summary as a string //
+            // { summary: "AI generated summary text" } //
 
+            const aiResponse = await fetch("http://localhost:8000/ai/summarise", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ rawNotes: rawNotes, userSummary: mySummary })
+                // body: JSON.stringify({ rawNotes: rawNotes, graphJson: graphJson, userSummary: userSummary })
+            });
 
-            // {   summary: "AI generated summary text" } // 
+            // >>>>>> FRONTEND TEAM <<<<<< //
+            // If you provide me with graphJson (from GraphPanel.jsx) I can send this to the AI model as additional content with which it can produce a summary (not needed)
+            // If you provide me with a userSummary, then the AI can produce a review of the user Summary + a User score. But you will need HTML to present this data.
+            // Let me know what you want to do here.
 
-            const data = await response.json();
+            // const data = await response.json();
+            // Changing name for this response as we have multiple await fetch responses on this page and response.status can get confusing
+            const data = await aiResponse.json();
+
+            // {   summary: "AI generated summary text" } //
 
 
             // << frontend dev >> //
             // Save returned AI summary into state //
 
-            setAiSummary(data.summary);
+            // setAiSummary(data.summary);
+            // HANS advises to change "data.summary" -> "data.aiSummary" to avoid confusion between multiple summaries between user and AI
+            // "aiSummary" also matches the return type Schema in the AI component
+            setAiSummary(data.aiSummary);
 
 
         } catch (error) {

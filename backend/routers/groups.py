@@ -3,9 +3,9 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from database import get_db
-from models import Group, Note, NoteLink
-from schemas import (
+from backend.database import get_db
+from backend.models import Group, Note, NoteLink
+from backend.schemas import (
     GraphResponse,
     GroupCreate,
     GroupResponse,

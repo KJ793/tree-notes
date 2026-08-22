@@ -4,9 +4,9 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from database import get_db
-from models import Note
-from schemas import NoteCreate, NoteResponse, NoteUpdate
+from backend.database import get_db
+from backend.models import Note
+from backend.schemas import NoteCreate, NoteResponse, NoteUpdate
 
 DEV_USER_ID = 1
 

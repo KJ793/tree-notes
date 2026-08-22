@@ -7,7 +7,9 @@ services:
       - backend
 
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     env_file:
@@ -17,8 +19,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      ollama:
+        condition: service_started
     volumes:
-      - ./backend:/app
+      - ./backend:/app/backend
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   db:
     image: postgres:15
@@ -56,5 +63,15 @@ services:
       db:
         condition: service_healthy
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    # GPU CONFIG MOVED TO docker-compose.override.yml
+
 volumes:
   postgres_data:
+  ollama:
