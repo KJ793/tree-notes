@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import {
+  User,
+  LogOut,
+} from "lucide-react";
+
 import treeNotesLogo from "../assets/logo.png";
+
 
 const initialNavbarUser = {
   displayName: "Ali H",
@@ -281,7 +287,7 @@ function Navbar() {
                 className="profile-dropdown-icon"
                 aria-hidden="true"
               >
-                ♙
+                <User size={18} strokeWidth={1.8} />
               </span>
 
               <span>Profile</span>
@@ -297,7 +303,7 @@ function Navbar() {
                 className="profile-dropdown-icon"
                 aria-hidden="true"
               >
-                ↪
+                <LogOut size={18} strokeWidth={1.8} />
               </span>
 
               <span>Log out</span>

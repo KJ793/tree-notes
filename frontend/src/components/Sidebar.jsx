@@ -1,10 +1,4 @@
 import {
-  House,
-  NotebookText,
-  Network,
-  Search,
-  Tags,
-  Settings,
   ChevronRight,
   ChevronLeft,
   ChevronsRight,
