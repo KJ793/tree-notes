@@ -42,9 +42,8 @@ async function handleSubmit(event) {
       //   password: string
       // }
 
-
-      // const response = await fetch("/api/login", {
-      const response = await fetch("http://localhost:8000/auth/login", {
+      // const response = await fetch("http://localhost:8000/auth/login", {
+      const response = await fetch("/api/login", {
         method: "POST",
 
         headers: {

@@ -76,7 +76,6 @@
 
 /* Panel headings */
 
-.note-workspace .raw-notes > h2,
 .note-workspace .graph-panel > h2 {
   min-height: 48px;
   margin: 0;
@@ -377,4 +376,232 @@
   .note-workspace .summary-content {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------------------------------------------------------
+   Raw Notes Heading
+   --------------------------------------------------------- */
+
+.note-workspace .raw-notes-heading {
+  min-height: 48px;
+
+  display: flex;
+  align-items: center;
+
+  gap: 9px;
+
+  padding: 0 22px;
+
+  border-bottom: 1px solid #263a56;
+
+  color: #f5f6fb;
+}
+
+
+.note-workspace .raw-notes-heading h2 {
+  margin: 0;
+
+  color: #f5f6fb;
+
+  font-size: 21px;
+  font-weight: 500;
+}
+
+
+.note-workspace .raw-notes-heading svg {
+  color: #f5f6fb;
+}
+
+
+/* ---------------------------------------------------------
+   Rich Text Editor
+   --------------------------------------------------------- */
+
+.note-workspace .raw-notes-editor {
+  flex: 1;
+
+  display: flex;
+  flex-direction: column;
+
+  margin: 16px;
+
+  overflow: hidden;
+
+  border: 1px solid #314867;
+  border-radius: 7px;
+
+  background: #192335;
+}
+
+
+/* Formatting toolbar */
+
+.note-workspace .raw-notes-toolbar {
+  min-height: 43px;
+
+  display: flex;
+  align-items: center;
+
+  gap: 3px;
+
+  padding: 0 18px;
+
+  border-bottom: 1px solid #31405a;
+
+  background: #172133;
+
+  color: #929aaa;
+}
+
+
+/* All toolbar buttons */
+
+.note-workspace .raw-notes-toolbar button {
+  height: 31px;
+  min-width: 31px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0 6px;
+
+  border: none;
+  border-radius: 5px;
+
+  background: transparent;
+
+  color: #969eac;
+
+  font-family: inherit;
+
+  cursor: pointer;
+
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+
+.note-workspace .raw-notes-toolbar button:hover {
+  background: #243149;
+
+  color: #ffffff;
+}
+
+
+.note-workspace .raw-notes-toolbar button:active {
+  background: #625df0;
+
+  color: white;
+}
+
+
+/* H1 / H2 / H3 */
+
+.note-workspace .toolbar-text-button {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+
+/* Separators between groups */
+
+.note-workspace .toolbar-divider {
+  width: 1px;
+  height: 21px;
+
+  margin: 0 4px;
+
+  background: #35445d;
+}
+
+
+/* ---------------------------------------------------------
+   Editable note area
+   --------------------------------------------------------- */
+
+.note-workspace .raw-notes-content {
+  flex: 1;
+
+  min-height: 300px;
+
+  margin: 0;
+
+  padding: 20px 31px;
+
+  overflow-y: auto;
+
+  border: none;
+  border-radius: 0;
+
+  outline: none;
+
+  background: #192335;
+
+  color: #eef1f7;
+
+  font-family: inherit;
+  font-size: 16px;
+
+  line-height: 1.55;
+
+  white-space: pre-wrap;
+}
+
+
+.note-workspace .raw-notes-content:focus {
+  outline: none;
+
+  box-shadow: none;
+}
+
+
+/* Headings within notes */
+
+.note-workspace .raw-notes-content h1 {
+  margin: 14px 0 10px;
+
+  font-size: 27px;
+  line-height: 1.25;
+}
+
+
+.note-workspace .raw-notes-content h2 {
+  margin: 13px 0 9px;
+
+  font-size: 23px;
+  line-height: 1.3;
+}
+
+
+.note-workspace .raw-notes-content h3 {
+  margin: 12px 0 8px;
+
+  font-size: 19px;
+  line-height: 1.35;
+}
+
+
+/* Lists */
+
+.note-workspace .raw-notes-content ul,
+.note-workspace .raw-notes-content ol {
+  margin: 8px 0;
+
+  padding-left: 27px;
+}
+
+
+.note-workspace .raw-notes-content li {
+  margin: 4px 0;
+}
+
+
+/* Links */
+
+.note-workspace .raw-notes-content a {
+  color: #8e89ff;
+
+  text-decoration: underline;
 }
