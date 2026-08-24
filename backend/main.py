@@ -20,7 +20,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from backend.routers import auth, groups, notes
+from backend.routers import ai_adapter, auth, groups, notes, profile
 
 from backend.ai.ai import router as ai_router
 from backend.ai.ai import warm_ollama
@@ -85,6 +85,8 @@ def on_startup():
 # Mounted under /api because the frontend issues same-origin relative calls to
 # /api/*, which nginx forwards here with the prefix intact.
 app.include_router(auth.router, prefix="/api", tags=["auth"])
+app.include_router(profile.router, prefix="/api", tags=["profile"])
+app.include_router(ai_adapter.router, prefix="/api", tags=["ai-adapter"])
 app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
 app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
 app.include_router(ai_router)

@@ -21,7 +21,12 @@ def create_note(
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user),
 ) -> Note:
-    note = Note(**payload.model_dump(), user_id = current_user.id)
+    fields = payload.model_dump()
+    content = fields.pop("content", None)
+    if content is not None and fields.get("notes_section") is None:
+        fields["notes_section"] = content
+
+    note = Note(**fields, user_id = current_user.id)
     db.add(note)
     db.commit()
     db.refresh(note)
@@ -82,6 +87,13 @@ def update_note(
             detail = f"Note id of {note_id} not found",
         )
     changes = payload.model_dump(exclude_unset = True)
+    # content is an alias, not a column. Redirect it before the setattr loop,
+    # which would otherwise hang a stray attribute off the ORM object that
+    # never reaches the database.
+    content = changes.pop("content", None)
+    if content is not None and "notes_section" not in changes:
+        changes["notes_section"] = content
+
     for field, value in changes.items():
         setattr(note, field, value)
 

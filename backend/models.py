@@ -17,6 +17,13 @@ class User(Base):
     email = Column(String(255), nullable=False, unique=True)
     password_hash = Column(String(255), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
+    # Profile fields. All nullable: existing rows predate them, and the profile
+    # page treats every one as optional. memberSince is derived from created_at
+    # rather than stored.
+    full_name = Column(String(255), nullable=True)
+    display_name = Column(String(255), nullable=True)
+    bio = Column(Text, nullable=True)
+    profile_image_url = Column(String(512), nullable=True)
     created_at = Column(PG_TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(PG_TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
