@@ -605,3 +605,17 @@
 
   text-decoration: underline;
 }
+
+/* ---------------------------------------------------------
+   Purple Active Style
+   --------------------------------------------------------- */
+
+.note-workspace .raw-notes-toolbar .toolbar-button-active {
+  background: #625df0;
+  color: #ffffff;
+}
+
+.note-workspace .raw-notes-toolbar .toolbar-button-active:hover {
+  background: #706bf5;
+  color: #ffffff;
+}

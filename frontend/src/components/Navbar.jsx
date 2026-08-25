@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   User,
   LogOut,
+  Save,
+  FileOutput,
 } from "lucide-react";
 
 import treeNotesLogo from "../assets/logo.png";
@@ -14,7 +16,10 @@ const initialNavbarUser = {
   profileImage: null,
 };
 
-// Backend
+/* =========================================================
+   BACKEND INTEGRATION
+   ========================================================= */
+
 // Function for retrieving logged-in user's navbar details
 async function getLoggedInUserNavbarDetails() {
   /*
@@ -102,7 +107,96 @@ async function getLoggedInUserProfileImage() {
   return null;
 }
 
+// Backend
+// Function for saving the currently open note
+async function saveCurrentNote() {
+  /*
+    BACKEND TODO:
+
+    This function should send the currently open note
+    to the backend so it can be saved to the database.
+
+    The backend will eventually need information such as:
+
+    {
+      noteId,
+      title,
+      rawNotes,
+      userSummary
+    }
+
+    Example:
+
+    const response = await fetch("/api/notes/save", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        noteId,
+        title,
+        rawNotes,
+        userSummary,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Unable to save note.");
+    }
+
+    return await response.json();
+  */
+
+  // Frontend placeholder
+  return {
+    backendConnected: false,
+    success: true,
+  };
+}
+
+// Backend
+// Function for exporting the currently open note
+async function exportCurrentNote() {
+  /*
+    BACKEND TODO:
+
+    Depending on how export is implemented, this could:
+
+      1. Ask the backend to generate a PDF / DOCX / text file
+      2. Return a downloadable file
+      3. Export the note locally from the frontend
+
+    Example:
+
+    const response = await fetch("/api/notes/export", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        noteId,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Unable to export note.");
+    }
+
+    return response;
+  */
+
+  // Frontend placeholder
+  return {
+    backendConnected: false,
+    success: true,
+  };
+}
+
 function Navbar() {
+  const [saving, setSaving] = useState(false);
+
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const [navbarUser, setNavbarUser] = useState(initialNavbarUser);
@@ -163,6 +257,33 @@ function Navbar() {
     }
   }
 
+  async function handleSave() {
+    try {
+      setSaving(true);
+
+      await saveCurrentNote();
+
+      window.setTimeout(() => {
+        setSaving(false);
+      }, 1200);
+    } catch (error) {
+      console.error("Unable to save note:", error);
+      setSaving(false);
+    }
+  }
+
+  async function handleExport() {
+    try {
+      const result = await exportCurrentNote();
+
+      if (result?.success) {
+        console.log("Export request successful.");
+      }
+    } catch (error) {
+      console.error("Unable to export note:", error);
+    }
+  }
+
   useEffect(() => {
     function handleClickOutside(event) {
       if (
@@ -207,6 +328,38 @@ function Navbar() {
           <small>Organise. connect. remember</small>
         </div>
       </Link>
+
+      <div className="navbar-note-actions">
+
+        <button
+          className="navbar-action-button"
+          type="button"
+          onClick={handleSave}
+        >
+          <Save
+            size={24}
+            strokeWidth={1.8}
+          />
+
+          <span>
+            {saving ? "Saved" : "Save"}
+          </span>
+        </button>
+
+        <button
+          className="navbar-action-button"
+          type="button"
+          onClick={handleExport}
+        >
+          <FileOutput
+            size={24}
+            strokeWidth={1.8}
+          />
+
+          <span>Export</span>
+        </button>
+
+      </div>
 
       <div
         className="profile-menu-container"
