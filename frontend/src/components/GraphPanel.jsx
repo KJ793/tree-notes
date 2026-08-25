@@ -1,262 +1,370 @@
-import {useRef, useEffect ,useState} from 'react';
-import cytoscape from 'cytoscape';
+import { useRef, useEffect, useState } from "react";
+import cytoscape from "cytoscape";
 
-function GraphPanel({rawNotes}) {
-    
-    // <<frontend dev >> //
-    //stores the graph Json returned from AI//
-    const [graphData, setGraphData] = useState(null);
+function GraphPanel({ rawNotes }) {
+  // << frontend dev >> //
+  // Stores graph JSON returned from AI/backend //
+  const [graphData, setGraphData] = useState(null);
 
-    //Used to handle graph loading time and state//
-    const [loading, setLoading] = useState(false);
+  // Handles graph loading state //
+  const [loading, setLoading] = useState(false);
 
-    //error state for graph generation(if returned by AI)//
-    const [error, setError] = useState("");
+  // Handles graph generation errors //
+  const [error, setError] = useState("");
 
-    // << CYTOSCAPE FRONTEND >> //
-    // References the HTML div where Cytoscape will render the graph //
-    const graphContainerRef = useRef(null);
+  // References the HTML div where Cytoscape renders //
+  const graphContainerRef = useRef(null);
 
+  // Stores the Cytoscape instance so other functions can access it //
+  const cyRef = useRef(null);
 
+  // Stores currently selected node //
+  const [selectedNode, setSelectedNode] = useState(null);
 
+  async function generateGraph() {
+    if (!rawNotes || rawNotes.trim() === "") {
+      setError("Please write some notes before generating a graph.");
+      return;
+    }
 
-    async function generateGraph() {
+    setLoading(true);
+    setError("");
 
-        // <<frontend dev >> //
+    try {
+      // << BACKEND CONNECTION >> //
+      const response = await fetch("/api/graph", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rawNotes: rawNotes,
+        }),
+      });
 
-        //raw note is sent to backend for graph generation//
-        //backend returns graph json which is stored in graphData state//
+      if (!response.ok) {
+        throw new Error("Graph generation failed. Please try again.");
+      }
 
-        if (!rawNotes || rawNotes.trim() === "") {
-            setError("Please write some notes before generating a graph.");
-            return;
-        }
+      const data = await response.json();
 
-    
-
-
-
-        setLoading(true);
-        setError("");
-
-        try{
-
-            // <<Backend connection goes here >> //
-            // frontend provides rawnotes: string //
-
-
-            const response = await fetch("/api/graph", {
-                method: "POST",
-
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ rawNotes:rawNotes }),
-            });
-
-            // << DAMON / KYLE BACKEND STUFF >> //
-            // Backend should return a non-200 status
-            // if graph generation fails
-
-            if (!response.ok) {
-                throw new Error("Graph generation failed. Please try again.");
-
-        }
-
-        // HANS AI GRAPH INTEGRATION //
-        // HANS RECIEVES RAW NOTES FROM BACKEND AND RETURNS GRAPH JSON //
-
-        // AI/BACKEND MUS RETURN GRAPH IN JSON FORMAT LIKE BELOW //
-        // {
-        //     nodes: [
-        //         { data: { id: "1", label: "Node 1" } },
-        //         { data: { id: "2", label: "Node 2" } },
-        //     ],
-        //     edges: [
-        //         { data: { id: "e1", source: "1", target: "2" } },
-        //     ],
-        // }
-
-        // NODE REQUIREMENTS //
-        // Id is unique for each node
-        // Label is the text displayed on the node
-
-        // EDGE REQUIREMENTS //
-        // Id is unique for each edge
-        // Source is the id of the source node
-        // Target is the id of the target node
-
-        // <<frontend dev >> //
-        // frontend expects:
-        // graphData.nodes
-        // graphData.edges
-        // which will be used by cytoscape to render the graph//
-        // As per current set up no more chnages from frontend side are required for graph rendering//
-        // We will continue to add stlying but it should not affect the graph rendering as long as the graphData format is maintained//
-        
-        // Hans AI RESPONSE //
-        // Hans receives rawNotes from backend //
-        // Hans must return graph information as JSON //
-        const aiResponse = await fetch("http://localhost:8000/ai/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rawNotes: rawNotes })
-        })
-
-        // const data = await response.json();
-        // Changing name for this response as we have multiple await fetch responses on this page and response.status can get confusing
-        const data = await aiResponse.json();
-
-        // <<frontend dev >> //
-        // save returned graph json to graphData state for rendering in graph panel//
-        setGraphData(data);
-
-        //cytoscape uses this data as  graphData.node and graphData.edges to render the graph//
+      // Store returned graph JSON //
+      setGraphData(data);
 
     } catch (error) {
+      console.error("Graph generation error:", error);
 
-        // <<frontend dev >> //
-        // error handling for graph generation failure//
-        console.error("Graph generation error:", error);
-
-        setError(
-            "Unable to generate graph. Please try again."
-        );
+      setError("Unable to generate graph. Please try again.");
 
     } finally {
-        // stop loading state after graph generation attempt and failed//
-        setLoading(false);
-
+      setLoading(false);
     }
-// we will remove this test graph data once the backend is integrated and working properly//
-    const testGraphData = {
-    nodes: [
-        { data: { id: "1", label: "React" } },
-        { data: { id: "2", label: "JavaScript" } },
-        { data: { id: "3", label: "Components" } },
-    ],
 
-    edges: [
-        { data: { id: "e1", source: "1", target: "2" } },
-        { data: { id: "e2", source: "1", target: "3" } },
-    ],
+    // TEMPORARY TEST GRAPH DATA //
+    // Keep this while Docker / AI is not running //
+    const testGraphData = {
+      nodes: [
+        {
+          data: {
+            id: "1",
+            label: "React",
+          },
+        },
+        {
+          data: {
+            id: "2",
+            label: "JavaScript",
+          },
+        },
+        {
+          data: {
+            id: "3",
+            label: "Components",
+          },
+        },
+      ],
+
+      edges: [
+        {
+          data: {
+            id: "e1",
+            source: "1",
+            target: "2",
+          },
+        },
+        {
+          data: {
+            id: "e2",
+            source: "1",
+            target: "3",
+          },
+        },
+      ],
     };
 
     setGraphData(testGraphData);
-    return;
+  }
+
+  // << CYTOSCAPE FRONTEND >> //
+  useEffect(() => {
+    if (!graphData || !graphContainerRef.current) {
+      return;
+    }
+
+    const cy = cytoscape({
+      container: graphContainerRef.current,
+
+      elements: [
+        ...graphData.nodes,
+        ...graphData.edges,
+      ],
+
+      layout: {
+        name: "cose",
+        animate: true,
+        fit: true,
+        padding: 50,
+      },
+
+      style: [
+        {
+          selector: "node",
+          style: {
+            "background-color": "#6366F1",
+            label: "data(label)",
+            color: "#fff",
+            "text-valign": "center",
+            "text-halign": "center",
+            "font-size": "12px",
+          },
+        },
+
+        // If node has saved colour data, use it //
+        {
+          selector: "node[color]",
+          style: {
+            "background-color": "data(color)",
+          },
+        },
+
+        {
+          selector: "edge",
+          style: {
+            width: 2,
+            "line-color": "#64748b",
+            "target-arrow-color": "#64748b",
+            "target-arrow-shape": "triangle",
+            "curve-style": "bezier",
+          },
+        },
+      ],
+    });
+
+    cyRef.current = cy;
+
+    // Detect selected node //
+    cy.on("tap", "node", (event) => {
+      const clickedNode = event.target;
+
+      setSelectedNode(clickedNode.data());
+
+      console.log("Selected node:", clickedNode.data());
+    });
+
+    cy.one("layoutstop", () => {
+      cy.resize();
+      cy.fit(cy.elements(), 50);
+    });
+
+    return () => {
+      cy.destroy();
+      cyRef.current = null;
+    };
+  }, [graphData]);
 
 
 
 
+  // Saves the final state of selected graph //
+  function getEditedGraphData() {
+    if (!cyRef.current){
+        return null;
+
+  }
+
+  const cy = cyRef.current;
+
+  const nodes = cy.nodes().map((node)=> ({
+    data: {
+        ...node.data(),
+
+    },
+    position: {
+        x: node.position("x"),
+        y: node.position("y"),
+
+    },
+
+  }));
+
+  const edges = cy.edges().map((edge =>({
+    data:{
+        ...edge.data(),
+    },
+    })));
+    return{
+        nodes,
+        edges,
+ };
 }
 
-// <<frontend dev cytoscape>> // 
-
-        useEffect(() => {
-            if (!graphData || !graphContainerRef.current) {   
-                return;
-            }
 
 
-            const cy = cytoscape({
-                container: graphContainerRef.current,
-                elements:[
-                    ...graphData.nodes, 
-                    ...graphData.edges, 
-                ],
 
-                layout: {
-                    name: 'cose',
-                    animate: true,
-                    fit: true,
-                    padding: 50,
-                },
-                
-                style: [
-                    {
-                        selector: 'node',
-                        style: {
-                            'background-color': '#6366F1',
-                            'label': 'data(label)',
-                            'color': '#fff',
-                            'text-valign': 'center',
-                            'text-halign': 'center',    
-                            'font-size': '12px',    
-                        },  
-                    },
-                    {
-                        selector: 'edge',
-                        style: {
-                            'width': 2, 
-                            'line-color': '#64748b',
-                            'target-arrow-color': '#64748b',    
-                            'target-arrow-shape': 'triangle',
-                            'curve-style': 'bezier',
-                        },
-
-
-                        
-
-
-                    },
-                
-                ]
-            });
-            cy.one("layoutstop", () => {
-                cy.resize();
-                cy.fit(cy.elements(), 50);
-            });
-
-            return () => {
-                cy.destroy();
-            };
-
-        }, [graphData]);
-
-
-// <<frontend dev >> //
-// page structure and rendering from data and function above //
-
-return (
-
+  return (
     <section className="graph-panel">
-        <h2>Graph Panel</h2>
+      <h2>Graph Panel</h2>
 
-        <div className="graph-placeholder">
+      <div className="graph-placeholder">
 
-            {/* << JEET & DAVID FRONTEND DISPLAY >> */}
+        {!graphData && !loading && (
+          <p>Graph will appear here</p>
+        )}
 
-            {!graphData && !loading && (
-                <p>Graph will appear here</p>)}
+        {loading && (
+          <p>Generating graph...</p>
+        )}
 
+        {error && (
+          <p className="graph-error">{error}</p>
+        )}
 
-            {loading && (
-               <p>Generating graph...</p>)}
+        <div
+          ref={graphContainerRef}
+          className="graph-container"
+        ></div>
 
-            {error && (
-                <p className="graph-error">{error}</p>)}
+        <div className="graph-toolbar">
 
-            {/* << CYTOSCAPE.JS GRAPH AREA >>
-               Later we will replace this temporary
-               JSON display with the real Cytoscape graph.
-            */}
+          <div className="graph-edit-controls">
 
-            <div
-                ref={graphContainerRef}
-                className="graph-container"
-            >
-            </div>
+            {selectedNode ? (
+              <>
+                <span className="selected-node-name">
+                  {selectedNode.label}
+                </span>
 
-            <button onClick={generateGraph} disabled={loading}>
+                {/* NODE COLOUR */}
+                <label className="graph-control">
+                  Color
 
-                {loading ? "Generating..." : "Generate Graph"}
-            </button>
+                  <input
+                    type="color"
+                    value={selectedNode.color || "#6366F1"}
+                    onChange={(e) => {
+                      const newColor = e.target.value;
+
+                      const node =
+                        cyRef.current.getElementById(
+                          selectedNode.id
+                        );
+
+                      // Change node visually //
+                      node.style(
+                        "background-color",
+                        newColor
+                      );
+
+                      // Store colour inside Cytoscape node data //
+                      node.data("color", newColor);
+
+                      // Update editor UI //
+                      setSelectedNode((prevNode) => ({
+                        ...prevNode,
+                        color: newColor,
+                      }));
+                    }}
+                  />
+                </label>
+
+                {/* NODE SHAPE */}
+                <label className="graph-control">
+                  Shape
+
+                  <select
+                    value={selectedNode.shape || "ellipse"}
+                    onChange={(e) => {
+                      const newShape = e.target.value;
+
+                      const node =
+                        cyRef.current.getElementById(
+                          selectedNode.id
+                        );
+
+                      // Change node visually //
+                      node.style(
+                        "shape",
+                        newShape
+                      );
+
+                      // Store shape inside Cytoscape node data //
+                      node.data(
+                        "shape",
+                        newShape
+                      );
+
+                      // Update editor UI //
+                      setSelectedNode((prevNode) => ({
+                        ...prevNode,
+                        shape: newShape,
+                      }));
+                    }}
+                  >
+                    <option value="ellipse">
+                      Circle
+                    </option>
+
+                    <option value="rectangle">
+                      Rectangle
+                    </option>
+
+                    <option value="round-rectangle">
+                      Rounded
+                    </option>
+
+                    <option value="diamond">
+                      Diamond
+                    </option>
+
+                    <option value="triangle">
+                      Triangle
+                    </option>
+                  </select>
+                </label>
+              </>
+            ) : (
+              <span className="no-node-selected">
+                Select a node to edit
+              </span>
+            )}
+
+          </div>
+
+          <button
+            type="button"
+            className="generate-graph-button"
+            onClick={generateGraph}
+            disabled={loading}
+          >
+            {loading
+              ? "Generating..."
+              : "Generate Graph"}
+          </button>
 
         </div>
+      </div>
     </section>
-);
-    
+  );
 }
 
 export default GraphPanel;
-

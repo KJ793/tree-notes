@@ -826,3 +826,71 @@ padding: 24px 0;
   width: 100% !important;
   height: 100% !important;
 }
+
+
+/* ============================= */
+/* Graph Container               */
+/* ============================= */
+
+.graph-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+
+  padding: 10px 14px;
+
+  border-top: 1px solid #2f3654;
+}
+
+.graph-edit-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.selected-node-name {
+  padding: 6px 10px;
+
+  background: #211a40;
+  border: 1px solid #6366f1;
+  border-radius: 6px;
+
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.graph-control {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+
+  color: #aeb8d0;
+  font-size: 12px;
+}
+
+.graph-control input[type="color"] {
+  width: 30px;
+  height: 30px;
+  padding: 2px;
+
+  border: 1px solid #394260;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.graph-control select {
+  padding: 6px 8px;
+
+  background: #111827;
+  color: #ffffff;
+
+  border: 1px solid #394260;
+  border-radius: 5px;
+}
+
+.no-node-selected {
+  color: #7f8ba5;
+  font-size: 12px;
+}
