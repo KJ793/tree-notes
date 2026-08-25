@@ -3,6 +3,10 @@ services:
     build: ./frontend
     ports:
       - "8080:80"
+    volumes:
+      # Replaces nginx's default server block: proxies /api to the backend so
+      # the frontend's relative fetch() calls resolve to FastAPI.
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
 
@@ -16,6 +20,17 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT}/${POSTGRES_DB}
+      # Only takes effect if watchfiles is installed (uvicorn[standard]); the
+      # current requirements.txt has plain uvicorn, so the reloader falls back
+      # to StatReload, which already polls and works over Windows bind mounts.
+      # Kept so reloading keeps working if watchfiles is added later.
+      - WATCHFILES_FORCE_POLLING=true
+      # Set to false to skip the Ollama warm-up on startup, which --reload
+      # otherwise re-runs on every code change.
+      - AI_WARMUP=true
+      # Signs the session cookie. Falls back to a known dev value so the
+      # stack runs out of the box; override in .env before deploying.
+      - SESSION_SECRET=${SESSION_SECRET:-dev-only-insecure-session-secret}
     depends_on:
       db:
         condition: service_healthy

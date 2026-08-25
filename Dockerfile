@@ -16,7 +16,12 @@ COPY backend/ ./backend
 # Expose FastAPI port
 EXPOSE 8000
 
-# Start FastAPI with uvicorn
-# CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
-
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start FastAPI with uvicorn.
+# --reload watches the ./backend bind mount from docker-compose, so code changes
+# take effect without rebuilding. --proxy-headers makes uvicorn trust the
+# X-Forwarded-* headers nginx sets, so redirects and client IPs resolve to the
+# browser's origin rather than the internal container address.
+CMD ["uvicorn", "backend.main:app", \
+     "--host", "0.0.0.0", "--port", "8000", \
+     "--reload", "--reload-dir", "/app/backend", \
+     "--proxy-headers", "--forwarded-allow-ips", "*"]
