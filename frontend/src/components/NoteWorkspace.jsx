@@ -24,6 +24,18 @@ const editorRef = useRef(null);
   // This rawNotes value will be shared with HANS AI //
   const [rawNotes, setRawNotes] = useState(note.content);
 
+  // Tracks the active text formatting //
+  const [activeFormats, setActiveFormats] = useState({
+  bold: false,
+  italic: false,
+  underline: false,
+
+  heading: null,
+
+  bulletList: false,
+  numberedList: false,
+  });
+
   /* ---------------------------------------------------------
    Raw Notes Formatting
    --------------------------------------------------------- */
@@ -34,6 +46,51 @@ const editorRef = useRef(null);
     document.execCommand(command, false, value);
 
     updateRawNotes();
+    updateFormattingState();
+  }
+
+  function updateFormattingState() {
+  let currentBlock = document.queryCommandValue("formatBlock");
+
+  if (currentBlock) {
+    currentBlock = currentBlock
+      .toLowerCase()
+      .replace("<", "")
+      .replace(">", "");
+  }
+
+  setActiveFormats({
+    bold: document.queryCommandState("bold"),
+    italic: document.queryCommandState("italic"),
+    underline: document.queryCommandState("underline"),
+
+    heading:
+      currentBlock === "h1" ||
+      currentBlock === "h2" ||
+      currentBlock === "h3"
+        ? currentBlock
+        : null,
+
+    bulletList:
+      document.queryCommandState("insertUnorderedList"),
+
+    numberedList:
+      document.queryCommandState("insertOrderedList"),
+    });
+  }
+
+  function toggleHeading(heading) {
+    const currentBlock = document
+      .queryCommandValue("formatBlock")
+      .toLowerCase()
+      .replace("<", "")
+      .replace(">", "");
+
+    if (currentBlock === heading) {
+      runFormat("formatBlock", "p");
+    } else {
+      runFormat("formatBlock", heading);
+    }
   }
 
   function updateRawNotes() {
@@ -95,8 +152,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-text-button"
-                onClick={() => runFormat("formatBlock", "h1")}
+                className={`toolbar-text-button ${
+                  activeFormats.heading === "h1"
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => toggleHeading("h1")}
+                aria-pressed={activeFormats.heading === "h1"}
                 title="Heading 1"
               >
                 H1
@@ -104,8 +167,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-text-button"
-                onClick={() => runFormat("formatBlock", "h2")}
+                className={`toolbar-text-button ${
+                  activeFormats.heading === "h2"
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => toggleHeading("h2")}
+                aria-pressed={activeFormats.heading === "h2"}
                 title="Heading 2"
               >
                 H2
@@ -113,8 +182,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-text-button"
-                onClick={() => runFormat("formatBlock", "h3")}
+                className={`toolbar-text-button ${
+                  activeFormats.heading === "h3"
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => toggleHeading("h3")}
+                aria-pressed={activeFormats.heading === "h3"}
                 title="Heading 3"
               >
                 H3
@@ -127,8 +202,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-icon-button"
+                className={`toolbar-icon-button ${
+                  activeFormats.bold
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runFormat("bold")}
+                aria-pressed={activeFormats.bold}
                 title="Bold"
               >
                 <Bold size={18} strokeWidth={2.2} />
@@ -136,8 +217,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-icon-button"
+                className={`toolbar-icon-button ${
+                  activeFormats.italic
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runFormat("italic")}
+                aria-pressed={activeFormats.italic}
                 title="Italic"
               >
                 <Italic size={18} strokeWidth={2} />
@@ -145,8 +232,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-icon-button"
+                className={`toolbar-icon-button ${
+                  activeFormats.underline
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runFormat("underline")}
+                aria-pressed={activeFormats.underline}
                 title="Underline"
               >
                 <Underline size={18} strokeWidth={2} />
@@ -160,10 +253,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-icon-button"
-                onClick={() =>
-                  runFormat("insertUnorderedList")
-                }
+                className={`toolbar-icon-button ${
+                  activeFormats.bulletList
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => runFormat("insertUnorderedList")}
+                aria-pressed={activeFormats.bulletList}
                 title="Bullet list"
               >
                 <List size={19} strokeWidth={1.9} />
@@ -171,10 +268,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-icon-button"
-                onClick={() =>
-                  runFormat("insertOrderedList")
-                }
+                className={`toolbar-icon-button ${
+                  activeFormats.numberedList
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => runFormat("insertOrderedList")}
+                aria-pressed={activeFormats.numberedList}
                 title="Numbered list"
               >
                 <ListOrdered size={19} strokeWidth={1.9} />
@@ -202,7 +303,15 @@ const editorRef = useRef(null);
               className="text-area raw-notes-content"
               contentEditable
               suppressContentEditableWarning
-              onInput={updateRawNotes}
+
+              onInput={() => {
+                updateRawNotes();
+                updateFormattingState();
+              }}
+
+              onMouseUp={updateFormattingState}
+              onKeyUp={updateFormattingState}
+              onFocus={updateFormattingState}
             >
               {note.content}
             </div>
