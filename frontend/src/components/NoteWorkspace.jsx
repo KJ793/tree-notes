@@ -24,6 +24,15 @@ const editorRef = useRef(null);
   // This rawNotes value will be shared with HANS AI //
   const [rawNotes, setRawNotes] = useState(note.content);
 
+  // Selected text for manually adding to graph //
+  const [selectedText, setSelectedText] = useState("");
+
+  // Initialising Context menu on right click //
+  const [contextMenu, setContextMenu] = useState(null);
+
+  const [addNodeTrigger, setAddNodeTrigger] = useState(0);
+
+
   // Tracks the active text formatting //
   const [activeFormats, setActiveFormats] = useState({
   bold: false,
@@ -116,7 +125,10 @@ const editorRef = useRef(null);
   }
 
   return (
-    <div className="note-workspace">
+    <div 
+      className="note-workspace"
+      onClick={() => setContextMenu(null)}
+    >
 
     {/* << frontend dev >> */}
     {/* Note title input */}
@@ -303,17 +315,80 @@ const editorRef = useRef(null);
               className="text-area raw-notes-content"
               contentEditable
               suppressContentEditableWarning
+              onContextMenu={(e) => {
+                    e.preventDefault();
+
+                    const selection = window.getSelection();
+                    const text = selection?.toString().trim() || "";
+
+                    if (!text) {
+                      setContextMenu(null);
+                      return;
+                    }
+
+                    setSelectedText(text);
+
+                    setContextMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      text: text,
+                    });
+
+                    console.log("Right-click selected text:", text);
+                  }}
+              
 
               onInput={() => {
                 updateRawNotes();
                 updateFormattingState();
               }}
 
-              onMouseUp={updateFormattingState}
+              onMouseUp={() => {
+                            updateFormattingState();
+
+                            const selection = window.getSelection();
+                            const text = selection?.toString().trim() || "";
+
+                            setSelectedText(text);
+
+                            console.log("Selected text:", text);
+                          }}
               onKeyUp={updateFormattingState}
               onFocus={updateFormattingState}
             >
               {note.content}
+
+
+
+              {contextMenu && (
+              <div
+                className="notes-context-menu"
+                style={{
+                  position: "fixed",
+                  left: contextMenu.x,
+                  top: contextMenu.y,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+
+                     const textToAdd = contextMenu.text
+
+                    console.log("Add to Graph:", selectedText);
+
+                    setSelectedText(textToAdd);
+
+                    setAddNodeTrigger((current) => current + 1);
+
+                    setContextMenu(null);
+                  }}
+                >
+                  Add to Graph
+                </button>
+              </div>
+            )}
             </div>
 
           </div>
@@ -324,7 +399,11 @@ const editorRef = useRef(null);
         {/* Provides current note text to GraphPanel */}
         {/* GraphPanel sends rawNotes to backend / AI */}
 
-        <GraphPanel rawNotes={rawNotes}/>
+        <GraphPanel 
+        rawNotes={rawNotes}
+        selectedText={selectedText}
+        addNodeTrigger={addNodeTrigger}
+        />
       </div>
 
       {/* << SUMMARY / AI CONNECTION >> */  }

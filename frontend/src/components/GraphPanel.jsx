@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import cytoscape from "cytoscape";
 
-function GraphPanel({ rawNotes }) {
+function GraphPanel({ rawNotes, selectedText, addNodeTrigger, }) {
   // << frontend dev >> //
   // Stores graph JSON returned from AI/backend //
   const [graphData, setGraphData] = useState(null);
@@ -18,8 +18,18 @@ function GraphPanel({ rawNotes }) {
   // Stores the Cytoscape instance so other functions can access it //
   const cyRef = useRef(null);
 
+  const linkModeRef = useRef(false);
+  const firstNodeToLinkRef = useRef(null);
+
   // Stores currently selected node //
   const [selectedNode, setSelectedNode] = useState(null);
+
+  // To link nodes// 
+const [linkMode, setLinkMode] = useState(false);
+
+// TO save first node clicked to link to second //
+
+const [firstNodeToLink, setFirstNodeToLink] = useState(null);
 
   async function generateGraph() {
     if (!rawNotes || rawNotes.trim() === "") {
@@ -164,12 +174,40 @@ function GraphPanel({ rawNotes }) {
 
     // Detect selected node //
     cy.on("tap", "node", (event) => {
-      const clickedNode = event.target;
+        const clickedNode = event.target;
 
-      setSelectedNode(clickedNode.data());
+        // Normal node selection
+        if (!linkModeRef.current) {
+            setSelectedNode(clickedNode.data());
+            console.log("Selected node:", clickedNode.data());
+            return;
+        }
 
-      console.log("Selected node:", clickedNode.data());
-    });
+        // First node selected for linking
+        if (!firstNodeToLinkRef.current) {
+            firstNodeToLinkRef.current = clickedNode.id();
+
+            setFirstNodeToLink(clickedNode.id());
+
+            console.log(
+                "First node selected for link:",
+                clickedNode.data("label")
+            );
+
+            return;
+            }
+
+        // Prevent linking a node to itself
+        if (firstNodeToLinkRef.current === clickedNode.id()) {
+            console.log("Cannot link a node to itself");
+            return;
+        }
+
+        console.log(
+            "Second node selected:",
+            clickedNode.data("label")
+        );
+        });
 
     cy.one("layoutstop", () => {
       cy.resize();
@@ -181,6 +219,14 @@ function GraphPanel({ rawNotes }) {
       cyRef.current = null;
     };
   }, [graphData]);
+
+  useEffect(() => {
+  if (addNodeTrigger === 0) {
+    return;
+  }
+
+  addSelectedTextNode();
+}, [addNodeTrigger]);
 
 
 
@@ -216,6 +262,51 @@ function GraphPanel({ rawNotes }) {
         nodes,
         edges,
  };
+}
+
+
+// Manually adding node to graph from selected text //
+
+function addSelectedTextNode() {
+  if (!cyRef.current || !selectedText) {
+    return;
+  }
+
+  const cy = cyRef.current;
+
+  // Check if a node with the same label already exists
+  const nodeAlreadyExists = cy.nodes().some((node) => {
+    return (
+      node.data("label")?.trim().toLowerCase() ===
+      selectedText.trim().toLowerCase()
+    );
+  });
+
+  if (nodeAlreadyExists) {
+    console.log("Node already exists:", selectedText);
+    return;
+  }
+
+  const newNodeId = `manual-${Date.now()}`;
+
+  const extent = cy.extent();
+
+  const centreX = (extent.x1 + extent.x2) / 2;
+  const centreY = (extent.y1 + extent.y2) / 2;
+
+  cy.add({
+    group: "nodes",
+
+    data: {
+      id: newNodeId,
+      label: selectedText,
+    },
+
+    position: {
+      x: centreX + 60,
+      y: centreY + 60,
+    },
+  });
 }
 
 
@@ -361,10 +452,25 @@ function GraphPanel({ rawNotes }) {
               : "Generate Graph"}
           </button>
 
+          <button
+            type="button"
+            className="generate-graph-button"
+            onClick={() => {
+                setLinkMode(true);
+                setFirstNodeToLink(null);
+
+                linkModeRef.current = true;
+                firstNodeToLinkRef.current = null;
+
+                console.log("Link mode started");
+            }}
+            >
+            Link Nodes
+            </button>
+
         </div>
       </div>
     </section>
   );
 }
-
 export default GraphPanel;
