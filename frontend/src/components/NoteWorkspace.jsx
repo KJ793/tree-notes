@@ -403,6 +403,8 @@ const editorRef = useRef(null);
         rawNotes={rawNotes}
         selectedText={selectedText}
         addNodeTrigger={addNodeTrigger}
+        noteId={note.id}
+
         />
       </div>
 

@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import cytoscape from "cytoscape";
 
-function GraphPanel({ rawNotes, selectedText, addNodeTrigger, }) {
+function GraphPanel({ rawNotes, selectedText, addNodeTrigger, noteId, }) {
   // << frontend dev >> //
   // Stores graph JSON returned from AI/backend //
   const [graphData, setGraphData] = useState(null);
@@ -169,103 +169,79 @@ const [firstNodeToLink, setFirstNodeToLink] = useState(null);
         },
       ],
     });
-
     cyRef.current = cy;
 
     // Detect selected node //
-    cy.on("tap", "node", (event) => {
-        const clickedNode = event.target;
+  cy.on("tap", "node", (event) => {
+  const clickedNode = event.target;
 
-        // Normal node selection
-        if (!linkModeRef.current) {
-            setSelectedNode(clickedNode.data());
-            console.log("Selected node:", clickedNode.data());
-            return;
-        }
-
-        // First node selected for linking
-        if (!firstNodeToLinkRef.current) {
-            firstNodeToLinkRef.current = clickedNode.id();
-
-            setFirstNodeToLink(clickedNode.id());
-
-            console.log(
-                "First node selected for link:",
-                clickedNode.data("label")
-            );
-
-            return;
-            }
-
-        // Prevent linking a node to itself
-        if (firstNodeToLinkRef.current === clickedNode.id()) {
-            console.log("Cannot link a node to itself");
-            return;
-        }
-
-        console.log(
-            "Second node selected:",
-            clickedNode.data("label")
-        );
-        });
-
-    cy.one("layoutstop", () => {
-      cy.resize();
-      cy.fit(cy.elements(), 50);
-    });
-
-    return () => {
-      cy.destroy();
-      cyRef.current = null;
-    };
-  }, [graphData]);
-
-  useEffect(() => {
-  if (addNodeTrigger === 0) {
+  // Normal node selection
+  if (!linkModeRef.current) {
+    setSelectedNode(clickedNode.data());
+    console.log("Selected node:", clickedNode.data());
     return;
   }
 
-  addSelectedTextNode();
-}, [addNodeTrigger]);
+  // First node selected for linking
+  if (!firstNodeToLinkRef.current) {
+    firstNodeToLinkRef.current = clickedNode.id();
 
+    setFirstNodeToLink(clickedNode.id());
 
+    console.log(
+      "First node selected for link:",
+      clickedNode.data("label")
+    );
 
-
-  // Saves the final state of selected graph //
-  function getEditedGraphData() {
-    if (!cyRef.current){
-        return null;
-
+    return;
   }
 
-  const cy = cyRef.current;
+  // Prevent linking node to itself
+  if (firstNodeToLinkRef.current === clickedNode.id()) {
+    console.log("Cannot link a node to itself");
+    return;
+  }
 
-  const nodes = cy.nodes().map((node)=> ({
+  const sourceId = firstNodeToLinkRef.current;
+  const targetId = clickedNode.id();
+
+  const edgeId = `manual-edge-${Date.now()}`;
+
+  cy.add({
+    group: "edges",
     data: {
-        ...node.data(),
-
+      id: edgeId,
+      source: sourceId,
+      target: targetId,
     },
-    position: {
-        x: node.position("x"),
-        y: node.position("y"),
+  });
 
-    },
+  console.log(
+    "Nodes linked:",
+    sourceId,
+    "→",
+    targetId
+  );
 
-  }));
+  // Exit link mode
+  linkModeRef.current = false;
+  firstNodeToLinkRef.current = null;
 
-  const edges = cy.edges().map((edge =>({
-    data:{
-        ...edge.data(),
-    },
-    })));
-    return{
-        nodes,
-        edges,
- };
-}
+  setLinkMode(false);
+  setFirstNodeToLink(null);
+});
 
+cy.one("layoutstop", () => {
+  cy.resize();
+  cy.fit(cy.elements(), 50);
+});
 
-// Manually adding node to graph from selected text //
+return () => {
+  cy.destroy();
+  cyRef.current = null;
+};
+
+}, [graphData]);
 
 function addSelectedTextNode() {
   if (!cyRef.current || !selectedText) {
@@ -274,7 +250,6 @@ function addSelectedTextNode() {
 
   const cy = cyRef.current;
 
-  // Check if a node with the same label already exists
   const nodeAlreadyExists = cy.nodes().some((node) => {
     return (
       node.data("label")?.trim().toLowerCase() ===
@@ -296,21 +271,89 @@ function addSelectedTextNode() {
 
   cy.add({
     group: "nodes",
-
     data: {
       id: newNodeId,
       label: selectedText,
     },
-
     position: {
       x: centreX + 60,
       y: centreY + 60,
     },
   });
+}   
+
+
+useEffect(() => 
+    { if (addNodeTrigger === 0) 
+        { return; }
+         addSelectedTextNode(); }, 
+         [addNodeTrigger]);
+
+
+// getting latest graph with all the chnages
+function getEditedGraphData() {
+  if (!cyRef.current) {
+    return null;
+  }
+
+  const cy = cyRef.current;
+
+  const nodes = cy.nodes().map((node) => ({
+    data: {
+      ...node.data(),
+    },
+    position: {
+      x: node.position("x"),
+      y: node.position("y"),
+    },
+  }));
+
+  const edges = cy.edges().map((edge) => ({
+    data: {
+      ...edge.data(),
+    },
+  }));
+
+  return {
+    nodes,
+    edges,
+  };
 }
+// saving graph backend point
+async function saveGraph() {
+  if (!noteId) {
+    console.log("No note ID available");
+    return;
+  }
 
+  const editedGraph = getEditedGraphData();
 
+  if (!editedGraph) {
+    console.log("No graph available to save");
+    return;
+  }
 
+  try {
+    const response = await fetch(
+      `/api/notes/${noteId}/graph`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(editedGraph),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to save graph");
+    }
+
+    console.log("Graph saved successfully");
+  } catch (error) {
+    console.error("Graph save error:", error);
+  }
+}
 
   return (
     <section className="graph-panel">
@@ -472,5 +515,7 @@ function addSelectedTextNode() {
       </div>
     </section>
   );
-}
+
+  }
+  
 export default GraphPanel;

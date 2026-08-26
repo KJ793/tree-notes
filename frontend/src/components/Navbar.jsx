@@ -194,7 +194,7 @@ async function exportCurrentNote() {
   };
 }
 
-function Navbar() {
+function Navbar({onSave}) {
   const [saving, setSaving] = useState(false);
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -260,8 +260,9 @@ function Navbar() {
   async function handleSave() {
     try {
       setSaving(true);
-
-      await saveCurrentNote();
+      if (onSave) {
+      await onSave();
+    }
 
       window.setTimeout(() => {
         setSaving(false);

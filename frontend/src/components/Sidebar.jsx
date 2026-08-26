@@ -1,4 +1,10 @@
 import {
+  House,
+  NotebookText,
+  Network,
+  Search,
+  Tags,
+  Settings,
   ChevronRight,
   ChevronLeft,
   ChevronsRight,
@@ -29,8 +35,13 @@ function Sidebar({
 
  {/* << FRONTEND DEV >> */}
  {/* Controls whether the dashboard note list is expanded */}
-      <button type="button" onClick={onNotesToggle}>
-        Dashboard
+       <button 
+        type="button" className="sidebar-nav-item" onClick={onNotesToggle}>
+       <House size={18} />
+        {!sidebarCollapsed && <span>Dashboard</span>}
+        {!sidebarCollapsed && (
+          <ChevronRight size={16} className="sidebar-arrow" />
+        )}
       </button>     
 
 
