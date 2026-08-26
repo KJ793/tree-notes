@@ -965,3 +965,108 @@ padding: 24px 0;
   color: #7f8ba5;
   font-size: 12px;
 }
+
+/* =============================================== */
+/* Authentication secondary links                  */
+/* =============================================== */
+
+.auth-links-row {
+  width: 100%;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin-top: 12px;
+}
+
+
+.auth-text-link {
+  padding: 0;
+
+  border: none;
+
+  background: transparent;
+
+  color: #d9dbea;
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+
+  text-decoration: none;
+
+  cursor: pointer;
+
+  transition: color 0.15s ease;
+}
+
+
+.auth-text-link:hover {
+  color: #817cff;
+
+  text-decoration: underline;
+}
+
+
+.auth-switch-link {
+  text-align: left;
+}
+
+
+.forgotpassword {
+  margin: 0;
+
+  text-align: right;
+}
+
+/* =============================================== */
+/* Registration                                    */
+/* =============================================== */
+
+.registration-card {
+  padding-top: 30px;
+  padding-bottom: 30px;
+}
+
+
+.registration-card form {
+  gap: 10px;
+}
+
+
+.optional-field {
+  margin-left: 4px;
+
+  color: #747b90;
+
+  font-size: 10px;
+  font-weight: 400;
+}
+
+
+.password-hint {
+  display: block;
+
+  margin-top: -3px;
+  margin-bottom: 5px;
+
+  color: #7f879c;
+
+  font-size: 10px;
+  line-height: 1.4;
+
+  text-align: left;
+}
+
+
+.registration-success {
+  margin: 4px 0;
+
+  color: #55d39a;
+
+  font-size: 11px;
+  line-height: 1.4;
+
+  text-align: left;
+}
