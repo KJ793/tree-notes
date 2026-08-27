@@ -8,6 +8,7 @@ import RegisterCard from "./components/RegisterCard";
 
 
 function Login() {
+
   // Controls whether the user sees Login or Registration.
   const [authView, setAuthView] = useState("login");
 

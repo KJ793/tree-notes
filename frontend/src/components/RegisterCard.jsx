@@ -1,5 +1,5 @@
 import { useState } from "react";
-
+import { useNavigate } from "react-router-dom";
 
 function RegisterCard({ onLogin }) {
   const [fullName, setFullName] = useState("");
@@ -13,6 +13,8 @@ function RegisterCard({ onLogin }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // Use the useNavigate to navigate to the dashboard after successful login.
+  const navigate = useNavigate();
 
   function validateRegistration() {
 
@@ -120,8 +122,8 @@ function RegisterCard({ onLogin }) {
         }
       */
 
-
-      // Temporary frontend behaviour.
+      navigate("/dashboard", { replace: true });
+      
       console.log(
         "Registration data:",
         {
