@@ -1,7 +1,10 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, forwardRef, useImperativeHandle,} from "react";
 import cytoscape from "cytoscape";
 
-function GraphPanel({ rawNotes, selectedText, addNodeTrigger, noteId, }) {
+const GraphPanel = forwardRef(function GraphPanel(
+  { rawNotes, selectedText, addNodeTrigger, noteId },
+  ref
+) {
   // << frontend dev >> //
   // Stores graph JSON returned from AI/backend //
   const [graphData, setGraphData] = useState(null);
@@ -141,11 +144,37 @@ const [firstNodeToLink, setFirstNodeToLink] = useState(null);
           selector: "node",
           style: {
             "background-color": "#6366F1",
+
+            width: 110,
+            height: 52,
+
+            shape: "round-rectangle",
+
             label: "data(label)",
-            color: "#fff",
+
+            color: "#ffffff",
+            "font-size": "16px",
+            "font-weight": "500",
+
             "text-valign": "center",
             "text-halign": "center",
-            "font-size": "12px",
+
+            "text-wrap": "wrap",
+            "text-max-width": "75px",
+
+            "border-width": 1,
+            "border-color": "#818CF8",
+
+            "overlay-opacity": 0,
+          },
+        },
+        // highlight the selected node
+        {
+          selector: "node:selected",
+          style: {
+            "border-width": 4,
+            "border-color": "#41d19f",
+            "background-color": "#4F46E5",
           },
         },
 
@@ -161,10 +190,32 @@ const [firstNodeToLink, setFirstNodeToLink] = useState(null);
           selector: "edge",
           style: {
             width: 2,
-            "line-color": "#64748b",
-            "target-arrow-color": "#64748b",
+
+            "line-color": "#475569",
+            "target-arrow-color": "#6366F1",
             "target-arrow-shape": "triangle",
+
             "curve-style": "bezier",
+
+            opacity: 0.8,
+
+            "arrow-scale": 1.1,
+          },
+        },
+        // overlay for edge
+        {
+          selector: "node:active",
+          style: {
+            "overlay-opacity": 0.08,
+          },
+        },
+
+        {
+          selector: "edge:selected",
+          style: {
+            width: 3,
+            "line-color": "#41d19f",
+            "target-arrow-color": "#818CF8",
           },
         },
       ],
@@ -355,6 +406,12 @@ async function saveGraph() {
   }
 }
 
+useImperativeHandle(ref, () => ({
+  getGraphData() {
+    return getEditedGraphData();
+  },
+}));
+
   return (
     <section className="graph-panel">
       <h2>Graph Panel</h2>
@@ -516,6 +573,6 @@ async function saveGraph() {
     </section>
   );
 
-  }
+  }); 
   
 export default GraphPanel;

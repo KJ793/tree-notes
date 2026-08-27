@@ -1,4 +1,9 @@
-import { useRef, useState} from "react";
+import { 
+  forwardRef,
+  useImperativeHandle,
+  useRef,
+  useState, 
+} from "react";
 import GraphPanel from "./GraphPanel";
 import SummaryPanel from "./SummaryPanel";
 import {
@@ -13,8 +18,14 @@ import {
 
 import "./NoteWorkspace.css";
 
-function NoteWorkspace({ note }) {
+const NoteWorkspace = forwardRef(function NoteWorkspace(
+  { note },
+  ref
+) {
+// text editor refrence for saving
 const editorRef = useRef(null);
+// graph panel refrence for saving 
+const graphPanelRef = useRef(null);
 
 // << frontend dev >> //
   // Stores the current note title //
@@ -123,6 +134,38 @@ const editorRef = useRef(null);
 
     updateRawNotes();
   }
+  useImperativeHandle(ref, () => ({
+  async saveEverything() {
+    if (!note?.id) {
+      console.log("No note ID available");
+      return;
+    }
+
+    const graphData = graphPanelRef.current?.getGraphData();
+
+    const response = await fetch(`/api/notes/${note.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        title: title,
+        notes_section: rawNotes,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to save note");
+    }
+
+    const savedNote = await response.json();
+
+    console.log("Note saved:", savedNote);
+    console.log("Graph ready to save:", graphData);
+  },
+
+}));
 
   return (
     <div 
@@ -404,6 +447,8 @@ const editorRef = useRef(null);
         selectedText={selectedText}
         addNodeTrigger={addNodeTrigger}
         noteId={note.id}
+        ref={graphPanelRef}
+
 
         />
       </div>
@@ -415,6 +460,6 @@ const editorRef = useRef(null);
       <SummaryPanel rawNotes={rawNotes} />
     </div>
   );
-}
+});
 
 export default NoteWorkspace;
