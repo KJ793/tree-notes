@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import "./ProfileContent.css";
 
-// Stores the initial profile data for the logged-in user. This is a placeholder until the backend is connected.
+// Initial state for the profile data. This is used to reset the form when the component is first loaded or when the user logs out.
 const initialProfile = {
-  fullName: "Ali H",
-  displayName: "Ali H",
-  email: "ali.h@example.com",
-  bio: "Building connected notes and turning scattered ideas into useful knowledge.",
-  memberSince: "2026",
+  fullName: "",
+  displayName: "",
+  email: "",
+  bio: "",
+  memberSince: "",
 };
 
 // Stores the initial state of the password change form. This is used to reset the form when the modal is closed.
@@ -20,101 +20,62 @@ const emptyPasswordForm = {
 // Backend
 // Function for retrieving user details
 async function getLoggedInUserDetails() {
-  /*
-    BACKEND TODO:
+  const response = await fetch("/api/profile", {
+    method: "GET",
+    credentials: "include",
+  });
 
-    Replace the mock return below with an authenticated API
-    request for the currently logged-in user.
+  if (!response.ok) {
+    throw new Error("Unable to retrieve user profile.");
+  }
 
-    Example:
-
-    const response = await fetch("/api/profile", {
-      method: "GET",
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      throw new Error("Unable to retrieve user profile.");
-    }
-
-    return await response.json();
-  */
-  return initialProfile;
+  return await response.json();
 }
 
 // Backend
 // Function for saving updated user details
 async function saveLoggedInUserDetails(profileData) {
-  /*
-    BACKEND TODO:
+  const response = await fetch("/api/profile", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(profileData),
+  });
 
-    Replace the mock return below with an authenticated API
-    request that sends the updated profile to the backend.
+  const result = await response.json();
 
-    Example:
+  if (!response.ok) {
+    throw new Error(
+      result.message || "Unable to save user profile."
+    );
+  }
 
-    const response = await fetch("/api/profile", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify(profileData),
-    });
-
-    if (!response.ok) {
-      throw new Error("Unable to save user profile.");
-    }
-
-    return await response.json();
-  */
-  return {
-    success: true,
-    profile: profileData,
-  };
+  return result;
 }
 
 // Backend
 // Function for changing the logged-in user's password
 async function changeLoggedInUserPassword(oldPassword, newPassword) {
-  /*
-    BACKEND TODO:
+  const response = await fetch("/api/profile/password", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({
+      oldPassword,
+      newPassword,
+    }),
+  });
 
-    Replace the mock return below with an authenticated API
-    request.
+  const result = await response.json();
 
-    The backend should:
-      1. Identify the currently logged-in user.
-      2. Verify oldPassword securely.
-      3. Hash newPassword.
-      4. Update the stored password.
-      5. Return success or an error message.
-
-    Example:
-
-    const response = await fetch("/api/profile/password", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify({
-        oldPassword,
-        newPassword,
-      }),
-    });
-
-    const result = await response.json();
-
-    return {
-      backendConnected: true,
-      success: response.ok,
-      message: result.message,
-    };
-  */
   return {
-    backendConnected: false,
-    success: false,
+    backendConnected: true,
+    success: response.ok,
+    message: result.message,
   };
 }
 
@@ -136,6 +97,23 @@ async function updateLoggedInUserProfilePhoto(photoFile) {
     success: false,
     photoFile,
   };
+}
+
+// Function for generating initials from a user's name. This is used for the profile avatar when no profile image is available.
+function getInitials(name) {
+  if (!name) {
+    return "?";
+  }
+
+  const parts = name.trim().split(/\s+/);
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return (
+    parts[0][0] + parts[parts.length - 1][0]
+  ).toUpperCase();
 }
 
 function ProfileContent() {
@@ -207,6 +185,7 @@ function ProfileContent() {
       const result = await saveLoggedInUserDetails(profile);
 
       if (result?.success) {
+        setProfile(result.profile);
         setSaved(true);
       }
     } catch (error) {
@@ -338,7 +317,7 @@ function ProfileContent() {
 
       <section className="profile-identity-card" aria-labelledby="profile-name">
         <div className="profile-avatar" aria-hidden="true">
-          AH
+          {getInitials(profile.displayName || profile.fullName)}
         </div>
 
         <div className="profile-identity-copy">

@@ -1,5 +1,5 @@
 import { useState } from "react";
-
+import { useNavigate } from "react-router-dom";
 
 function LoginCard({ onCreateAccount }) {
   const [email, setEmail] = useState("");
@@ -8,6 +8,8 @@ function LoginCard({ onCreateAccount }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Use the useNavigate to navigate to the dashboard after successful login.
+  const navigate = useNavigate();
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -43,6 +45,8 @@ function LoginCard({ onCreateAccount }) {
           "Content-Type": "application/json",
         },
 
+        credentials: "include",
+
         body: JSON.stringify(loginData),
       });
 
@@ -68,14 +72,7 @@ function LoginCard({ onCreateAccount }) {
 
       console.log("Logged in user:", data);
 
-
-      /*
-        FRONTEND TODO:
-
-        Once authentication flow is finalised,
-        redirect the logged-in user to /dashboard here.
-      */
-
+      navigate("/dashboard", { replace: true });
 
     } catch (error) {
       console.error("Login error:", error);

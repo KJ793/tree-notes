@@ -11,8 +11,8 @@ import treeNotesLogo from "../assets/logo.png";
 
 
 const initialNavbarUser = {
-  displayName: "Ali H",
-  initials: "AH",
+  displayName: "",
+  initials: "",
   profileImage: null,
 };
 
@@ -22,71 +22,32 @@ const initialNavbarUser = {
 
 // Function for retrieving logged-in user's navbar details
 async function getLoggedInUserNavbarDetails() {
-  /*
-    BACKEND TODO:
+  const response = await fetch("/api/user/navbar", {
+    method: "GET",
+    credentials: "include",
+  });
 
-    Replace the mock return below with an authenticated API
-    request for the currently logged-in user.
+  if (!response.ok) {
+    throw new Error("Unable to retrieve logged-in user.");
+  }
 
-    The backend should return only the information required
-    by the navbar, for example:
-
-    {
-      displayName: "Ali H",
-      initials: "AH",
-      profileImage: "https://..."
-    }
-
-    Example:
-
-    const response = await fetch("/api/user/navbar", {
-      method: "GET",
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      throw new Error("Unable to retrieve logged-in user.");
-    }
-
-    return await response.json();
-  */
-
-  // Frontend mock data until backend is connected.
-  return initialNavbarUser;
+  return await response.json();
 }
 
 // Backend
 // Function for logging out the currently logged-in user
 async function logoutLoggedInUser() {
-  /*
-    BACKEND TODO:
+  const response = await fetch("/api/logout", {
+    method: "POST",
+    credentials: "include",
+  });
 
-    Replace the mock return below with a request to the
-    backend logout endpoint.
+  if (!response.ok) {
+    throw new Error("Unable to log out.");
+  }
 
-    The backend should invalidate/delete the current user's
-    session or authentication cookie.
-
-    Example:
-
-    const response = await fetch("/api/logout", {
-      method: "POST",
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      throw new Error("Unable to log out.");
-    }
-
-    return {
-      backendConnected: true,
-      success: true,
-    };
-  */
-
-  // Frontend placeholder until authentication is connected.
   return {
-    backendConnected: false,
+    backendConnected: true,
     success: true,
   };
 }
