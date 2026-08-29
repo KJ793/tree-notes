@@ -1,4 +1,10 @@
 import {
+  House,
+  NotebookText,
+  Network,
+  Search,
+  Tags,
+  Settings,
   ChevronRight,
   ChevronLeft,
   ChevronsRight,
@@ -23,14 +29,17 @@ function Sidebar({
 >
 
     
-    
-{/* << FRONTEND DEV >> */}
-      <h2>TreeNotes</h2>
+
 
  {/* << FRONTEND DEV >> */}
  {/* Controls whether the dashboard note list is expanded */}
-      <button type="button" onClick={onNotesToggle}>
-        Dashboard
+       <button 
+        type="button" className="sidebar-nav-item sidebar-nav-item-active" onClick={onNotesToggle}>
+       <House size={18} />
+        {!sidebarCollapsed && <span>Dashboard</span>}
+        {!sidebarCollapsed && (
+          <ChevronRight size={16} className="sidebar-arrow" />
+        )}
       </button>     
 
 
@@ -45,10 +54,11 @@ function Sidebar({
       */}
 
       {notesExpanded && (
-        <div>
+        <div className="sidebar-note-list">
           {/* << TEMPORARY FRONTEND NOTE >> */}
           
           <button
+            className="sidebar-note-button"
             onClick={() =>
               onSelectNote({
                 id: 1,
@@ -62,6 +72,7 @@ function Sidebar({
           </button>
 
           <button
+            className="sidebar-note-button"
             onClick={() =>
               onSelectNote({
                 id: 2,
@@ -79,11 +90,25 @@ function Sidebar({
     {/* << FRONTEND NAVIGATION >> */}
     {/* These buttons will later connect to their pages /routes */}
 
-      <button>Notes</button>
-      <button>Graph</button>
-      <button>Search</button>
-      <button>Tags</button>
-      <button>Settings</button>
+    <button className="sidebar-nav-item">
+      <NotebookText size={17} />
+      {!sidebarCollapsed && <span>Notes</span>}
+    </button>
+
+    <button className="sidebar-nav-item">
+      <Network size={17} />
+      {!sidebarCollapsed && <span>Graphs</span>}
+    </button>
+
+    <button className="sidebar-nav-item ">
+      <Tags size={17} />
+      {!sidebarCollapsed && <span>Tags</span>}
+    </button>
+
+    <button className="sidebar-nav-item ">
+      <Settings size={17} />
+      {!sidebarCollapsed && <span>Settings</span>}
+    </button>
 
 
 

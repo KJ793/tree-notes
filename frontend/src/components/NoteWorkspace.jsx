@@ -1,4 +1,9 @@
-import { useRef, useState} from "react";
+import { 
+  forwardRef,
+  useImperativeHandle,
+  useRef,
+  useState, 
+} from "react";
 import GraphPanel from "./GraphPanel";
 import SummaryPanel from "./SummaryPanel";
 import {
@@ -13,8 +18,14 @@ import {
 
 import "./NoteWorkspace.css";
 
-function NoteWorkspace({ note }) {
+const NoteWorkspace = forwardRef(function NoteWorkspace(
+  { note },
+  ref
+) {
+// text editor refrence for saving
 const editorRef = useRef(null);
+// graph panel refrence for saving 
+const graphPanelRef = useRef(null);
 
 // << frontend dev >> //
   // Stores the current note title //
@@ -23,6 +34,27 @@ const editorRef = useRef(null);
   // Stores the current raw note text //
   // This rawNotes value will be shared with HANS AI //
   const [rawNotes, setRawNotes] = useState(note.content);
+
+  // Selected text for manually adding to graph //
+  const [selectedText, setSelectedText] = useState("");
+
+  // Initialising Context menu on right click //
+  const [contextMenu, setContextMenu] = useState(null);
+
+  const [addNodeTrigger, setAddNodeTrigger] = useState(0);
+
+
+  // Tracks the active text formatting //
+  const [activeFormats, setActiveFormats] = useState({
+  bold: false,
+  italic: false,
+  underline: false,
+
+  heading: null,
+
+  bulletList: false,
+  numberedList: false,
+  });
 
   /* ---------------------------------------------------------
    Raw Notes Formatting
@@ -34,6 +66,51 @@ const editorRef = useRef(null);
     document.execCommand(command, false, value);
 
     updateRawNotes();
+    updateFormattingState();
+  }
+
+  function updateFormattingState() {
+  let currentBlock = document.queryCommandValue("formatBlock");
+
+  if (currentBlock) {
+    currentBlock = currentBlock
+      .toLowerCase()
+      .replace("<", "")
+      .replace(">", "");
+  }
+
+  setActiveFormats({
+    bold: document.queryCommandState("bold"),
+    italic: document.queryCommandState("italic"),
+    underline: document.queryCommandState("underline"),
+
+    heading:
+      currentBlock === "h1" ||
+      currentBlock === "h2" ||
+      currentBlock === "h3"
+        ? currentBlock
+        : null,
+
+    bulletList:
+      document.queryCommandState("insertUnorderedList"),
+
+    numberedList:
+      document.queryCommandState("insertOrderedList"),
+    });
+  }
+
+  function toggleHeading(heading) {
+    const currentBlock = document
+      .queryCommandValue("formatBlock")
+      .toLowerCase()
+      .replace("<", "")
+      .replace(">", "");
+
+    if (currentBlock === heading) {
+      runFormat("formatBlock", "p");
+    } else {
+      runFormat("formatBlock", heading);
+    }
   }
 
   function updateRawNotes() {
@@ -57,9 +134,44 @@ const editorRef = useRef(null);
 
     updateRawNotes();
   }
+  useImperativeHandle(ref, () => ({
+  async saveEverything() {
+    if (!note?.id) {
+      console.log("No note ID available");
+      return;
+    }
+
+    const graphData = graphPanelRef.current?.getGraphData();
+
+    const response = await fetch(`/api/notes/${note.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        title: title,
+        notes_section: rawNotes,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to save note");
+    }
+
+    const savedNote = await response.json();
+
+    console.log("Note saved:", savedNote);
+    console.log("Graph ready to save:", graphData);
+  },
+
+}));
 
   return (
-    <div className="note-workspace">
+    <div 
+      className="note-workspace"
+      onClick={() => setContextMenu(null)}
+    >
 
     {/* << frontend dev >> */}
     {/* Note title input */}
@@ -95,8 +207,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-text-button"
-                onClick={() => runFormat("formatBlock", "h1")}
+                className={`toolbar-text-button ${
+                  activeFormats.heading === "h1"
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => toggleHeading("h1")}
+                aria-pressed={activeFormats.heading === "h1"}
                 title="Heading 1"
               >
                 H1
@@ -104,8 +222,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-text-button"
-                onClick={() => runFormat("formatBlock", "h2")}
+                className={`toolbar-text-button ${
+                  activeFormats.heading === "h2"
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => toggleHeading("h2")}
+                aria-pressed={activeFormats.heading === "h2"}
                 title="Heading 2"
               >
                 H2
@@ -113,8 +237,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-text-button"
-                onClick={() => runFormat("formatBlock", "h3")}
+                className={`toolbar-text-button ${
+                  activeFormats.heading === "h3"
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => toggleHeading("h3")}
+                aria-pressed={activeFormats.heading === "h3"}
                 title="Heading 3"
               >
                 H3
@@ -127,8 +257,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-icon-button"
+                className={`toolbar-icon-button ${
+                  activeFormats.bold
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runFormat("bold")}
+                aria-pressed={activeFormats.bold}
                 title="Bold"
               >
                 <Bold size={18} strokeWidth={2.2} />
@@ -136,8 +272,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-icon-button"
+                className={`toolbar-icon-button ${
+                  activeFormats.italic
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runFormat("italic")}
+                aria-pressed={activeFormats.italic}
                 title="Italic"
               >
                 <Italic size={18} strokeWidth={2} />
@@ -145,8 +287,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-icon-button"
+                className={`toolbar-icon-button ${
+                  activeFormats.underline
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runFormat("underline")}
+                aria-pressed={activeFormats.underline}
                 title="Underline"
               >
                 <Underline size={18} strokeWidth={2} />
@@ -160,10 +308,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-icon-button"
-                onClick={() =>
-                  runFormat("insertUnorderedList")
-                }
+                className={`toolbar-icon-button ${
+                  activeFormats.bulletList
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => runFormat("insertUnorderedList")}
+                aria-pressed={activeFormats.bulletList}
                 title="Bullet list"
               >
                 <List size={19} strokeWidth={1.9} />
@@ -171,10 +323,14 @@ const editorRef = useRef(null);
               
               <button
                 type="button"
-                className="toolbar-icon-button"
-                onClick={() =>
-                  runFormat("insertOrderedList")
-                }
+                className={`toolbar-icon-button ${
+                  activeFormats.numberedList
+                    ? "toolbar-button-active"
+                    : ""
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => runFormat("insertOrderedList")}
+                aria-pressed={activeFormats.numberedList}
                 title="Numbered list"
               >
                 <ListOrdered size={19} strokeWidth={1.9} />
@@ -202,9 +358,80 @@ const editorRef = useRef(null);
               className="text-area raw-notes-content"
               contentEditable
               suppressContentEditableWarning
-              onInput={updateRawNotes}
+              onContextMenu={(e) => {
+                    e.preventDefault();
+
+                    const selection = window.getSelection();
+                    const text = selection?.toString().trim() || "";
+
+                    if (!text) {
+                      setContextMenu(null);
+                      return;
+                    }
+
+                    setSelectedText(text);
+
+                    setContextMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      text: text,
+                    });
+
+                    console.log("Right-click selected text:", text);
+                  }}
+              
+
+              onInput={() => {
+                updateRawNotes();
+                updateFormattingState();
+              }}
+
+              onMouseUp={() => {
+                            updateFormattingState();
+
+                            const selection = window.getSelection();
+                            const text = selection?.toString().trim() || "";
+
+                            setSelectedText(text);
+
+                            console.log("Selected text:", text);
+                          }}
+              onKeyUp={updateFormattingState}
+              onFocus={updateFormattingState}
             >
               {note.content}
+
+
+
+              {contextMenu && (
+              <div
+                className="notes-context-menu"
+                style={{
+                  position: "fixed",
+                  left: contextMenu.x,
+                  top: contextMenu.y,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+
+                     const textToAdd = contextMenu.text
+
+                    console.log("Add to Graph:", selectedText);
+
+                    setSelectedText(textToAdd);
+
+                    setAddNodeTrigger((current) => current + 1);
+
+                    setContextMenu(null);
+                  }}
+                >
+                  Add to Graph
+                </button>
+              </div>
+            )}
             </div>
 
           </div>
@@ -215,7 +442,15 @@ const editorRef = useRef(null);
         {/* Provides current note text to GraphPanel */}
         {/* GraphPanel sends rawNotes to backend / AI */}
 
-        <GraphPanel rawNotes={rawNotes}/>
+        <GraphPanel 
+        rawNotes={rawNotes}
+        selectedText={selectedText}
+        addNodeTrigger={addNodeTrigger}
+        noteId={note.id}
+        ref={graphPanelRef}
+
+
+        />
       </div>
 
       {/* << SUMMARY / AI CONNECTION >> */  }
@@ -225,6 +460,6 @@ const editorRef = useRef(null);
       <SummaryPanel rawNotes={rawNotes} />
     </div>
   );
-}
+});
 
 export default NoteWorkspace;

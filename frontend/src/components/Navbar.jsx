@@ -3,85 +3,51 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   User,
   LogOut,
+  Save,
+  FileOutput,
 } from "lucide-react";
 
 import treeNotesLogo from "../assets/logo.png";
 
 
 const initialNavbarUser = {
-  displayName: "Ali H",
-  initials: "AH",
+  displayName: "",
+  initials: "",
   profileImage: null,
 };
 
-// Backend
+/* =========================================================
+   BACKEND INTEGRATION
+   ========================================================= */
+
 // Function for retrieving logged-in user's navbar details
 async function getLoggedInUserNavbarDetails() {
-  /*
-    BACKEND TODO:
+  const response = await fetch("/api/user/navbar", {
+    method: "GET",
+    credentials: "include",
+  });
 
-    Replace the mock return below with an authenticated API
-    request for the currently logged-in user.
+  if (!response.ok) {
+    throw new Error("Unable to retrieve logged-in user.");
+  }
 
-    The backend should return only the information required
-    by the navbar, for example:
-
-    {
-      displayName: "Ali H",
-      initials: "AH",
-      profileImage: "https://..."
-    }
-
-    Example:
-
-    const response = await fetch("/api/user/navbar", {
-      method: "GET",
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      throw new Error("Unable to retrieve logged-in user.");
-    }
-
-    return await response.json();
-  */
-
-  // Frontend mock data until backend is connected.
-  return initialNavbarUser;
+  return await response.json();
 }
 
 // Backend
 // Function for logging out the currently logged-in user
 async function logoutLoggedInUser() {
-  /*
-    BACKEND TODO:
+  const response = await fetch("/api/logout", {
+    method: "POST",
+    credentials: "include",
+  });
 
-    Replace the mock return below with a request to the
-    backend logout endpoint.
+  if (!response.ok) {
+    throw new Error("Unable to log out.");
+  }
 
-    The backend should invalidate/delete the current user's
-    session or authentication cookie.
-
-    Example:
-
-    const response = await fetch("/api/logout", {
-      method: "POST",
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      throw new Error("Unable to log out.");
-    }
-
-    return {
-      backendConnected: true,
-      success: true,
-    };
-  */
-
-  // Frontend placeholder until authentication is connected.
   return {
-    backendConnected: false,
+    backendConnected: true,
     success: true,
   };
 }
@@ -102,7 +68,96 @@ async function getLoggedInUserProfileImage() {
   return null;
 }
 
-function Navbar() {
+// Backend
+// Function for saving the currently open note
+async function saveCurrentNote() {
+  /*
+    BACKEND TODO:
+
+    This function should send the currently open note
+    to the backend so it can be saved to the database.
+
+    The backend will eventually need information such as:
+
+    {
+      noteId,
+      title,
+      rawNotes,
+      userSummary
+    }
+
+    Example:
+
+    const response = await fetch("/api/notes/save", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        noteId,
+        title,
+        rawNotes,
+        userSummary,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Unable to save note.");
+    }
+
+    return await response.json();
+  */
+
+  // Frontend placeholder
+  return {
+    backendConnected: false,
+    success: true,
+  };
+}
+
+// Backend
+// Function for exporting the currently open note
+async function exportCurrentNote() {
+  /*
+    BACKEND TODO:
+
+    Depending on how export is implemented, this could:
+
+      1. Ask the backend to generate a PDF / DOCX / text file
+      2. Return a downloadable file
+      3. Export the note locally from the frontend
+
+    Example:
+
+    const response = await fetch("/api/notes/export", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        noteId,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Unable to export note.");
+    }
+
+    return response;
+  */
+
+  // Frontend placeholder
+  return {
+    backendConnected: false,
+    success: true,
+  };
+}
+
+function Navbar({onSave}) {
+  const [saving, setSaving] = useState(false);
+
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const [navbarUser, setNavbarUser] = useState(initialNavbarUser);
@@ -163,6 +218,34 @@ function Navbar() {
     }
   }
 
+  async function handleSave() {
+    try {
+      setSaving(true);
+      if (onSave) {
+      await onSave();
+    }
+
+      window.setTimeout(() => {
+        setSaving(false);
+      }, 1200);
+    } catch (error) {
+      console.error("Unable to save note:", error);
+      setSaving(false);
+    }
+  }
+
+  async function handleExport() {
+    try {
+      const result = await exportCurrentNote();
+
+      if (result?.success) {
+        console.log("Export request successful.");
+      }
+    } catch (error) {
+      console.error("Unable to export note:", error);
+    }
+  }
+
   useEffect(() => {
     function handleClickOutside(event) {
       if (
@@ -207,6 +290,38 @@ function Navbar() {
           <small>Organise. connect. remember</small>
         </div>
       </Link>
+
+      <div className="navbar-note-actions">
+
+        <button
+          className="navbar-action-button"
+          type="button"
+          onClick={handleSave}
+        >
+          <Save
+            size={24}
+            strokeWidth={1.8}
+          />
+
+          <span>
+            {saving ? "Saved" : "Save"}
+          </span>
+        </button>
+
+        <button
+          className="navbar-action-button"
+          type="button"
+          onClick={handleExport}
+        >
+          <FileOutput
+            size={24}
+            strokeWidth={1.8}
+          />
+
+          <span>Export</span>
+        </button>
+
+      </div>
 
       <div
         className="profile-menu-container"

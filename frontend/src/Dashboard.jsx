@@ -1,17 +1,23 @@
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
 import DashboardContent from "./components/DashboardContent";
-import { useState } from "react";
+import { useState, useRef} from "react";
 import NoteWorkspace from "./components/NoteWorkspace"; 
 
 function Dashboard() {
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [selectedNote, setSelectedNote] = useState(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+// workspace refrence for save button
+  const noteWorkspaceRef = useRef(null);
 
   return (
     <main className="dashboard-page">
-      <Navbar />
+      <Navbar
+      onSave={() => {
+      noteWorkspaceRef.current?.saveEverything();
+      }}
+      />
 
       <div className="dashboard-layout">
         <Sidebar
@@ -30,7 +36,10 @@ function Dashboard() {
 
         <section className="dashboard-main">
           {selectedNote ? (
-            <NoteWorkspace note={selectedNote} /> ) : 
+            <NoteWorkspace 
+            note={selectedNote}
+            ref={noteWorkspaceRef}
+            /> ) : 
             (
             <DashboardContent />
             )}
