@@ -74,26 +74,6 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
-/* Panel headings */
-
-.note-workspace .graph-panel > h2 {
-  min-height: 48px;
-  margin: 0;
-  padding: 13px 22px 11px;
-
-  display: flex;
-  align-items: center;
-
-  border-bottom: 1px solid #263a56;
-
-  color: #f5f6fb;
-
-  font-size: 21px;
-  font-weight: 500;
-  line-height: 1.2;
-  letter-spacing: -0.2px;
-}
-
 /* ---------------------------------------------------------
    Raw Notes editor
    --------------------------------------------------------- */
@@ -379,36 +359,61 @@
 }
 
 /* ---------------------------------------------------------
-   Raw Notes Heading
+   Panel Headings
    --------------------------------------------------------- */
 
-.note-workspace .raw-notes-heading {
-  min-height: 48px;
+.note-workspace .raw-notes-heading,
+.note-workspace .graph-panel-heading {
+  width: 100%;
+  height: 52px;
+  min-height: 52px;
 
   display: flex;
   align-items: center;
+  justify-content: space-between;
 
-  gap: 9px;
+  gap: 16px;
 
-  padding: 0 22px;
+  padding: 0 16px;
+
+  box-sizing: border-box;
 
   border-bottom: 1px solid #263a56;
-
-  color: #f5f6fb;
 }
 
+.note-workspace .raw-notes-heading-title,
+.note-workspace .graph-panel-heading-title {
+  display: flex;
+  align-items: center;
 
-.note-workspace .raw-notes-heading h2 {
+  gap: 8px;
+
+  min-width: 0;
+
+  flex-shrink: 0;
+}
+
+.note-workspace .raw-notes-heading h2,
+.note-workspace .graph-panel-heading h2 {
   margin: 0;
 
   color: #f5f6fb;
 
-  font-size: 21px;
-  font-weight: 500;
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 600;
+
+  line-height: 1;
 }
 
 
-.note-workspace .raw-notes-heading svg {
+.note-workspace .raw-notes-heading svg,
+.note-workspace .graph-panel-heading svg {
+  width: 21px;
+  height: 21px;
+
+  flex-shrink: 0;
+
   color: #f5f6fb;
 }
 
@@ -525,6 +530,10 @@
   flex: 1;
 
   min-height: 300px;
+  max-height: 350px;
+
+  overflow-y: auto;
+  overflow-x: hidden;
 
   margin: 0;
 
@@ -618,4 +627,340 @@
 .note-workspace .raw-notes-toolbar .toolbar-button-active:hover {
   background: #706bf5;
   color: #ffffff;
+}
+
+/* ================================================== */
+/* Semantic Search                                    */
+/* ================================================== */
+
+.note-workspace .semantic-search-area {
+  min-width: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+
+  gap: 12px;
+
+  flex: 1;
+
+  margin: 0;
+  padding: 0;
+}
+
+.note-workspace .search-bar {
+  width: 250px;
+  height: 36px;
+
+  margin: 0;
+
+  display: flex;
+  align-items: center;
+
+  flex-shrink: 0;
+
+  padding: 0 5px 0 12px;
+
+  box-sizing: border-box;
+
+  border: 1px solid #354765;
+  border-radius: 6px;
+
+  background: #19243a;
+
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.note-workspace .search-bar:focus-within {
+  border-color: #6864ef;
+
+  background: #1d2941;
+
+  box-shadow:
+    0 0 0 1px #6864ef;
+}
+
+
+/* ================================================ */
+/* Search input                                     */
+/* ================================================ */
+
+.note-workspace .search-bar input {
+  flex: 1;
+
+  min-width: 0;
+
+  height: 100%;
+
+  padding: 0;
+
+  border: none;
+  outline: none;
+
+  background: transparent;
+
+  color: #eef1f7;
+
+  font-family: inherit;
+  font-size: 13px;
+}
+
+
+.note-workspace .search-bar input::placeholder {
+  color: #747f94;
+}
+
+
+/* ================================================ */
+/* Semantic Search Button                           */
+/* ================================================ */
+
+.note-workspace .search-submit-button {
+  width: 28px;
+  height: 28px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  padding: 0;
+
+  border: none;
+  border-radius: 5px;
+
+  background: transparent;
+
+  color: #a4adbe;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+
+.note-workspace .search-submit-button:hover:not(:disabled) {
+  background: #625df0;
+
+  color: #ffffff;
+}
+
+
+.note-workspace .search-submit-button:active:not(:disabled) {
+  background: #5752dc;
+}
+
+
+.note-workspace .search-submit-button:disabled {
+  opacity: 0.35;
+
+  cursor: default;
+}
+
+/* ================================================== */
+/* AI Response                                        */
+/* ================================================== */
+
+.note-workspace .semantic-search-result,
+.note-workspace .semantic-search-status,
+.note-workspace .semantic-search-error {
+  max-width: 330px;
+
+  overflow: hidden;
+
+  font-size: 12px;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.note-workspace .semantic-search-result {
+  color: #58bde8;
+}
+
+
+.note-workspace .semantic-search-status {
+  color: #8f9aae;
+}
+
+
+.note-workspace .semantic-search-error {
+  color: #ef7777;
+}
+
+/* ================================================== */
+/* Raw Notes Scroll Bar                               */
+/* ================================================== */
+
+.note-workspace .raw-notes-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+
+.note-workspace .raw-notes-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+
+.note-workspace .raw-notes-content::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+
+  background: #3b4962;
+}
+
+
+.note-workspace .raw-notes-content::-webkit-scrollbar-thumb:hover {
+  background: #53617b;
+}
+
+/* ================================================== */
+/* Raw Notes Context Menu                             */
+/* ================================================== */
+
+.notes-context-menu {
+  position: fixed;
+
+  z-index: 1000;
+
+  width: 210px;
+
+  padding: 6px;
+
+  box-sizing: border-box;
+
+  overflow: hidden;
+
+  border: 1px solid #344865;
+  border-radius: 8px;
+
+  background: #121c2d;
+
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.35);
+
+  color: #eef1f7;
+}
+
+
+/* Selected-text preview */
+
+.notes-context-menu-preview {
+  display: flex;
+  flex-direction: column;
+
+  gap: 3px;
+
+  padding: 7px 9px;
+}
+
+
+.notes-context-menu-preview span {
+  color: #7f8aa0;
+
+  font-size: 10px;
+  font-weight: 500;
+
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+
+.notes-context-menu-preview strong {
+  overflow: hidden;
+
+  color: #dfe4ee;
+
+  font-size: 12px;
+  font-weight: 500;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* Separator */
+
+.notes-context-menu-divider {
+  height: 1px;
+
+  margin: 3px 5px;
+
+  background: #293a54;
+}
+
+
+/* Menu action */
+
+.notes-context-menu-item {
+  width: 100%;
+  min-height: 35px;
+
+  display: flex;
+  align-items: center;
+
+  gap: 9px;
+
+  padding: 7px 9px;
+
+  border: none;
+  border-radius: 5px;
+
+  background: transparent;
+
+  color: #e9edf5;
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+
+  text-align: left;
+
+  cursor: pointer;
+
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
+}
+
+
+.notes-context-menu-item svg {
+  flex-shrink: 0;
+
+  color: #9691ff;
+}
+
+
+.notes-context-menu-item:hover {
+  background: #625df0;
+
+  color: #ffffff;
+}
+
+
+.notes-context-menu-item:hover svg {
+  color: #ffffff;
+}
+
+
+.notes-context-menu-item:active {
+  background: #5752dc;
+}
+
+.notes-context-menu {
+  user-select: none;
+}
+
+.notes-context-menu-preview {
+  user-select: none;
+}
+
+.notes-context-menu-item {
+  user-select: none;
 }

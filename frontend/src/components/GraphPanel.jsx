@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, forwardRef, useImperativeHandle,} from "react";
+import { ChartLine } from "lucide-react";
 import cytoscape from "cytoscape";
 
 const GraphPanel = forwardRef(function GraphPanel(
@@ -414,7 +415,30 @@ useImperativeHandle(ref, () => ({
 
   return (
     <section className="graph-panel">
-      <h2>Graph Panel</h2>
+      
+      {/* =============================================== */}
+      {/* Graph Panel Header                              */}
+      {/* =============================================== */}
+
+      <div className="graph-panel-heading">
+
+        <div className="graph-panel-heading-title">
+
+          <h2>Graph View</h2>
+
+          <ChartLine
+            size={21}
+            strokeWidth={1.8}
+            aria-hidden="true"
+          />
+
+        </div>
+
+      </div>
+
+      {/* =============================================== */}
+      {/* Graph Content                                   */}
+      {/* =============================================== */}
 
       <div className="graph-placeholder">
 

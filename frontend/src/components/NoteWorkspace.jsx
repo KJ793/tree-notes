@@ -6,6 +6,7 @@ import {
 } from "react";
 import GraphPanel from "./GraphPanel";
 import SummaryPanel from "./SummaryPanel";
+import SearchBar from "./SearchBar";
 import {
   Bold,
   Italic,
@@ -14,9 +15,83 @@ import {
   ListOrdered,
   Link,
   Info,
+  Network,
 } from "lucide-react";
 
 import "./NoteWorkspace.css";
+
+/* =========================================================
+   BACKEND / AI INTEGRATION
+   ========================================================= */
+
+
+// Backend / AI
+// Function for semantic/fuzzy searching Raw Notes
+async function semanticSearchRawNotes(
+  searchTerm,
+  rawNotes
+) {
+  /*
+    HANS / BACKEND TODO:
+
+    Send the user's semantic search query together with
+    the current Raw Notes to the AI/backend.
+
+    Frontend provides:
+
+    {
+      searchTerm: string,
+      rawNotes: string
+    }
+
+
+    Example future API request:
+
+    const response = await fetch(
+      "/api/ai/semantic-search",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          search_input: searchTerm,
+          rawNotes: rawNotes,
+        }),
+      }
+    );
+
+
+    if (!response.ok) {
+      throw new Error(
+        "Semantic search failed."
+      );
+    }
+
+
+    return await response.json();
+
+
+    Suggested backend response:
+
+    {
+      result:
+        "Python functions are described in the section about reusable blocks of code."
+    }
+  */
+
+
+  // Temporary frontend mock response
+  // until Hans connects the AI/backend.
+  return {
+    backendConnected: false,
+
+    result:
+      `Semantic search requested for "${searchTerm}". AI backend still needs to be connected.`,
+  };
+}
 
 const NoteWorkspace = forwardRef(function NoteWorkspace(
   { note },
@@ -26,6 +101,22 @@ const NoteWorkspace = forwardRef(function NoteWorkspace(
 const editorRef = useRef(null);
 // graph panel refrence for saving 
 const graphPanelRef = useRef(null);
+
+// << RAW NOTES SEARCH >> //
+
+// << AI SEMANTIC SEARCH >> //
+
+// Text returned from semantic search
+const [semanticSearchResult, setSemanticSearchResult] =
+  useState("");
+
+// Shows whether AI search is currently running
+const [semanticSearchLoading, setSemanticSearchLoading] =
+  useState(false);
+
+// Stores errors returned from semantic search
+const [semanticSearchError, setSemanticSearchError] =
+  useState("");
 
 // << frontend dev >> //
   // Stores the current note title //
@@ -55,6 +146,54 @@ const graphPanelRef = useRef(null);
   bulletList: false,
   numberedList: false,
   });
+
+  /* ---------------------------------------------------------
+   Semantic Search
+   --------------------------------------------------------- */
+
+  async function handleSemanticSearch(
+      searchTerm
+    ) {
+      setSemanticSearchLoading(true);
+      setSemanticSearchError("");
+      setSemanticSearchResult("");
+
+
+      try {
+
+        const response =
+          await semanticSearchRawNotes(
+            searchTerm,
+            rawNotes
+          );
+
+
+        if (response?.result) {
+          setSemanticSearchResult(
+            response.result
+          );
+        }
+
+
+      } catch (error) {
+
+        console.error(
+          "Semantic search error:",
+          error
+        );
+
+
+        setSemanticSearchError(
+          "Unable to complete semantic search."
+        );
+
+
+      } finally {
+
+        setSemanticSearchLoading(false);
+
+      }
+    }
 
   /* ---------------------------------------------------------
    Raw Notes Formatting
@@ -134,6 +273,7 @@ const graphPanelRef = useRef(null);
 
     updateRawNotes();
   }
+
   useImperativeHandle(ref, () => ({
   async saveEverything() {
     if (!note?.id) {
@@ -187,13 +327,52 @@ const graphPanelRef = useRef(null);
         <section className="raw-notes">
           
           <div className="raw-notes-heading">
-            <h2>Raw Notes</h2>
-            
-            <Info
-              size={21}
-              strokeWidth={2}
-              aria-hidden="true"
-            />
+
+            <div className="raw-notes-heading-title">
+              <h2>Raw Notes</h2>
+
+              <Info
+                size={21}
+                strokeWidth={2}
+                aria-hidden="true"
+              />
+            </div>
+
+
+            <div className="semantic-search-area">
+
+              {semanticSearchLoading && (
+                <span className="semantic-search-status">
+                  Searching...
+                </span>
+              )}
+
+
+              {!semanticSearchLoading &&
+                semanticSearchResult && (
+                  <span className="semantic-search-result">
+                    {semanticSearchResult}
+                  </span>
+                )}
+
+
+              {!semanticSearchLoading &&
+                semanticSearchError && (
+                  <span className="semantic-search-error">
+                    {semanticSearchError}
+                  </span>
+                )}
+
+
+              <SearchBar
+                placeholder="Semantic search..."
+                ariaLabel="Semantic search raw notes"
+                onSearch={handleSemanticSearch}
+                loading={semanticSearchLoading}
+              />
+
+            </div>
+
           </div>
           
           <div className="raw-notes-editor">
@@ -358,16 +537,21 @@ const graphPanelRef = useRef(null);
               className="text-area raw-notes-content"
               contentEditable
               suppressContentEditableWarning
-              onContextMenu={(e) => {
-                    e.preventDefault();
 
+              onContextMenu={(e) => {
                     const selection = window.getSelection();
+
                     const text = selection?.toString().trim() || "";
 
                     if (!text) {
                       setContextMenu(null);
+
+                      // Allow normal browser context menu
                       return;
                     }
+
+                    // Only override normal right-click when selected text exists
+                    e.preventDefault();
 
                     setSelectedText(text);
 
@@ -406,14 +590,45 @@ const graphPanelRef = useRef(null);
               {contextMenu && (
               <div
                 className="notes-context-menu"
+                contentEditable={false}
                 style={{
-                  position: "fixed",
                   left: contextMenu.x,
                   top: contextMenu.y,
                 }}
+                role="menu"
+                onClick={(e) =>
+                  e.stopPropagation()
+                }
               >
+
+                <div 
+                  className="notes-context-menu-preview"
+                  contentEditable={false}
+                >
+                  <span>Selected text</span>
+
+                  <strong>
+                    {contextMenu.text}
+                  </strong>
+                </div>
+
+                <div className="notes-context-menu-divider" />
+
                 <button
                   type="button"
+                  className="notes-context-menu-item"
+                  role="menuitem"
+
+                  onMouseDown={(event) => {
+                    /*
+                      Stops the editable Raw Notes area from
+                      treating interaction with this button as
+                      an editor selection/cursor change.
+                    */
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+
                   onClick={(e) => {
                     e.stopPropagation();
 
@@ -428,7 +643,12 @@ const graphPanelRef = useRef(null);
                     setContextMenu(null);
                   }}
                 >
-                  Add to Graph
+                  <Network
+                    size={17}
+                    strokeWidth={1.8}
+                  />
+
+                  <span>Add to Graph</span>
                 </button>
               </div>
             )}
