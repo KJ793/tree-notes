@@ -194,120 +194,417 @@
   color: #ff8e94;
 }
 
-/* ---------------------------------------------------------
-   Summary panel
-   --------------------------------------------------------- */
+/* ================================================== */
+/* Summary Panel                                      */
+/* ================================================== */
 
 .note-workspace .summary-panel {
-  margin: 0;
-  padding: 7px;
+  width: 100%;
+
+  margin-top: 8px;
 
   overflow: hidden;
 
-  border: 1px solid #243956;
+  border: 1px solid #2d4668;
   border-radius: 9px;
 
   background: #111a2b;
 }
 
-.note-workspace .summary-header {
-  min-height: 33px;
 
+/* ================================================== */
+/* Summary Tabs                                       */
+/* ================================================== */
+
+.note-workspace .summary-tabs {
+  min-height: 30px;
+
+  display: flex;
+  align-items: flex-end;
+
+  gap: 4px;
+
+  padding: 0 13px;
+
+  border-bottom: 1px solid #263a56;
+}
+
+
+.note-workspace .summary-tab {
+  height: 34px;
+
+  padding: 0 13px;
+
+  border: 1px solid transparent;
+  border-radius: 6px 6px 0 0;
+
+  background: transparent;
+
+  color: #9ca6b8;
+
+  font-family: inherit;
+  font-size: 12px;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+
+.note-workspace .summary-tab:hover {
+  color: #ffffff;
+
+  background: #19243a;
+}
+
+
+.note-workspace .summary-tab-active {
+  border-color: #625df0;
+
+  background: #625df0;
+
+  color: #ffffff;
+}
+
+
+/* ================================================== */
+/* Summary View                                       */
+/* ================================================== */
+
+.note-workspace .summary-view {
+  padding: 12px 16px 14px;
+}
+
+
+.note-workspace .summary-view-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
 
-  margin: 0 0 5px;
-  padding: 0;
+  gap: 18px;
+
+  margin-bottom: 10px;
 }
 
-.note-workspace .summary-header > div {
+
+.note-workspace .summary-view-header h3 {
+  margin: 0 0 3px;
+
+  color: #f5f6fb;
+
+  font-size: 16px;
+  font-weight: 600;
+}
+
+
+.note-workspace .summary-view-header p {
+  margin: 0;
+
+  color: #7f8a9f;
+
+  font-size: 11px;
+}
+
+
+/* ================================================== */
+/* Summary Action Buttons                             */
+/* ================================================== */
+
+.note-workspace .summary-action-button {
+  min-height: 36px;
+
   display: flex;
   align-items: center;
-}
+  justify-content: center;
 
-.note-workspace .summary-header button {
-  min-height: 29px;
-  padding: 5px 9px;
+  gap: 8px;
 
-  border: 1px solid #334765;
-  border-radius: 4px;
+  padding: 0 13px;
+
+  border: 1px solid #625df0;
+  border-radius: 6px;
 
   background: transparent;
-  color: #c7cedb;
 
-  font: inherit;
+  color: #dadcff;
+
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+
+.note-workspace
+.summary-action-button:hover:not(:disabled) {
+  background: #625df0;
+
+  color: #ffffff;
+}
+
+
+.note-workspace .summary-action-button:disabled {
+  opacity: 0.5;
+
+  cursor: default;
+}
+
+
+/* ================================================== */
+/* AI Summary                                         */
+/* ================================================== */
+
+.note-workspace .ai-summary-content {
+  height: 180px;
+  min-height: 180px;
+
+  padding: 15px 17px;
+
+  box-sizing: border-box;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  border: 1px solid #314867;
+  border-radius: 6px;
+
+  background: #121c2d;
+
+  color: #e7ebf3;
+
   font-size: 13px;
+  line-height: 1.55;
+}
+
+
+.note-workspace .ai-summary-content p {
+  margin: 0;
+}
+
+
+.note-workspace .summary-placeholder {
+  color: #768198;
+}
+
+
+/* ================================================== */
+/* User Summary                                       */
+/* ================================================== */
+
+.note-workspace .user-summary-input {
+  width: 100%;
+
+  height: 180px;
+  min-height: 180px;
+
+  padding: 14px 16px;
+
+  box-sizing: border-box;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  resize: none;
+
+  border: 1px solid #314867;
+  border-radius: 6px;
+
+  outline: none;
+
+  background: #121c2d;
+
+  color: #eef1f7;
+
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+
+.note-workspace .user-summary-input:focus {
+  border-color: #625df0;
+
+  box-shadow:
+    0 0 0 2px rgba(98, 93, 240, 0.1);
+}
+
+
+/* ================================================== */
+/* User Summary Score                                 */
+/* ================================================== */
+
+.note-workspace .summary-user-actions {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+}
+
+
+.note-workspace .summary-score {
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  padding: 7px 10px;
+
+  border: 1px solid #314867;
+  border-radius: 6px;
+
+  background: #19243a;
+}
+
+
+.note-workspace .summary-score span {
+  color: #8e99ae;
+
+  font-size: 10px;
+}
+
+
+.note-workspace .summary-score strong {
+  color: #a7a3ff;
+
+  font-size: 12px;
+}
+
+
+/* ================================================== */
+/* AI Review                                          */
+/* ================================================== */
+
+.note-workspace .summary-review {
+  display: grid;
+
+  gap: 10px;
+
+  margin-top: 12px;
+}
+
+
+.note-workspace .summary-feedback,
+.note-workspace .improved-summary {
+  padding: 12px 14px;
+
+  border: 1px solid #2c415e;
+  border-radius: 6px;
+
+  background: #162135;
+}
+
+
+.note-workspace .summary-review-label {
+  color: #918cff;
+
+  font-size: 10px;
+  font-weight: 600;
+
+  text-transform: uppercase;
+  letter-spacing: 0.45px;
+}
+
+
+.note-workspace .summary-feedback p,
+.note-workspace .improved-summary p {
+  margin: 7px 0 0;
+
+  color: #dce1eb;
+
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+/* ================================================== */
+/* Suggested Summary                                  */
+/* ================================================== */
+
+.note-workspace .improved-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 12px;
+}
+
+
+.note-workspace .use-improved-summary-button {
+  display: flex;
+  align-items: center;
+
+  gap: 5px;
+
+  padding: 5px 8px;
+
+  border: none;
+  border-radius: 5px;
+
+  background: transparent;
+
+  color: #aaa6ff;
+
+  font-family: inherit;
+  font-size: 10px;
 
   cursor: pointer;
 }
 
-/* Treat AI Summary as the currently selected tab for now. */
-.note-workspace .summary-header > div button:first-child {
-  border-color: #6864ef;
-  background: #6864ef;
+
+.note-workspace .use-improved-summary-button:hover {
+  background: #625df0;
+
   color: #ffffff;
 }
 
-.note-workspace .summary-header > div button + button {
-  margin-left: -1px;
-}
 
-/* Regenerate is visually quieter than the tabs. */
-.note-workspace .summary-header > button {
-  margin-right: 8px;
-  border-color: transparent;
-  background: transparent;
-  color: #c9cfda;
-}
-
-.note-workspace .summary-header > button:hover:not(:disabled) {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.045);
-}
-
-.note-workspace .summary-content {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.note-workspace .summary-content textarea {
-  width: 100%;
-  min-height: 95px;
-  padding: 10px 12px;
-
-  resize: vertical;
-  outline: none;
-
-  border: 1px solid #314867;
-  border-radius: 5px;
-
-  background: #111a2b;
-  color: #e9edf5;
-
-  font: inherit;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.note-workspace .summary-content textarea:focus {
-  border-color: #6864ef;
-  box-shadow: 0 0 0 2px rgba(104, 100, 239, 0.08);
-}
-
-.note-workspace .summary-content textarea::placeholder {
-  color: #7e899d;
-}
-
-.note-workspace .summary-content textarea[readonly] {
-  color: #d2d8e3;
-}
+/* ================================================== */
+/* Errors                                             */
+/* ================================================== */
 
 .note-workspace .summary-error {
-  margin: 4px 8px 8px;
-  color: #ff8e94;
-  font-size: 12px;
+  margin: 0 0 10px;
+
+  color: #ef7d7d;
+
+  font-size: 11px;
+}
+
+/* ================================================== */
+/* Summary Scrollbars                                 */
+/* ================================================== */
+
+.note-workspace .ai-summary-content::-webkit-scrollbar,
+.note-workspace .user-summary-input::-webkit-scrollbar {
+  width: 6px;
+}
+
+
+.note-workspace .ai-summary-content::-webkit-scrollbar-track,
+.note-workspace .user-summary-input::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+
+.note-workspace .ai-summary-content::-webkit-scrollbar-thumb,
+.note-workspace .user-summary-input::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+
+  background: #3b4962;
+}
+
+
+.note-workspace .ai-summary-content::-webkit-scrollbar-thumb:hover,
+.note-workspace .user-summary-input::-webkit-scrollbar-thumb:hover {
+  background: #53617b;
 }
 
 /* ---------------------------------------------------------
@@ -964,3 +1261,4 @@
 .notes-context-menu-item {
   user-select: none;
 }
+
