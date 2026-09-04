@@ -407,10 +407,237 @@ async function saveGraph() {
   }
 }
 
+function createLinkedTextNode(label, linkColor) {
+  if (!cyRef.current || !label?.trim()) {
+    return null;
+  }
+
+  const cy = cyRef.current;
+
+  /*
+    If this concept already exists, link to the
+    existing node instead of making a duplicate.
+  */
+  const existingNodes = cy.nodes().filter((node) => {
+    return (
+      node.data("label")?.trim().toLowerCase() ===
+      label.trim().toLowerCase()
+    );
+  });
+
+  if (existingNodes.length > 0) {
+    const existingNode = existingNodes[0];
+
+    existingNode.data(
+      "linkColor",
+      linkColor
+    );
+
+    return existingNode.id();
+  }
+
+
+  const newNodeId =
+    typeof crypto.randomUUID === "function"
+      ? `manual-${crypto.randomUUID()}`
+      : `manual-${Date.now()}`;
+
+
+  const extent = cy.extent();
+
+  const centreX =
+    (extent.x1 + extent.x2) / 2;
+
+  const centreY =
+    (extent.y1 + extent.y2) / 2;
+
+
+  cy.add({
+    group: "nodes",
+
+    data: {
+      id: newNodeId,
+      label: label,
+      linkColor: linkColor,
+    },
+
+    position: {
+      x: centreX + 60,
+      y: centreY + 60,
+    },
+  });
+
+
+  return newNodeId;
+}
+
+function focusNode(nodeId) {
+  if (!cyRef.current) {
+    return false;
+  }
+
+  const cy = cyRef.current;
+
+  const node =
+    cy.getElementById(nodeId);
+
+  if (!node || node.empty()) {
+    return false;
+  }
+
+
+  cy.elements().unselect();
+
+  node.select();
+
+  setSelectedNode({
+    ...node.data(),
+  });
+
+
+  cy.animate(
+    {
+      center: {
+        eles: node,
+      },
+
+      zoom: Math.max(
+        cy.zoom(),
+        1.35
+      ),
+    },
+
+    {
+      duration: 350,
+    }
+  );
+
+
+  return true;
+}
+
+function setLinkedNodeHover(
+  nodeId,
+  color,
+  isHovered
+) {
+  if (!cyRef.current) {
+    return;
+  }
+
+  const node =
+    cyRef.current.getElementById(
+      nodeId
+    );
+
+  if (!node || node.empty()) {
+    return;
+  }
+
+
+  if (isHovered) {
+    node.data(
+      "linkColor",
+      color
+    );
+
+    node.style({
+      "underlay-color": color,
+      "underlay-opacity": 0.38,
+      "underlay-padding": 20,
+    });
+  } else {
+    /*
+      Only turn off our halo.
+
+      Don't call removeStyle() here because that could
+      remove the user's custom node colour/shape too.
+    */
+    node.style(
+      "underlay-opacity",
+      0
+    );
+  }
+}
+
+function setLinkedNodeColor(
+  nodeId,
+  color
+) {
+  if (!cyRef.current) {
+    return;
+  }
+
+  const node =
+    cyRef.current.getElementById(
+      nodeId
+    );
+
+  if (!node || node.empty()) {
+    return;
+  }
+
+
+  node.data(
+    "linkColor",
+    color
+  );
+
+  /*
+    Also update an existing hover halo immediately.
+  */
+  node.style(
+    "underlay-color",
+    color
+  );
+}
+
 useImperativeHandle(ref, () => ({
+
   getGraphData() {
     return getEditedGraphData();
   },
+
+
+  createLinkedTextNode(
+    label,
+    linkColor
+  ) {
+    return createLinkedTextNode(
+      label,
+      linkColor
+    );
+  },
+
+
+  focusNode(nodeId) {
+    return focusNode(nodeId);
+  },
+
+
+  setLinkedNodeHover(
+    nodeId,
+    color,
+    isHovered
+  ) {
+    setLinkedNodeHover(
+      nodeId,
+      color,
+      isHovered
+    );
+  },
+
+
+  setLinkedNodeColor(
+    nodeId,
+    color
+  ) {
+    setLinkedNodeColor(
+      nodeId,
+      color
+    );
+  },
+
 }));
 
   return (

@@ -1,5 +1,6 @@
 import { 
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useRef,
   useState, 
@@ -16,6 +17,10 @@ import {
   Link,
   Info,
   Network,
+  Palette,
+  Highlighter,
+  Unlink,
+  Eraser,
 } from "lucide-react";
 
 import "./NoteWorkspace.css";
@@ -102,6 +107,36 @@ const editorRef = useRef(null);
 // graph panel refrence for saving 
 const graphPanelRef = useRef(null);
 
+// Stores the current text selection while using colour pickers
+const savedSelectionRef = useRef(null);
+
+// Hidden colour picker references
+const textColorInputRef = useRef(null);
+const highlightColorInputRef = useRef(null);
+const linkHighlightInputRef = useRef(null);
+
+// Current selected toolbar colours
+const [textColor, setTextColor] = useState("#eef1f7");
+const [highlightColor, setHighlightColor] = useState("#625df0");
+
+// Current formatting colours at the editor cursor
+const [activeTextColor, setActiveTextColor] = useState("#eef1f7");
+const [activeHighlightColor, setActiveHighlightColor] = useState(null);
+
+const selectedRangeRef = useRef(null);
+const graphLinkColourIndexRef = useRef(0);
+
+const GRAPH_LINK_COLORS = [
+  "#f2c94c",
+  "#56ccf2",
+  "#9b7df5",
+  "#4fd1a1",
+  "#f58b8b",
+  "#f2994a",
+  "#bb6bd9",
+  "#60a5fa",
+];
+
 // << RAW NOTES SEARCH >> //
 
 // << AI SEMANTIC SEARCH >> //
@@ -125,6 +160,10 @@ const [semanticSearchError, setSemanticSearchError] =
   // Stores the current raw note text //
   // This rawNotes value will be shared with HANS AI //
   const [rawNotes, setRawNotes] = useState(note.content);
+
+  // Stores the current raw note text in HTML format //
+  const [rawNotesHtml, setRawNotesHtml] =
+  useState("");
 
   // Selected text for manually adding to graph //
   const [selectedText, setSelectedText] = useState("");
@@ -236,6 +275,9 @@ const [semanticSearchError, setSemanticSearchError] =
     numberedList:
       document.queryCommandState("insertOrderedList"),
     });
+
+    // Update text/highlight colour indicators
+    updateActiveColors();
   }
 
   function toggleHeading(heading) {
@@ -257,7 +299,15 @@ const [semanticSearchError, setSemanticSearchError] =
       return;
     }
 
-    setRawNotes(editorRef.current.innerText);
+    // Plain text for Hans / AI
+    setRawNotes(
+      editorRef.current.innerText
+    );
+
+    // Rich content for saving formatting + graph links
+    setRawNotesHtml(
+      editorRef.current.innerHTML
+    );
   }
 
   function addLink() {
@@ -273,6 +323,934 @@ const [semanticSearchError, setSemanticSearchError] =
 
     updateRawNotes();
   }
+
+  function hexToRgba(
+    hex,
+    alpha = 1
+  ) {
+    let cleanHex =
+      hex.replace("#", "");
+
+
+    if (cleanHex.length === 3) {
+      cleanHex =
+        cleanHex
+          .split("")
+          .map(
+            (character) =>
+              character + character
+          )
+          .join("");
+    }
+
+
+    const red =
+      parseInt(
+        cleanHex.substring(0, 2),
+        16
+      );
+
+    const green =
+      parseInt(
+        cleanHex.substring(2, 4),
+        16
+      );
+
+    const blue =
+      parseInt(
+        cleanHex.substring(4, 6),
+        16
+      );
+
+
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+  }
+
+  function cssColorToHex(color, fallback = "#eef1f7") {
+    if (!color) {
+      return fallback;
+    }
+
+    if (color.startsWith("#")) {
+      return color;
+    }
+
+    const rgbMatch = color.match(
+      /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/
+    );
+
+    if (!rgbMatch) {
+      return fallback;
+    }
+
+    // Transparent colour
+    if (
+      rgbMatch[4] !== undefined &&
+      Number(rgbMatch[4]) === 0
+    ) {
+      return null;
+    }
+
+    const red = Number(rgbMatch[1]);
+    const green = Number(rgbMatch[2]);
+    const blue = Number(rgbMatch[3]);
+
+    return (
+      "#" +
+      [red, green, blue]
+        .map((value) =>
+          value
+            .toString(16)
+            .padStart(2, "0")
+        )
+        .join("")
+    );
+  }
+
+  function updateActiveColors() {
+    const selection =
+      window.getSelection();
+
+    if (
+      !selection ||
+      selection.rangeCount === 0 ||
+      !editorRef.current
+    ) {
+      return;
+    }
+
+
+    let currentNode =
+      selection.anchorNode;
+
+
+    if (!currentNode) {
+      return;
+    }
+
+
+    // If the cursor is inside a text node,
+    // use its parent HTML element.
+    let currentElement =
+      currentNode.nodeType === Node.TEXT_NODE
+        ? currentNode.parentElement
+        : currentNode;
+
+
+    if (
+      !currentElement ||
+      !editorRef.current.contains(
+        currentElement
+      )
+    ) {
+      return;
+    }
+
+
+    // =====================================================
+    // TEXT COLOUR
+    // =====================================================
+
+    const computedStyle =
+      window.getComputedStyle(
+        currentElement
+      );
+
+
+    const currentTextColor =
+      cssColorToHex(
+        computedStyle.color,
+        "#eef1f7"
+      );
+
+
+    if (currentTextColor) {
+      setActiveTextColor(
+        currentTextColor
+      );
+
+      setTextColor(
+        currentTextColor
+      );
+    }
+
+
+    // =====================================================
+    // HIGHLIGHT COLOUR
+    // =====================================================
+
+    /*
+      execCommand("hiliteColor") normally creates
+      a span with an inline background colour.
+
+      Walk upward from the cursor until we either find
+      one or reach the editor itself.
+    */
+
+    const graphLinkedText =
+      currentElement?.closest?.(
+        ".graph-linked-text"
+      );
+
+
+    if (
+      graphLinkedText &&
+      editorRef.current.contains(
+        graphLinkedText
+      )
+    ) {
+
+      const graphLinkColor =
+        graphLinkedText.dataset
+          .graphLinkColor;
+
+
+      if (graphLinkColor) {
+
+        setActiveHighlightColor(
+          graphLinkColor
+        );
+
+        setHighlightColor(
+          graphLinkColor
+        );
+
+        return;
+
+      }
+
+    }
+
+    let highlightElement =
+      currentElement;
+
+    let foundHighlight = null;
+
+
+    while (
+      highlightElement &&
+      highlightElement !==
+        editorRef.current
+    ) {
+
+      const inlineBackground =
+        highlightElement.style
+          ?.backgroundColor;
+
+
+      if (
+        inlineBackground &&
+        inlineBackground !==
+          "transparent"
+      ) {
+
+        foundHighlight =
+          cssColorToHex(
+            inlineBackground,
+            null
+          );
+
+        break;
+      }
+
+
+      highlightElement =
+        highlightElement.parentElement;
+    }
+
+
+    setActiveHighlightColor(
+      foundHighlight
+    );
+
+    setHighlightColor(
+      foundHighlight
+    );
+  }
+
+  function saveEditorSelection() {
+    const selection = window.getSelection();
+
+    if (
+      !selection ||
+      selection.rangeCount === 0 ||
+      !editorRef.current
+    ) {
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+
+    // Only save selections that actually belong to Raw Notes
+    if (
+      editorRef.current.contains(
+        range.commonAncestorContainer
+      )
+    ) {
+      savedSelectionRef.current =
+        range.cloneRange();
+    }
+  }
+
+
+  function restoreEditorSelection() {
+    if (!savedSelectionRef.current) {
+      return false;
+    }
+
+    const selection = window.getSelection();
+
+    selection.removeAllRanges();
+    selection.addRange(
+      savedSelectionRef.current
+    );
+
+    return true;
+  }
+
+
+  function applyEditorColor(command, color) {
+    editorRef.current?.focus();
+
+    restoreEditorSelection();
+
+    /*
+      foreColor  = text colour
+      hiliteColor = background/highlight colour
+    */
+    const applied = document.execCommand(
+      command,
+      false,
+      color
+    );
+
+    /*
+      Fallback for highlight colour if hiliteColor
+      isn't accepted by the browser.
+    */
+    if (
+      command === "hiliteColor" &&
+      !applied
+    ) {
+      document.execCommand(
+        "backColor",
+        false,
+        color
+      );
+    }
+
+    updateRawNotes();
+
+    updateFormattingState();
+
+    saveEditorSelection();
+  }
+
+  function applyHighlightColor(color) {
+
+    editorRef.current?.focus();
+
+    restoreEditorSelection();
+
+
+    // =====================================================
+    // CHECK FOR GRAPH-LINKED TEXT
+    // =====================================================
+
+    const linkedSpans =
+      getGraphLinksInSelection();
+
+
+    if (linkedSpans.length > 0) {
+
+      /*
+        IMPORTANT:
+
+        Do NOT use execCommand here.
+
+        That would create nested/split formatting spans
+        inside graph-linked text.
+      */
+
+
+      const processedNodeIds =
+        new Set();
+
+
+      linkedSpans.forEach((span) => {
+
+        const nodeId =
+          span.dataset.graphNodeId;
+
+
+        if (!nodeId) {
+          return;
+        }
+
+
+        /*
+          If multiple Raw Notes references point to
+          the same graph node, only process that node
+          once.
+        */
+
+        if (
+          processedNodeIds.has(
+            nodeId
+          )
+        ) {
+          return;
+        }
+
+
+        processedNodeIds.add(
+          nodeId
+        );
+
+
+        /*
+          Use the SAME function as the right-click
+          Graph Link colour picker.
+
+          This guarantees both interfaces behave
+          identically.
+        */
+
+        handleGraphLinkColorChange(
+          nodeId,
+          span.dataset.graphLinkId,
+          color
+        );
+
+      });
+
+
+      setHighlightColor(
+        color
+      );
+
+      setActiveHighlightColor(
+        color
+      );
+
+
+      /*
+        Keep the graph link structurally intact.
+      */
+
+      saveEditorSelection();
+
+
+      return;
+    }
+
+
+    // =====================================================
+    // NORMAL TEXT HIGHLIGHT
+    // =====================================================
+
+    const applied =
+      document.execCommand(
+        "hiliteColor",
+        false,
+        color
+      );
+
+
+    if (!applied) {
+
+      document.execCommand(
+        "backColor",
+        false,
+        color
+      );
+
+    }
+
+
+    setHighlightColor(
+      color
+    );
+
+    setActiveHighlightColor(
+      color
+    );
+
+
+    updateRawNotes();
+
+    updateFormattingState();
+
+    saveEditorSelection();
+  }
+
+  function removeManualHighlight() {
+
+    editorRef.current?.focus();
+
+    restoreEditorSelection();
+
+
+    const selection =
+      window.getSelection();
+
+
+    if (
+      !selection ||
+      selection.rangeCount === 0
+    ) {
+      return;
+    }
+
+
+    const range =
+      selection.getRangeAt(0);
+
+
+    /*
+      Nothing selected.
+
+      We don't want the eraser to change the
+      formatting mode for future typing.
+    */
+    if (range.collapsed) {
+      return;
+    }
+
+
+    // =====================================================
+    // PROTECT GRAPH-LINKED TEXT
+    // =====================================================
+
+    const linkedSpans =
+      getGraphLinksInSelection();
+
+
+    if (linkedSpans.length > 0) {
+
+      console.log(
+        "Graph-linked highlights cannot be removed with the toolbar."
+      );
+
+      /*
+        Graph-linked highlighting is structural.
+
+        To remove it, the user must:
+        Right click → Remove graph link.
+      */
+
+      return;
+    }
+
+
+    // =====================================================
+    // REMOVE NORMAL HIGHLIGHT
+    // =====================================================
+
+    /*
+      Different browsers may use either command,
+      so try hiliteColor first and backColor second.
+    */
+
+    const removed =
+      document.execCommand(
+        "hiliteColor",
+        false,
+        "transparent"
+      );
+
+
+    if (!removed) {
+
+      document.execCommand(
+        "backColor",
+        false,
+        "transparent"
+      );
+
+    }
+
+
+    setActiveHighlightColor(null);
+
+
+    updateRawNotes();
+
+    updateFormattingState();
+
+    saveEditorSelection();
+  }
+
+  function getNextGraphLinkColor() {
+    const color =
+      GRAPH_LINK_COLORS[
+        graphLinkColourIndexRef.current %
+        GRAPH_LINK_COLORS.length
+      ];
+
+    graphLinkColourIndexRef.current += 1;
+
+    return color;
+  }
+
+  function getGraphLinksInSelection() {
+    if (
+      !editorRef.current ||
+      !savedSelectionRef.current
+    ) {
+      return [];
+    }
+
+
+    const range =
+      savedSelectionRef.current;
+
+
+    const linkedSpans =
+      Array.from(
+        editorRef.current.querySelectorAll(
+          ".graph-linked-text"
+        )
+      );
+
+
+    const matchedLinks =
+      linkedSpans.filter((span) => {
+
+        try {
+
+          /*
+            range.intersectsNode() catches:
+            - full selection of linked text
+            - partial selection of linked text
+            - selection crossing linked text
+          */
+
+          return range.intersectsNode(span);
+
+        } catch {
+
+          return false;
+
+        }
+
+      });
+
+
+    /*
+      A collapsed caret doesn't always behave quite
+      how we want with intersectsNode(), so explicitly
+      check what element the caret currently sits inside.
+    */
+
+    if (
+      range.collapsed &&
+      range.startContainer
+    ) {
+
+      const startElement =
+        range.startContainer.nodeType === Node.TEXT_NODE
+          ? range.startContainer.parentElement
+          : range.startContainer;
+
+
+      const linkedParent =
+        startElement?.closest?.(
+          ".graph-linked-text"
+        );
+
+
+      if (
+        linkedParent &&
+        editorRef.current.contains(
+          linkedParent
+        ) &&
+        !matchedLinks.includes(
+          linkedParent
+        )
+      ) {
+
+        matchedLinks.push(
+          linkedParent
+        );
+
+      }
+
+    }
+
+
+    return matchedLinks;
+  }
+
+  function createGraphLinkedText(
+    range,
+    nodeId,
+    color
+  ) {
+    if (!range) {
+      return;
+    }
+
+
+    const linkId =
+      typeof crypto.randomUUID === "function"
+        ? `link-${crypto.randomUUID()}`
+        : `link-${Date.now()}`;
+
+
+    const span =
+      document.createElement("span");
+
+
+    span.className =
+      "graph-linked-text";
+
+
+    span.dataset.graphNodeId =
+      nodeId;
+
+    span.dataset.graphLinkId =
+      linkId;
+
+    span.dataset.graphLinkColor =
+      color;
+
+
+    span.style.setProperty(
+      "--graph-link-color",
+      color
+    );
+
+
+    /*
+      Preserve formatting that already exists
+      inside the selection.
+    */
+    const contents =
+      range.extractContents();
+
+    span.appendChild(contents);
+
+    range.insertNode(span);
+
+
+    /*
+      Collapse selection after newly linked text.
+    */
+    const selection =
+      window.getSelection();
+
+    selection.removeAllRanges();
+
+
+    updateRawNotes();
+
+
+    console.log(
+      "Created Raw Notes graph link:",
+      {
+        nodeId,
+        linkId,
+        color,
+      }
+    );
+  }
+
+  function handleAddSelectedTextToGraph() {
+    const textToAdd =
+      contextMenu?.text;
+
+    const range =
+      selectedRangeRef.current;
+
+
+    if (
+      !textToAdd ||
+      !range
+    ) {
+      console.warn(
+        "No selected text/range available."
+      );
+
+      return;
+    }
+
+
+    const linkColor =
+      getNextGraphLinkColor();
+
+
+    /*
+      Ask GraphPanel to create the node.
+
+      IMPORTANT:
+      createLinkedTextNode must RETURN its node ID.
+    */
+    const nodeId =
+      graphPanelRef.current
+        ?.createLinkedTextNode(
+          textToAdd,
+          linkColor
+        );
+
+
+    console.log(
+      "Created graph node:",
+      nodeId
+    );
+
+
+    if (!nodeId) {
+      console.warn(
+        "GraphPanel did not return a node ID."
+      );
+
+      return;
+    }
+
+
+    /*
+      Wrap the selected Raw Notes text and
+      embed that node ID into it.
+    */
+    createGraphLinkedText(
+      range,
+      nodeId,
+      linkColor
+    );
+
+
+    selectedRangeRef.current =
+      null;
+
+
+    setContextMenu(null);
+  }
+
+  function handleGraphLinkColorChange(
+    nodeId,
+    linkId,
+    color
+  ) {
+    if (!editorRef.current) {
+      return;
+    }
+
+
+    console.log(
+      "Changing graph link colour:",
+      {
+        nodeId,
+        linkId,
+        color,
+      }
+    );
+
+
+    // =====================================================
+    // UPDATE RAW NOTES LINK
+    // =====================================================
+
+    const linkedSpans =
+      editorRef.current.querySelectorAll(
+        ".graph-linked-text"
+      );
+
+
+    linkedSpans.forEach((span) => {
+
+      /*
+        Update everything connected to this graph node.
+
+        This means if the same node is referenced more
+        than once in Raw Notes, they all keep the same
+        intrinsic link colour.
+      */
+
+      if (
+        span.dataset.graphNodeId !==
+        String(nodeId)
+      ) {
+        return;
+      }
+
+
+      span.dataset.graphLinkColor =
+        color;
+
+
+      span.style.setProperty(
+        "--graph-link-color",
+        color
+      );
+
+
+      /*
+        Also set a concrete fallback background.
+
+        This makes the colour visibly update even if
+        color-mix() behaves unexpectedly.
+      */
+      span.style.backgroundColor =
+        hexToRgba(
+          color,
+          0.38
+        );
+    });
+
+
+    // =====================================================
+    // UPDATE GRAPH NODE LINK COLOUR
+    // =====================================================
+
+    graphPanelRef.current
+      ?.setLinkedNodeColor(
+        nodeId,
+        color
+      );
+
+
+    // =====================================================
+    // UPDATE OPEN CONTEXT MENU
+    // =====================================================
+
+    setContextMenu((current) => {
+
+      if (!current) {
+        return current;
+      }
+
+
+      return {
+        ...current,
+        color: color,
+      };
+
+    });
+
+
+    // Preserve rich-note data
+    updateRawNotes();
+  }
+
+  useEffect(() => {
+    if (!editorRef.current) {
+      return;
+    }
+
+    /*
+      Initialise editor content only when
+      switching to a different note.
+
+      Later, if backend stores rich HTML,
+      prefer note.notes_section_html here.
+    */
+    editorRef.current.innerHTML =
+      note.notes_section_html ||
+      note.content ||
+      "";
+
+  }, [note.id]);
 
   useImperativeHandle(ref, () => ({
   async saveEverything() {
@@ -394,7 +1372,8 @@ const [semanticSearchError, setSemanticSearchError] =
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => toggleHeading("h1")}
                 aria-pressed={activeFormats.heading === "h1"}
-                title="Heading 1"
+                data-tooltip="Heading 1"
+                aria-label="Heading 1"
               >
                 H1
               </button>
@@ -409,7 +1388,8 @@ const [semanticSearchError, setSemanticSearchError] =
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => toggleHeading("h2")}
                 aria-pressed={activeFormats.heading === "h2"}
-                title="Heading 2"
+                data-tooltip="Heading 2"
+                aria-label="Heading 2"
               >
                 H2
               </button>
@@ -424,7 +1404,8 @@ const [semanticSearchError, setSemanticSearchError] =
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => toggleHeading("h3")}
                 aria-pressed={activeFormats.heading === "h3"}
-                title="Heading 3"
+                data-tooltip="Heading 3"
+                aria-label="Heading 3"
               >
                 H3
               </button>
@@ -444,7 +1425,8 @@ const [semanticSearchError, setSemanticSearchError] =
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runFormat("bold")}
                 aria-pressed={activeFormats.bold}
-                title="Bold"
+                data-tooltip="Bold"
+                aria-label="Bold"
               >
                 <Bold size={18} strokeWidth={2.2} />
               </button>
@@ -459,7 +1441,8 @@ const [semanticSearchError, setSemanticSearchError] =
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runFormat("italic")}
                 aria-pressed={activeFormats.italic}
-                title="Italic"
+                data-tooltip="Italic"
+                aria-label="Italic"
               >
                 <Italic size={18} strokeWidth={2} />
               </button>
@@ -474,11 +1457,144 @@ const [semanticSearchError, setSemanticSearchError] =
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runFormat("underline")}
                 aria-pressed={activeFormats.underline}
-                title="Underline"
+                data-tooltip="Underline"
+                aria-label="Underline"
               >
                 <Underline size={18} strokeWidth={2} />
               </button>
               
+              {/* Text Colour */}
+
+              <div className="toolbar-color-wrapper">
+
+                <button
+                  type="button"
+                  className="toolbar-icon-button toolbar-color-button"
+
+                  onMouseDown={(event) => {
+                    saveEditorSelection();
+                    event.preventDefault();
+                  }}
+
+                  onClick={() =>
+                    textColorInputRef.current?.click()
+                  }
+
+                  data-tooltip="Text colour"
+                  aria-label="Text colour"
+                >
+                  <Palette
+                    size={18}
+                    strokeWidth={1.9}
+                  />
+
+                  <span
+                    className="toolbar-color-indicator"
+                    style={{
+                      backgroundColor: activeTextColor,
+                    }}
+                  />
+                </button>
+
+
+                <input
+                  ref={textColorInputRef}
+                  className="toolbar-hidden-color-input"
+                  type="color"
+                  value={textColor}
+
+                  onChange={(event) => {
+                    const color = event.target.value;
+
+                    setTextColor(color);
+
+                    applyEditorColor(
+                      "foreColor",
+                      color
+                    );
+                  }}
+                />
+
+              </div>
+
+
+              {/* Highlight Colour */}
+
+              <div className="toolbar-color-wrapper">
+
+                <button
+                  type="button"
+                  className="toolbar-icon-button toolbar-color-button"
+
+                  onMouseDown={(event) => {
+                    saveEditorSelection();
+                    event.preventDefault();
+                  }}
+
+                  onClick={() =>
+                    highlightColorInputRef.current?.click()
+                  }
+
+                  data-tooltip="Highlight colour"
+                  aria-label="Highlight colour"
+                >
+                  <Highlighter
+                    size={18}
+                    strokeWidth={1.9}
+                  />
+
+                  <span
+                    className="toolbar-color-indicator"
+                    style={{
+                      backgroundColor:
+                        activeHighlightColor,
+                    }}
+                  />
+                </button>
+
+
+                <input
+                  ref={highlightColorInputRef}
+                  className="toolbar-hidden-color-input"
+                  type="color"
+                  value={highlightColor}
+
+                  onChange={(event) => {
+                    const color = event.target.value;
+
+                    applyHighlightColor(
+                      color
+                    );
+
+                  }}
+                />
+
+              </div>
+
+              {/* Remove Highlight */}
+
+              <button
+                type="button"
+
+                className="toolbar-icon-button"
+
+                onMouseDown={(event) => {
+                  saveEditorSelection();
+
+                  event.preventDefault();
+                }}
+
+                onClick={removeManualHighlight}
+
+                data-tooltip="Remove highlight"
+
+                aria-label="Remove highlight"
+              >
+                <Eraser
+                  size={18}
+                  strokeWidth={1.9}
+                />
+              </button>
 
               <span className="toolbar-divider" />
               
@@ -495,7 +1611,8 @@ const [semanticSearchError, setSemanticSearchError] =
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runFormat("insertUnorderedList")}
                 aria-pressed={activeFormats.bulletList}
-                title="Bullet list"
+                data-tooltip="Bullet list"
+                aria-label="Bullet list"
               >
                 <List size={19} strokeWidth={1.9} />
               </button>
@@ -510,7 +1627,8 @@ const [semanticSearchError, setSemanticSearchError] =
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runFormat("insertOrderedList")}
                 aria-pressed={activeFormats.numberedList}
-                title="Numbered list"
+                data-tooltip="Numbered list"
+                aria-label="Numbered list"
               >
                 <ListOrdered size={19} strokeWidth={1.9} />
               </button>
@@ -525,7 +1643,8 @@ const [semanticSearchError, setSemanticSearchError] =
                 type="button"
                 className="toolbar-icon-button"
                 onClick={addLink}
-                title="Insert link"
+                data-tooltip="Insert link"
+                aria-label="Insert link"
               >
                 <Link size={19} strokeWidth={1.9} />
               </button>
@@ -538,32 +1657,241 @@ const [semanticSearchError, setSemanticSearchError] =
               contentEditable
               suppressContentEditableWarning
 
-              onContextMenu={(e) => {
-                    const selection = window.getSelection();
+              onContextMenu={(event) => {
 
-                    const text = selection?.toString().trim() || "";
+                // =====================================================
+                // 1. CHECK IF USER RIGHT-CLICKED LINKED GRAPH TEXT
+                // =====================================================
 
-                    if (!text) {
-                      setContextMenu(null);
+                const targetElement =
+                  event.target instanceof Element
+                    ? event.target
+                    : event.target?.parentElement;
 
-                      // Allow normal browser context menu
-                      return;
-                    }
 
-                    // Only override normal right-click when selected text exists
-                    e.preventDefault();
+                const linkedText =
+                  targetElement?.closest(
+                    ".graph-linked-text"
+                  );
 
-                    setSelectedText(text);
 
-                    setContextMenu({
-                      x: e.clientX,
-                      y: e.clientY,
-                      text: text,
-                    });
+                if (
+                  linkedText &&
+                  editorRef.current?.contains(
+                    linkedText
+                  )
+                ) {
+                  event.preventDefault();
 
-                    console.log("Right-click selected text:", text);
-                  }}
+
+                  /*
+                    We do NOT need a text selection here.
+
+                    Everything needed is already stored directly
+                    on the graph-linked span.
+                  */
+
+                  selectedRangeRef.current = null;
+
+
+                  setContextMenu({
+                    type: "linked",
+
+                    x: event.clientX,
+                    y: event.clientY,
+
+                    text:
+                      linkedText.textContent || "",
+
+                    nodeId:
+                      linkedText.dataset.graphNodeId,
+
+                    linkId:
+                      linkedText.dataset.graphLinkId,
+
+                    color:
+                      linkedText.dataset.graphLinkColor ||
+                      "#f2c94c",
+                  });
+
+
+                  return;
+                }
+
+
+                // =====================================================
+                // 2. OTHERWISE CHECK ORDINARY SELECTED TEXT
+                // =====================================================
+
+                const selection =
+                  window.getSelection();
+
+
+                const text =
+                  selection
+                    ?.toString()
+                    .trim() || "";
+
+
+                if (
+                  !text ||
+                  !selection ||
+                  selection.rangeCount === 0
+                ) {
+                  /*
+                    Nothing special was clicked.
+
+                    Do NOT preventDefault here so the normal
+                    browser right-click menu still works.
+                  */
+
+                  setContextMenu(null);
+
+                  return;
+                }
+
+
+                // =====================================================
+                // 3. NEW TEXT → ADD TO GRAPH MENU
+                // =====================================================
+
+                event.preventDefault();
+
+
+                const range =
+                  selection.getRangeAt(0);
+
+
+                /*
+                  Make sure the selection actually belongs to
+                  the Raw Notes editor.
+                */
+
+                if (
+                  !editorRef.current?.contains(
+                    range.commonAncestorContainer
+                  )
+                ) {
+                  return;
+                }
+
+
+                selectedRangeRef.current =
+                  range.cloneRange();
+
+
+                setContextMenu({
+                  type: "new",
+
+                  x: event.clientX,
+                  y: event.clientY,
+
+                  text: text,
+                });
+
+              }}
               
+              onClick={(event) => {
+
+                const linkedText =
+                  event.target.closest?.(
+                    ".graph-linked-text"
+                  );
+
+
+                if (!linkedText) {
+                  return;
+                }
+
+
+                const nodeId =
+                  linkedText.dataset.graphNodeId;
+
+
+                console.log(
+                  "Clicked linked text:",
+                  nodeId
+                );
+
+
+                graphPanelRef.current
+                  ?.focusNode(
+                    nodeId
+                  );
+
+              }}
+
+              onMouseOver={(event) => {
+
+                const linkedText =
+                  event.target.closest?.(
+                    ".graph-linked-text"
+                  );
+
+
+                if (!linkedText) {
+                  return;
+                }
+
+
+                /*
+                  Prevent repeated events while moving
+                  between descendants of the same span.
+                */
+                if (
+                  event.relatedTarget &&
+                  linkedText.contains(
+                    event.relatedTarget
+                  )
+                ) {
+                  return;
+                }
+
+
+                graphPanelRef.current
+                  ?.setLinkedNodeHover(
+                    linkedText.dataset.graphNodeId,
+
+                    linkedText.dataset.graphLinkColor,
+
+                    true
+                  );
+
+              }}
+
+              onMouseOut={(event) => {
+
+                const linkedText =
+                  event.target.closest?.(
+                    ".graph-linked-text"
+                  );
+
+
+                if (!linkedText) {
+                  return;
+                }
+
+
+                if (
+                  event.relatedTarget &&
+                  linkedText.contains(
+                    event.relatedTarget
+                  )
+                ) {
+                  return;
+                }
+
+
+                graphPanelRef.current
+                  ?.setLinkedNodeHover(
+                    linkedText.dataset.graphNodeId,
+
+                    linkedText.dataset.graphLinkColor,
+
+                    false
+                  );
+
+              }}
 
               onInput={() => {
                 updateRawNotes();
@@ -583,75 +1911,179 @@ const [semanticSearchError, setSemanticSearchError] =
               onKeyUp={updateFormattingState}
               onFocus={updateFormattingState}
             >
-              {note.content}
-
 
 
               {contextMenu && (
-              <div
-                className="notes-context-menu"
-                contentEditable={false}
-                style={{
-                  left: contextMenu.x,
-                  top: contextMenu.y,
-                }}
-                role="menu"
-                onClick={(e) =>
-                  e.stopPropagation()
-                }
-              >
+                <div
+                  className="notes-context-menu"
 
-                <div 
-                  className="notes-context-menu-preview"
                   contentEditable={false}
-                >
-                  <span>Selected text</span>
 
-                  <strong>
-                    {contextMenu.text}
-                  </strong>
+                  style={{
+                    left: contextMenu.x,
+                    top: contextMenu.y,
+                  }}
+
+                  onClick={(event) =>
+                    event.stopPropagation()
+                  }
+                >
+
+                  <div className="notes-context-menu-preview">
+
+                    <span>
+                      {contextMenu.type === "linked"
+                        ? "Graph Link"
+                        : "Selected Text"}
+                    </span>
+
+                    <strong>
+                      {contextMenu.text}
+                    </strong>
+
+                  </div>
+
+
+                  <div className="notes-context-menu-divider" />
+
+
+                  {contextMenu.type === "new" ? (
+
+                    <button
+                      type="button"
+                      className="notes-context-menu-item"
+
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+
+                      onClick={(event) => {
+                        event.stopPropagation();
+
+                        handleAddSelectedTextToGraph();
+                      }}
+                    >
+                      <Network
+                        size={17}
+                        strokeWidth={1.8}
+                      />
+
+                      <span>
+                        Add to Graph
+                      </span>
+                    </button>
+
+                  ) : (
+
+                    <>
+                      {/* Linked-text options go here */}
+
+                      <div className="notes-context-color-wrapper">
+
+                        <button
+                          type="button"
+                          className="notes-context-menu-item"
+
+                          onMouseDown={(event) => {
+                            /*
+                              Keep the Raw Notes editor from trying
+                              to change its selection.
+                            */
+                            event.preventDefault();
+                            event.stopPropagation();
+                          }}
+
+                          onClick={(event) => {
+                            event.stopPropagation();
+
+                            linkHighlightInputRef.current?.click();
+                          }}
+                        >
+
+                          <span className="notes-context-highlight-icon">
+
+                            <Highlighter
+                              size={17}
+                              strokeWidth={1.8}
+                            />
+
+                            <span
+                              className="notes-context-color-indicator"
+                              style={{
+                                backgroundColor:
+                                  contextMenu.color ||
+                                  "#f2c94c",
+                              }}
+                            />
+
+                          </span>
+
+
+                          <span>
+                            Link highlight
+                          </span>
+
+                        </button>
+
+
+                        <input
+                          ref={linkHighlightInputRef}
+                          className="notes-context-hidden-color-input"
+
+                          type="color"
+
+                          value={
+                            contextMenu.color ||
+                            "#f2c94c"
+                          }
+
+                          onChange={(event) => {
+
+                            handleGraphLinkColorChange(
+                              contextMenu.nodeId,
+                              contextMenu.linkId,
+                              event.target.value
+                            );
+
+                          }}
+                        />
+
+                      </div>
+
+
+                      <button
+                        type="button"
+
+                        className="
+                          notes-context-menu-item
+                          notes-context-menu-danger
+                        "
+
+                        onClick={(event) => {
+                          event.stopPropagation();
+
+                          removeGraphTextLink(
+                            contextMenu.linkId
+                          );
+                        }}
+                      >
+                        <Unlink
+                          size={17}
+                          strokeWidth={1.8}
+                        />
+
+                        <span>
+                          Remove graph link
+                        </span>
+                      </button>
+
+                    </>
+
+                  )}
+
                 </div>
-
-                <div className="notes-context-menu-divider" />
-
-                <button
-                  type="button"
-                  className="notes-context-menu-item"
-                  role="menuitem"
-
-                  onMouseDown={(event) => {
-                    /*
-                      Stops the editable Raw Notes area from
-                      treating interaction with this button as
-                      an editor selection/cursor change.
-                    */
-                    event.preventDefault();
-                    event.stopPropagation();
-                  }}
-
-                  onClick={(e) => {
-                    e.stopPropagation();
-
-                     const textToAdd = contextMenu.text
-
-                    console.log("Add to Graph:", selectedText);
-
-                    setSelectedText(textToAdd);
-
-                    setAddNodeTrigger((current) => current + 1);
-
-                    setContextMenu(null);
-                  }}
-                >
-                  <Network
-                    size={17}
-                    strokeWidth={1.8}
-                  />
-
-                  <span>Add to Graph</span>
-                </button>
-              </div>
-            )}
+              )}
             </div>
 
           </div>
