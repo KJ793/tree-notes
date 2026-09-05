@@ -21,6 +21,13 @@ import {
   Highlighter,
   Unlink,
   Eraser,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  IndentIncrease,
+  IndentDecrease,
+  ChevronDown,
 } from "lucide-react";
 
 import "./NoteWorkspace.css";
@@ -123,6 +130,15 @@ const [highlightColor, setHighlightColor] = useState("#625df0");
 const [activeTextColor, setActiveTextColor] = useState("#eef1f7");
 const [activeHighlightColor, setActiveHighlightColor] = useState(null);
 
+// Controls alignment / indent popover
+const [paragraphMenuOpen, setParagraphMenuOpen] = useState(false);
+
+// Used for detecting clicks outside the popover
+const paragraphMenuRef = useRef(null);
+
+// Stores current paragraph alignment
+const [activeAlignment, setActiveAlignment] = useState("left");
+
 const selectedRangeRef = useRef(null);
 const graphLinkColourIndexRef = useRef(0);
 
@@ -185,6 +201,16 @@ const [semanticSearchError, setSemanticSearchError] =
   bulletList: false,
   numberedList: false,
   });
+
+  const alignmentIcons = {
+    left: AlignLeft,
+    center: AlignCenter,
+    right: AlignRight,
+    justify: AlignJustify,
+  };
+
+
+  const ActiveAlignmentIcon = alignmentIcons[activeAlignment] || AlignLeft;
 
   /* ---------------------------------------------------------
    Semantic Search
@@ -275,6 +301,9 @@ const [semanticSearchError, setSemanticSearchError] =
     numberedList:
       document.queryCommandState("insertOrderedList"),
     });
+
+    // Update alignment state
+    updateAlignmentState();
 
     // Update text/highlight colour indicators
     updateActiveColors();
@@ -881,6 +910,168 @@ const [semanticSearchError, setSemanticSearchError] =
     saveEditorSelection();
   }
 
+  function applyAlignment(alignment) {
+
+    editorRef.current?.focus();
+
+    restoreEditorSelection();
+
+
+    const commandMap = {
+      left: "justifyLeft",
+      center: "justifyCenter",
+      right: "justifyRight",
+      justify: "justifyFull",
+    };
+
+
+    const command =
+      commandMap[alignment];
+
+
+    if (!command) {
+      return;
+    }
+
+
+    document.execCommand(
+      command,
+      false,
+      null
+    );
+
+
+    /*
+      Update immediately rather than waiting
+      for another cursor event.
+    */
+
+    setActiveAlignment(
+      alignment
+    );
+
+
+    updateRawNotes();
+
+    saveEditorSelection();
+
+
+    /*
+      Re-read all toolbar formatting after
+      the browser has applied the command.
+    */
+
+    requestAnimationFrame(() => {
+      updateFormattingState();
+    });
+  }
+
+  function applyIndent(direction) {
+
+    editorRef.current?.focus();
+
+    restoreEditorSelection();
+
+
+    const command =
+      direction === "increase"
+        ? "indent"
+        : "outdent";
+
+
+    document.execCommand(
+      command,
+      false,
+      null
+    );
+
+
+    updateRawNotes();
+
+    updateFormattingState();
+
+    saveEditorSelection();
+  }
+
+  function updateAlignmentState() {
+    const selection =
+      window.getSelection();
+
+    if (
+      !selection ||
+      selection.rangeCount === 0 ||
+      !editorRef.current
+    ) {
+      return;
+    }
+
+
+    let currentNode =
+      selection.anchorNode;
+
+
+    if (!currentNode) {
+      return;
+    }
+
+
+    let currentElement =
+      currentNode.nodeType === Node.TEXT_NODE
+        ? currentNode.parentElement
+        : currentNode;
+
+
+    if (
+      !currentElement ||
+      !editorRef.current.contains(
+        currentElement
+      )
+    ) {
+      return;
+    }
+
+
+    /*
+      Find the paragraph/block that actually
+      owns the alignment.
+    */
+
+    const blockElement =
+      currentElement.closest(
+        "p, div, h1, h2, h3, h4, h5, h6, li"
+      ) || currentElement;
+
+
+    const alignment =
+      window
+        .getComputedStyle(blockElement)
+        .textAlign;
+
+
+    switch (alignment) {
+
+      case "center":
+        setActiveAlignment("center");
+        break;
+
+
+      case "right":
+        setActiveAlignment("right");
+        break;
+
+
+      case "justify":
+        setActiveAlignment("justify");
+        break;
+
+
+      default:
+        setActiveAlignment("left");
+        break;
+
+    }
+  }
+
   function getNextGraphLinkColor() {
     const color =
       GRAPH_LINK_COLORS[
@@ -1233,6 +1424,10 @@ const [semanticSearchError, setSemanticSearchError] =
     updateRawNotes();
   }
 
+  // =========================================================
+  // Load Raw Notes content
+  // =========================================================
+
   useEffect(() => {
     if (!editorRef.current) {
       return;
@@ -1251,6 +1446,62 @@ const [semanticSearchError, setSemanticSearchError] =
       "";
 
   }, [note.id]);
+
+  // =========================================================
+  // Paragraph formatting popover
+  // =========================================================
+
+  useEffect(() => {
+
+    function handleParagraphMenuOutside(event) {
+
+      if (
+        paragraphMenuRef.current &&
+        !paragraphMenuRef.current.contains(
+          event.target
+        )
+      ) {
+        setParagraphMenuOpen(false);
+      }
+
+    }
+
+
+    function handleParagraphMenuEscape(event) {
+
+      if (event.key === "Escape") {
+        setParagraphMenuOpen(false);
+      }
+
+    }
+
+
+    document.addEventListener(
+      "mousedown",
+      handleParagraphMenuOutside
+    );
+
+    document.addEventListener(
+      "keydown",
+      handleParagraphMenuEscape
+    );
+
+
+    return () => {
+
+      document.removeEventListener(
+        "mousedown",
+        handleParagraphMenuOutside
+      );
+
+      document.removeEventListener(
+        "keydown",
+        handleParagraphMenuEscape
+      );
+
+    };
+
+  }, []);
 
   useImperativeHandle(ref, () => ({
   async saveEverything() {
@@ -1598,6 +1849,271 @@ const [semanticSearchError, setSemanticSearchError] =
 
               <span className="toolbar-divider" />
               
+              {/* Paragraph Formatting */}
+
+              <div
+                className="toolbar-popover-wrapper"
+                ref={paragraphMenuRef}
+              >
+
+                <button
+                  type="button"
+
+                  className={`toolbar-icon-button ${
+                    paragraphMenuOpen
+                      ? "toolbar-button-active"
+                      : ""
+                  }`}
+
+                  onMouseDown={(event) => {
+
+                    /*
+                      Preserve the editor selection before
+                      interacting with the toolbar.
+                    */
+
+                    saveEditorSelection();
+
+                    event.preventDefault();
+
+                  }}
+
+                  onClick={() => {
+
+                    setParagraphMenuOpen(
+                      (current) => {
+
+                        const nextOpen =
+                          !current;
+
+
+                        /*
+                          When opening the popover,
+                          restore the editor selection and
+                          check the paragraph's current alignment.
+                        */
+
+                        if (nextOpen) {
+
+                          restoreEditorSelection();
+
+
+                          requestAnimationFrame(() => {
+                            updateAlignmentState();
+                          });
+
+                        }
+
+
+                        return nextOpen;
+                      }
+                    );
+
+                  }}
+
+                  data-tooltip="Alignment and indent"
+
+                  aria-label="Alignment and indent"
+
+                  aria-expanded={
+                    paragraphMenuOpen
+                  }
+
+                  aria-haspopup="true"
+                >
+                  <span className="alignment-toolbar-icon">
+                    <ActiveAlignmentIcon
+                      size={19}
+                      strokeWidth={1.9}
+                    />
+
+                    <ChevronDown
+                      className="alignment-toolbar-chevron"
+                      size={12}
+                      strokeWidth={2}
+                    />
+                  </span>
+                </button>
+
+
+                {paragraphMenuOpen && (
+
+                  <div
+                    className="paragraph-format-popover"
+                    contentEditable={false}
+                  >
+
+                    {/* Alignment */}
+
+                    <div className="paragraph-format-row">
+
+                      <button
+                        type="button"
+
+                        className={`paragraph-format-button ${
+                          activeAlignment === "left"
+                            ? "paragraph-format-button-active"
+                            : ""
+                        }`}
+
+                        onMouseDown={(event) =>
+                          event.preventDefault()
+                        }
+
+                        onClick={() =>
+                          applyAlignment("left")
+                        }
+
+                        aria-label="Align left"
+                        data-tooltip="Align left"
+                      >
+                        <AlignLeft
+                          size={18}
+                          strokeWidth={1.8}
+                        />
+                      </button>
+
+
+                      <button
+                        type="button"
+
+                        className={`paragraph-format-button ${
+                          activeAlignment === "center"
+                            ? "paragraph-format-button-active"
+                            : ""
+                        }`}
+
+                        onMouseDown={(event) =>
+                          event.preventDefault()
+                        }
+
+                        onClick={() =>
+                          applyAlignment("center")
+                        }
+
+                        aria-label="Align centre"
+                        data-tooltip="Align centre"
+                      >
+                        <AlignCenter
+                          size={18}
+                          strokeWidth={1.8}
+                        />
+                      </button>
+
+
+                      <button
+                        type="button"
+
+                        className={`paragraph-format-button ${
+                          activeAlignment === "right"
+                            ? "paragraph-format-button-active"
+                            : ""
+                        }`}
+
+                        onMouseDown={(event) =>
+                          event.preventDefault()
+                        }
+
+                        onClick={() =>
+                          applyAlignment("right")
+                        }
+
+                        aria-label="Align right"
+                        data-tooltip="Align right"
+                      >
+                        <AlignRight
+                          size={18}
+                          strokeWidth={1.8}
+                        />
+                      </button>
+
+
+                      <button
+                        type="button"
+
+                        className={`paragraph-format-button ${
+                          activeAlignment === "justify"
+                            ? "paragraph-format-button-active"
+                            : ""
+                        }`}
+
+                        onMouseDown={(event) =>
+                          event.preventDefault()
+                        }
+
+                        onClick={() =>
+                          applyAlignment("justify")
+                        }
+
+                        aria-label="Justify"
+                        data-tooltip="Justify"
+                      >
+                        <AlignJustify
+                          size={18}
+                          strokeWidth={1.8}
+                        />
+                      </button>
+
+                    </div>
+
+
+                    <div className="paragraph-popover-divider" />
+
+
+                    {/* Indentation */}
+
+                    <div className="paragraph-format-row">
+
+                      <button
+                        type="button"
+                        className="paragraph-format-button"
+
+                        onMouseDown={(event) =>
+                          event.preventDefault()
+                        }
+
+                        onClick={() =>
+                          applyIndent("decrease")
+                        }
+
+                        aria-label="Decrease indent"
+                        data-tooltip="Decrease indent"
+                      >
+                        <IndentDecrease
+                          size={18}
+                          strokeWidth={1.8}
+                        />
+                      </button>
+
+
+                      <button
+                        type="button"
+                        className="paragraph-format-button"
+
+                        onMouseDown={(event) =>
+                          event.preventDefault()
+                        }
+
+                        onClick={() =>
+                          applyIndent("increase")
+                        }
+
+                        aria-label="Increase indent"
+                        data-tooltip="Increase indent"
+                      >
+                        <IndentIncrease
+                          size={18}
+                          strokeWidth={1.8}
+                        />
+                      </button>
+
+                    </div>
+
+                  </div>
+
+                )}
+
+              </div>
               
               {/* Lists */}
               

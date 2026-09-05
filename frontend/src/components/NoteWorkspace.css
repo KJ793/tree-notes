@@ -1542,3 +1542,191 @@ button[data-tooltip]:hover::after {
 
   pointer-events: none;
 }
+
+/* ================================================== */
+/* Paragraph Formatting Popover                       */
+/* ================================================== */
+
+.note-workspace .toolbar-popover-wrapper {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+}
+
+
+.note-workspace .paragraph-format-popover {
+  position: absolute;
+
+  top: calc(100% + 9px);
+  left: 50%;
+
+  z-index: 500;
+
+  width: 174px;
+
+  padding: 7px;
+
+  box-sizing: border-box;
+
+  transform: translateX(-50%);
+
+  border: 1px solid #354765;
+  border-radius: 8px;
+
+  background: #121c2d;
+
+  box-shadow:
+    0 10px 30px
+    rgba(0, 0, 0, 0.38);
+
+  color: #eef1f7;
+
+  user-select: none;
+}
+
+
+/* Small arrow above popover */
+
+.note-workspace
+.paragraph-format-popover::before {
+  content: "";
+
+  position: absolute;
+
+  top: -5px;
+  left: 50%;
+
+  width: 8px;
+  height: 8px;
+
+  transform:
+    translateX(-50%)
+    rotate(45deg);
+
+  border-left: 1px solid #354765;
+  border-top: 1px solid #354765;
+
+  background: #121c2d;
+}
+
+/* Button row */
+
+.note-workspace .paragraph-format-row {
+  display: flex;
+  align-items: center;
+
+  gap: 3px;
+}
+
+
+/* Individual formatting buttons */
+
+.note-workspace .paragraph-format-button {
+  width: 36px;
+  height: 32px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border: 1px solid transparent;
+  border-radius: 5px;
+
+  background: transparent;
+
+  color: #9ba6b9;
+
+  cursor: pointer;
+
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease;
+}
+
+
+.note-workspace
+.paragraph-format-button:hover {
+  background: #263550;
+
+  color: #ffffff;
+}
+
+
+/* Current alignment */
+
+.note-workspace
+.paragraph-format-button-active {
+  border-color: #6a65ef;
+
+  background: #625df0;
+
+  color: #ffffff;
+}
+
+
+/* Divider */
+
+.note-workspace
+.paragraph-popover-divider {
+  height: 1px;
+
+  margin: 6px 2px;
+
+  background: #293a54;
+}
+
+/* ================================================== */
+/* Paragraph Formatting Active State                  */
+/* Keep these AFTER the normal/hover button rules     */
+/* ================================================== */
+
+.note-workspace
+.paragraph-format-popover
+.paragraph-format-button.paragraph-format-button-active {
+  background: #625df0;
+  border-color: #7772ff;
+  color: #ffffff;
+}
+
+
+.note-workspace
+.paragraph-format-popover
+.paragraph-format-button.paragraph-format-button-active:hover {
+  background: #625df0;
+  border-color: #7772ff;
+  color: #ffffff;
+}
+
+
+.note-workspace
+.paragraph-format-popover
+.paragraph-format-button.paragraph-format-button-active svg {
+  color: #ffffff;
+}
+
+.note-workspace .alignment-toolbar-button {
+  width: auto;
+
+  padding-left: 7px;
+  padding-right: 5px;
+}
+
+
+.note-workspace .alignment-toolbar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 2px;
+}
+
+
+.note-workspace .alignment-toolbar-chevron {
+  margin-top: 1px;
+
+  opacity: 0.8;
+}
