@@ -1,56 +1,62 @@
 import { useState } from "react";
+import { ArrowUp } from "lucide-react";
 
-function SearchBar({ onSearch }) {
 
-  // << FRONTEND DEV >> //
-  // Stores the text currently entered into the search bar //
+function SearchBar({
+  placeholder = "Semantic search...",
+  ariaLabel = "Semantic search",
+  onSearch,
+  loading = false,
+}) {
   const [searchTerm, setSearchTerm] = useState("");
 
 
-  function handleSearch(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
 
-    // << FRONTEND DEV >> //
-    // Sends the current search term to the parent component //
+    const query = searchTerm.trim();
 
-    if (!searchTerm.trim()) {
+    if (!query || loading) {
       return;
     }
 
-    onSearch(searchTerm);
+    await onSearch(query);
   }
 
 
   return (
-
     <form
       className="search-bar"
-      onSubmit={handleSearch}
+      onSubmit={handleSubmit}
+      role="search"
+      aria-label={ariaLabel}
     >
-
-      {/* << FRONTEND DEV >> */}
-      {/* Search input controlled by React state */}
-
       <input
         type="text"
         value={searchTerm}
         onChange={(event) =>
           setSearchTerm(event.target.value)
         }
-        placeholder="Search notes..."
+        placeholder={placeholder}
+        aria-label={ariaLabel}
       />
 
 
-      {/* << SEARCH CONNECTION >> */}
-      {/* Parent component decides what happens with searchterm */}
-      {/* Backend search connection can be added here later */}
-
-      <button type="submit">
-        Search
+      <button
+        className="search-submit-button"
+        type="submit"
+        disabled={loading || !searchTerm.trim()}
+        aria-label="Run semantic search"
+        title="Search"
+      >
+        <ArrowUp
+          size={18}
+          strokeWidth={2}
+        />
       </button>
-
     </form>
   );
 }
+
 
 export default SearchBar;
