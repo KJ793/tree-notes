@@ -3,8 +3,19 @@
 }
 
 body{
-  background: linear-gradient(180deg, #08111f 0%,#0b1428 60%,#111827 100%
+  background: 
+    linear-gradient(
+      180deg, 
+      var(--bg-page-start) 0%,
+      var(--bg-page-mid) 60%,
+      var(--bg-page-end) 100%
   );
+
+  color: var(--text-primary);
+
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
 }
 
 
@@ -275,7 +286,7 @@ padding: 24px 0;
   border: none;
   border-radius: 7px;
 
-  color: #d5d9e5;
+  color: var(--text-body);
 
   font-family: inherit;
   font-size: 14px;
@@ -285,12 +296,12 @@ padding: 24px 0;
 }
 
 .sidebar-nav-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-hover-soft);
 }
 
 .sidebar-nav-item-active {
-  background: #625df0;
-  color: #ffffff;
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
 }
 
 /*Notes list style*/
@@ -309,11 +320,13 @@ padding: 24px 0;
 
   padding: 7px 10px;
 
-  background: #151e31;
-  border: 1px solid #263652;
+  background: var(--bg-note-card);
+  border: 
+    1px solid 
+    var(--border-subtle);
   border-radius: 6px;
 
-  color: #d8deeb;
+  color: var(--text-body);
 
   font-family: inherit;
   font-size: 12px;
@@ -323,8 +336,8 @@ padding: 24px 0;
 }
 
 .sidebar-note-button:hover {
-  background: #1d2942;
-  border-color: #4f46e5;
+  background: var(--bg-note-card-hover);
+  border-color: var(--border-accent-muted);
 }
 
 /*Sidebar toggle button*/
@@ -342,7 +355,7 @@ padding: 24px 0;
   border: none;
   border-radius: 7px;
 
-  color: #8f9bb0;
+  color: var(--text-muted);
 
   font-family: inherit;
   font-size: 12px;
@@ -351,8 +364,8 @@ padding: 24px 0;
 }
 
 .sidebar-toggle-button:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #ffffff;
+  background: var(--bg-hover-soft);
+  color: var(--text-primary);
 }
 
 .sidebar.sidebar-collapsed .sidebar-note-list {
@@ -392,10 +405,13 @@ padding: 24px 0;
   align-items: center;
   gap: 56px;
   padding: 50px 52px;
-  border: 1px solid #36577f;
+  border: 
+    1px solid 
+    var(--border-dashboard);
   border-radius: 11px;
-  background: #121b2b;
+  background: var(--bg-panel);
   overflow: hidden;
+  box-shadow: var(--shadow-panel);
 }
 
 .welcome-text {
@@ -408,7 +424,7 @@ padding: 24px 0;
   flex-direction: column;
   gap: 5px;
   margin: 0 0 28px;
-  color: #f5f6fb;
+  color: var(--text-primary);
   font-size: clamp(38px, 3vw, 48px);
   font-weight: 500;
   line-height: 1.18;
@@ -420,14 +436,14 @@ padding: 24px 0;
 }
 
 .dashboard-welcome-heading strong {
-  color: #6f6ce8;
+  color: var(--accent-brand);
   font: inherit;
   font-weight: 600;
 }
 
 .dashboard-feature-list h2 {
   margin: 0 0 6px;
-  color: #d8dbe4;
+  color: var(--text-body);
   font-size: 22px;
   font-weight: 600;
   line-height: 1.3;
@@ -437,7 +453,7 @@ padding: 24px 0;
 .dashboard-feature-list ul {
   margin: 0;
   padding-left: 42px;
-  color: #d4d6de;
+  color: var(--text-body);
   font-size: 20px;
   line-height: 1.62;
 }
@@ -456,8 +472,11 @@ padding: 24px 0;
 .welcome-image img {
   width: min(100%, 280px);
   height: auto;
-  opacity: 0.34;
-  filter: saturate(0.8) brightness(0.72);
+  opacity:
+    var(--welcome-image-opacity);
+
+  filter:
+    var(--welcome-image-filter);
   object-fit: contain;
 }
 
@@ -578,7 +597,7 @@ padding: 24px 0;
 
   background: transparent;
 
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 
@@ -587,7 +606,7 @@ padding: 24px 0;
   align-items: center;
   gap: 13px;
 
-  color: white;
+  color: var(--text-primary);
   text-decoration: none;
 }
 
@@ -632,7 +651,7 @@ padding: 24px 0;
 
 
 .dashboard-brand-text strong {
-  color: #f7f8ff;
+  color: var(--text-primary);
 
   font-size: 25px;
   font-weight: 700;
@@ -642,7 +661,7 @@ padding: 24px 0;
 .dashboard-brand-text small {
   margin-top: 5px;
 
-  color: #979eaf;
+  color: var(--text-muted);
 
   font-size: 14px;
   font-weight: 400;
@@ -704,7 +723,7 @@ padding: 24px 0;
 
   background: transparent;
 
-  color: #f5f6fb;
+  color: var(--text-primary);
 
   font-family: inherit;
   font-size: 17px;
@@ -720,12 +739,12 @@ padding: 24px 0;
 
 
 .navbar-action-button svg {
-  color: #f5f6fb;
+  color: var(--text-primary);
 }
 
 
 .navbar-action-button:hover {
-  background: #625df0;
+  background: var(--accent-primary);
 
   color: #ffffff;
 }
@@ -737,11 +756,13 @@ padding: 24px 0;
 .navbar-action-button:active {
   transform: translateY(1px);
 
-  background: #5752dc;
+  background: var(--accent-primary-active);
 }
 
 .navbar-action-button:focus-visible {
-  outline: 2px solid #817cff;
+  outline: 
+    2px solid 
+    var(--accent-focus-strong);
   outline-offset: 2px;
 }
 
@@ -757,7 +778,7 @@ padding: 24px 0;
 
   background: transparent;
 
-  color: #f7f8ff;
+  color: var(--text-primary);
   font: inherit;
 
   cursor: pointer;
@@ -770,7 +791,7 @@ padding: 24px 0;
 
 .profile-nav-trigger:hover,
 .profile-nav-trigger-open {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--bg-hover-soft);
 }
 
 
@@ -797,7 +818,7 @@ padding: 24px 0;
 
 
 .profile-nav-name {
-  color: #f7f8ff;
+  color: var(--text-primary);
 
   font-size: 21px;
   font-weight: 600;
@@ -810,7 +831,7 @@ padding: 24px 0;
 .profile-nav-chevron {
   margin-left: 2px;
 
-  color: #aeb4c4;
+  color: var(--text-secondary);
 
   font-size: 15px;
 
@@ -839,13 +860,16 @@ padding: 24px 0;
 
   z-index: 1000;
 
-  background: #111a2b;
+  background: var(--bg-panel-secondary);
 
-  border: 1px solid #2b3c59;
+  border: 
+    1px solid 
+    var(--border-control);
   border-radius: 12px;
 
   box-shadow:
-    0 15px 35px rgba(0, 0, 0, 0.35);
+    0 15px 35px 
+    var(--shadow-dropdown);
 
   animation: profileDropdownOpen 0.15s ease;
 }
@@ -909,7 +933,7 @@ padding: 24px 0;
 
 
 .profile-dropdown-header strong {
-  color: #f4f6fb;
+  color: var(--text-primary);
 
   font-size: 14px;
   font-weight: 600;
@@ -921,7 +945,7 @@ padding: 24px 0;
 
   overflow: hidden;
 
-  color: #8e97aa;
+  color: var(--text-muted);
 
   font-size: 11px;
 
@@ -937,7 +961,7 @@ padding: 24px 0;
 
   margin: 2px 4px 7px;
 
-  background: #26344e;
+  background: var(--border-subtle);
 }
 
 
@@ -962,7 +986,7 @@ padding: 24px 0;
 
   background: transparent;
 
-  color: #e9ebf2;
+  color: var(--text-body);
   text-decoration: none;
 
   font-family: inherit;
@@ -978,9 +1002,9 @@ padding: 24px 0;
 
 
 .profile-dropdown-item:hover {
-  background: #1b2740;
+  background: var(--bg-hover);
 
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 
@@ -1001,19 +1025,19 @@ padding: 24px 0;
 /* Logout gets subtle red treatment */
 
 .profile-dropdown-logout {
-  color: #ff9b9b;
+  color: var(--danger-text);
 }
 
 
 .profile-dropdown-logout .profile-dropdown-icon {
-  color: #ff7777;
+  color: var(--danger-icon);
 }
 
 
 .profile-dropdown-logout:hover {
-  background: rgba(225, 80, 80, 0.12);
+  background: var(--status-error-bg);
 
-  color: #ffb0b0;
+  color: var(--danger-hover-text);
 }
 
 .graph-container {
@@ -1067,8 +1091,10 @@ padding: 24px 0;
 
   padding: 12px 14px;
 
-  background: #111a2b;
-  border: 1px solid #28324a;
+  background: var(--bg-panel);
+  border: 
+    1px solid 
+    var(--graph-border);
   border-top: none;
   border-radius: 0 0 12px 12px;
 }
@@ -1086,11 +1112,13 @@ padding: 24px 0;
 
   overflow: hidden;
 
-  background: #211a40;
-  border: 1px solid #6366f1;
+  background: var(--bg-accent-soft);
+  border: 
+    1px solid 
+    var(--graph-node-accent);
   border-radius: 7px;
 
-  color: #ffffff;
+  color: var(--text-primary);
 
   font-size: 13px;
   font-weight: 600;
@@ -1104,7 +1132,7 @@ padding: 24px 0;
   align-items: center;
   gap: 7px;
 
-  color: #aeb8d0;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
@@ -1114,30 +1142,34 @@ padding: 24px 0;
 
   padding: 2px;
 
-  background: #0d1525;
+  background: var(--graph-control-bg);
 
-  border: 1px solid #394260;
+  border: 
+    1px solid 
+    var(--graph-control-border);
   border-radius: 7px;
 
   cursor: pointer;
 }
 
 .graph-control input[type="color"]:hover {
-  border-color: #6366f1;
+  border-color: var(--accent-primary);
 }
 
 .graph-control select {
   padding: 6px 8px;
 
-  background: #111827;
-  color: #ffffff;
+  background: var(--graph-control-bg);
+  color: var(--text-primary);
 
-  border: 1px solid #394260;
+  border: 
+    1px solid 
+    var(--graph-control-border);
   border-radius: 5px;
 }
 
 .no-node-selected {
-  color: #7f8ba5;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -1157,11 +1189,13 @@ padding: 24px 0;
 .graph-toolbar .generate-graph-button {
   padding: 8px 14px;
 
-  background: #211a40;
-  border: 1px solid #4f46e5;
+  background: var(--bg-accent-soft);
+  border: 
+    1px solid 
+    var(--border-accent-muted);
   border-radius: 8px;
 
-  color: #ffffff;
+  color: var(--text-primary);
 
   font-family: inherit;
   font-size: 12px;
@@ -1175,8 +1209,8 @@ padding: 24px 0;
 }
 
 .graph-toolbar .generate-graph-button:hover {
-  background: #3730a3;
-  border-color: #818cf8;
+  background: var(--accent-primary);
+  border-color: var(--accent-primary-hover);
 }
 
 .graph-toolbar .generate-graph-button:disabled {
@@ -1292,4 +1326,217 @@ padding: 24px 0;
 .graph-error {
   color: #f87171;
   font-size: 13px;
+}
+
+/* ================================================== */
+/* Navbar Action Buttons                              */
+/* ================================================== */
+
+.dashboard-navbar .navbar-action-button {
+  min-width: 48px;
+  height: 44px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 9px;
+
+  padding: 0 13px;
+
+  border: none;
+  border-radius: 7px;
+
+  background: transparent;
+
+  color: var(--text-primary);
+
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    transform 0.15s ease;
+}
+
+
+.dashboard-navbar .navbar-action-button:hover {
+  background: var(--accent-primary);
+
+  color: var(--text-on-accent);
+}
+
+
+.dashboard-navbar .navbar-action-button:active {
+  background: var(--accent-primary-active);
+
+  color: var(--text-on-accent);
+
+  transform: translateY(1px);
+}
+
+
+/* Theme button specifically */
+
+.dashboard-navbar .theme-toggle {
+  width: 48px;
+  padding: 0;
+}
+
+
+.dashboard-navbar .theme-toggle svg {
+  width: 24px;
+  height: 24px;
+
+  flex-shrink: 0;
+}
+
+.dashboard-navbar .profile-menu-container {
+  margin-left: 10px;
+}
+
+/* ================================================== */
+/* Navbar Theme Toggle Tooltip                        */
+/* ================================================== */
+
+.dashboard-navbar
+.theme-toggle[data-tooltip] {
+  position: relative;
+}
+
+
+/* Tooltip box */
+
+.dashboard-navbar
+.theme-toggle[data-tooltip]::after {
+  content: attr(data-tooltip);
+
+  position: absolute;
+
+  top: calc(100% + 9px);
+  left: 50%;
+
+  z-index: 2000;
+
+  padding: 6px 9px;
+
+  transform:
+    translateX(-50%)
+    translateY(-3px);
+
+  border:
+    1px solid
+    var(--border-control);
+
+  border-radius: 6px;
+
+  background:
+    var(--bg-tooltip);
+
+  color:
+    var(--text-primary);
+
+  box-shadow:
+    var(--shadow-popover);
+
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+
+  white-space: nowrap;
+
+  opacity: 0;
+  visibility: hidden;
+
+  pointer-events: none;
+
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease,
+    visibility 0.14s ease;
+}
+
+
+/* Little arrow */
+
+.dashboard-navbar
+.theme-toggle[data-tooltip]::before {
+  content: "";
+
+  position: absolute;
+
+  top: calc(100% + 5px);
+  left: 50%;
+
+  z-index: 2001;
+
+  width: 7px;
+  height: 7px;
+
+  transform:
+    translateX(-50%)
+    rotate(45deg);
+
+  border-left:
+    1px solid
+    var(--border-control);
+
+  border-top:
+    1px solid
+    var(--border-control);
+
+  background:
+    var(--bg-tooltip);
+
+  opacity: 0;
+  visibility: hidden;
+
+  pointer-events: none;
+
+  transition:
+    opacity 0.14s ease,
+    visibility 0.14s ease;
+}
+
+
+/* Show on mouse hover */
+
+.dashboard-navbar
+.theme-toggle[data-tooltip]:hover::after,
+.dashboard-navbar
+.theme-toggle[data-tooltip]:hover::before {
+  opacity: 1;
+  visibility: visible;
+}
+
+
+.dashboard-navbar
+.theme-toggle[data-tooltip]:hover::after {
+  transform:
+    translateX(-50%)
+    translateY(0);
+}
+
+
+/* Also show for keyboard users */
+
+.dashboard-navbar
+.theme-toggle[data-tooltip]:focus-visible::after,
+.dashboard-navbar
+.theme-toggle[data-tooltip]:focus-visible::before {
+  opacity: 1;
+  visibility: visible;
+}
+
+
+.dashboard-navbar
+.theme-toggle[data-tooltip]:focus-visible::after {
+  transform:
+    translateX(-50%)
+    translateY(0);
 }
