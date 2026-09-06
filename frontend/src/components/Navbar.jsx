@@ -5,9 +5,12 @@ import {
   LogOut,
   Save,
   FileOutput,
+  Moon,
+  Sun,
 } from "lucide-react";
 
 import treeNotesLogo from "../assets/logo.png";
+import { useTheme } from "../context/ThemeContext";
 
 
 const initialNavbarUser = {
@@ -161,6 +164,8 @@ function Navbar({onSave}) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const [navbarUser, setNavbarUser] = useState(initialNavbarUser);
+
+  const { theme, toggleTheme, } = useTheme();
 
   const profileMenuRef = useRef(null);
   const navigate = useNavigate();
@@ -321,6 +326,42 @@ function Navbar({onSave}) {
           <span>Export</span>
         </button>
 
+        <button
+          type="button"
+          className="navbar-action-button theme-toggle"
+
+          onClick={toggleTheme}
+
+          data-tooltip={
+            theme === "dark"
+              ? "Switch to light mode"
+              : "Switch to dark mode"
+          }
+
+          aria-label={
+            theme === "dark"
+              ? "Switch to light mode"
+              : "Switch to dark mode"
+          }
+        >
+
+          {theme === "dark" ? (
+
+            <Moon
+              size={24}
+              strokeWidth={1.8}
+            />
+
+          ) : (
+
+            <Sun
+              size={24}
+              strokeWidth={1.8}
+            />
+
+          )}
+
+        </button>
       </div>
 
       <div
