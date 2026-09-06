@@ -8,3 +8,8 @@ requests
 passlib
 bcrypt==4.0.1
 itsdangerous
+# Official Bolt driver. The synchronous API is used deliberately: every router
+# here is `def`, not `async def`, so FastAPI already runs them in a threadpool.
+# Pinned to 5.x: the repository uses execute_read/execute_write, which replaced
+# read_transaction/write_transaction in 5.0 and could change again in 6.
+neo4j>=5,<6

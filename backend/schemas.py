@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 class NoteBase(BaseModel):
     title: str
@@ -156,3 +156,33 @@ class SummaryResponse(BaseModel):
     aiSummary: str
     userSummaryReview: str = ""
     userScore: int = 0
+
+
+# --- Cytoscape graph payloads -------------------------------------------
+#
+# `data` is deliberately an open dict rather than a typed model.
+# GraphPanel.getEditedGraphData() spreads `...node.data()`, so the request body
+# contains whatever Cytoscape happened to be holding, including keys this API
+# never sent. Rejecting unknown keys would make the endpoint brittle against a
+# frontend change; instead graph/projections.py applies an explicit allowlist,
+# so exactly one place decides what is persistable.
+
+class CytoscapePosition(BaseModel):
+    x: Optional[float] = None
+    y: Optional[float] = None
+
+
+class CytoscapeNode(BaseModel):
+    data: Dict[str, Any] = Field(default_factory=dict)
+    # Absent on a freshly generated graph, present once Cytoscape has laid it
+    # out and the user has saved.
+    position: Optional[CytoscapePosition] = None
+
+
+class CytoscapeEdge(BaseModel):
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+
+class CytoscapeGraph(BaseModel):
+    nodes: List[CytoscapeNode] = Field(default_factory=list)
+    edges: List[CytoscapeEdge] = Field(default_factory=list)

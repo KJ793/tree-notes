@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from typing import List
 
@@ -6,10 +7,32 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.dependencies import get_current_user
+from backend.graph import repository as graph_repository
+from backend.graph_db import get_driver
 from backend.models import Note, User
 from backend.schemas import NoteCreate, NoteResponse, NoteUpdate
 
 router = APIRouter()
+
+log = logging.getLogger("uvicorn.error")
+
+
+def _purge_graph(user_id: int, note_id: int) -> None:
+    """Best-effort removal of a deleted note's subgraph.
+
+    Deliberately not a FastAPI dependency: `get_graph` raises when Neo4j is
+    unreachable, which would make note deletion fail because a *secondary*
+    store is down. Postgres is authoritative for whether a note exists, so the
+    row goes first and this is allowed to fail.
+
+    A failure here leaves an orphaned subgraph, which is what the reconcile
+    routine in backend/graph/reconcile.py is for.
+    """
+    try:
+        with get_driver().session() as session:
+            graph_repository.delete_note_graph(session, user_id, note_id)
+    except Exception as exc:
+        log.warning("Graph cleanup skipped for note %s: %s", note_id, exc)
 
 @router.post(
     "",
@@ -122,3 +145,7 @@ def delete_note(
         )
     db.delete(note)
     db.commit()
+
+    # Postgres first, then the graph. If this order were reversed and the
+    # Postgres delete failed, the note would survive with its graph destroyed.
+    _purge_graph(current_user.id, note_id)

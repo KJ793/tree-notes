@@ -54,8 +54,25 @@ class Note(Base):
     notes_section = Column(Text, nullable=True)
     summary_section = Column(Text, nullable=True)
     is_node = Column(Boolean, nullable=False, default=False)
+    # Whether Neo4j currently holds a usable concept graph for this note.
+    # 'none'  - never generated
+    # 'ok'    - written successfully
+    # 'stale' - a graph write failed, so what is stored (if anything) predates
+    #           the current note content. The UI can offer "regenerate" rather
+    #           than silently showing an out-of-date graph.
+    # Postgres stays authoritative for the note's existence; this column only
+    # records what is known about the other store.
+    graph_status = Column(String(20), nullable=False, server_default="none")
+    graph_updated_at = Column(PG_TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(PG_TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(PG_TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "graph_status IN ('none', 'ok', 'stale')",
+            name="ck_notes_graph_status",
+        ),
+    )
 
 
 class NoteLink(Base):
