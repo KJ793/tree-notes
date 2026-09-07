@@ -1179,7 +1179,6 @@
   background: var(--bg-panel-secondary);
 
   box-shadow:
-    0 10px 30px 
     var(--shadow-popover);
 
   color: var(--text-primary);
@@ -1625,7 +1624,6 @@ button[data-tooltip]:hover::after {
   background: var(--bg-panel-secondary);
 
   box-shadow:
-    0 10px 30px
     var(--shadow-popover);
 
   color: var(--text-primary);

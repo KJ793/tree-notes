@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./ProfileContent.css";
+import { useTheme } from "../context/ThemeContext.jsx";
 
 // Initial state for the profile data. This is used to reset the form when the component is first loaded or when the user logs out.
 const initialProfile = {
@@ -119,7 +120,7 @@ function getInitials(name) {
 function ProfileContent() {
   const [profile, setProfile] = useState(initialProfile);
   const [saved, setSaved] = useState(false);
-  const [darkMode, setDarkMode] = useState(true);
+  const {theme, setTheme } = useTheme();
 
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordForm, setPasswordForm] = useState(emptyPasswordForm);
@@ -407,8 +408,14 @@ function ProfileContent() {
               </span>
               <input
                 type="checkbox"
-                checked={darkMode}
-                onChange={(event) => setDarkMode(event.target.checked)}
+                checked={theme === "dark"}
+                onChange={(event) => 
+                  setTheme(
+                    event.target.checked
+                      ? "dark"
+                      : "light"
+                  )
+                }
               />
             </label>
           </section>
