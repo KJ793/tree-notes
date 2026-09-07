@@ -43,11 +43,11 @@ function SearchBar({
 
 
       <button
-        className="search-submit-button"
+        className="search-submit-button tooltip-align-right"
         type="submit"
         disabled={loading || !searchTerm.trim()}
-        aria-label="Run semantic search"
-        title="Search"
+        data-tooltip="Semantic search"
+        aria-label="Semantic search"
       >
         <ArrowUp
           size={18}

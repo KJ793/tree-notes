@@ -65,13 +65,17 @@
 .note-workspace .raw-notes,
 .note-workspace .graph-panel {
   min-width: 0;
+
+  height: 480px;
   min-height: 480px;
+  max-height: 480px;
+
   padding: 0;
 
   display: flex;
   flex-direction: column;
 
-  overflow: hidden;
+  overflow: visible;
 
   border: 
     1px solid 
@@ -86,10 +90,6 @@
 /* ---------------------------------------------------------
    Raw Notes editor
    --------------------------------------------------------- */
-
-.note-workspace .raw-notes {
-  padding-bottom: 16px;
-}
 
 .note-workspace .text-area {
   width: auto;
@@ -154,16 +154,26 @@
 }
 
 .note-workspace .graph-container {
-  width: 100%;
-  height: auto;
-  min-height: 320px;
+  position: relative;
+
   flex: 1;
 
-  position: relative;
-  overflow: hidden;
+  width: 100%;
+  height: 100%;
 
-  border-radius: 6px;
-  background: var(--bg-panel);
+  min-width: 0;
+  min-height: 0;
+
+  border: none;
+  border-radius: 0;
+
+  box-shadow: none;
+}
+
+.note-workspace .raw-notes-content,
+.note-workspace .graph-canvas-shell,
+.note-workspace .graph-container {
+  background: var(--bg-workspace-canvas);
 }
 
 .note-workspace .graph-placeholder > button {
@@ -322,58 +332,6 @@
 
   font-size: 11px;
 }
-
-
-/* ================================================== */
-/* Summary Action Buttons                             */
-/* ================================================== */
-
-.note-workspace .summary-action-button {
-  min-height: 36px;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  gap: 8px;
-
-  padding: 0 13px;
-
-  border: 
-    1px solid 
-    var(--accent-primary);
-  border-radius: 6px;
-
-  background: transparent;
-
-  color: var(--text-accent);
-
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 600;
-
-  cursor: pointer;
-
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
-}
-
-
-.note-workspace
-.summary-action-button:hover:not(:disabled) {
-  background: var(--accent-primary);
-
-  color: #ffffff;
-}
-
-
-.note-workspace .summary-action-button:disabled {
-  opacity: 0.5;
-
-  cursor: default;
-}
-
 
 /* ================================================== */
 /* AI Summary                                         */
@@ -733,7 +691,7 @@
 
 
 .note-workspace .raw-notes-heading svg,
-.note-workspace .graph-panel-heading svg {
+.note-workspace .graph-panel-heading-title svg {
   width: 21px;
   height: 21px;
 
@@ -747,22 +705,22 @@
    Rich Text Editor
    --------------------------------------------------------- */
 
-.note-workspace .raw-notes-editor {
+.note-workspace .raw-notes-editor,
+.note-workspace .graph-editor {
   flex: 1;
+  min-height: 0;
 
   display: flex;
   flex-direction: column;
 
   margin: 16px;
 
-  overflow: hidden;
-
   border: 
     1px solid 
     var(--border-secondary);
   border-radius: 7px;
 
-  background: var(--bg-editor);
+  background: var(--bg-workspace-canvas);
 }
 
 
@@ -857,8 +815,7 @@
 .note-workspace .raw-notes-content {
   flex: 1;
 
-  min-height: 300px;
-  max-height: 350px;
+  min-height: 0;
 
   overflow-y: auto;
   overflow-x: hidden;
@@ -866,8 +823,6 @@
   margin: 0;
 
   padding: 20px 31px;
-
-  overflow-y: auto;
 
   border: none;
   border-radius: 0;
@@ -1080,6 +1035,9 @@
     color 0.15s ease;
 }
 
+.note-workspace .search-submit-button svg {
+  color: currentColor;
+}
 
 .note-workspace .search-submit-button:hover:not(:disabled) {
   background: var(--accent-primary);
@@ -1135,8 +1093,17 @@
 /* Raw Notes Scroll Bar                               */
 /* ================================================== */
 
+.note-workspace .raw-notes-content {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+
+  scrollbar-color:
+    var(--editor-scrollbar-thumb)
+    transparent;
+}
+
 .note-workspace .raw-notes-content::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 
@@ -1146,14 +1113,23 @@
 
 
 .note-workspace .raw-notes-content::-webkit-scrollbar-thumb {
-  border-radius: 10px;
+  background:
+    var(--editor-scrollbar-thumb);
 
-  background: #3b4962;
+  border: 2px solid transparent;
+
+  border-radius: 999px;
+
+  background-clip: padding-box;
 }
 
-
 .note-workspace .raw-notes-content::-webkit-scrollbar-thumb:hover {
-  background: #53617b;
+  background:
+    var(--editor-scrollbar-thumb-hover);
+
+  border: 2px solid transparent;
+
+  background-clip: padding-box;
 }
 
 /* ================================================== */
@@ -1358,132 +1334,6 @@
   opacity: 0;
 
   pointer-events: none;
-}
-
-/* ================================================== */
-/* Toolbar Tooltips                                   */
-/* ================================================== */
-
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip] {
-  position: relative;
-}
-
-
-/* Tooltip box */
-
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip]::after {
-  content: attr(data-tooltip);
-
-  position: absolute;
-
-  top: calc(100% + 8px);
-  left: 50%;
-
-  z-index: 100;
-
-  transform:
-    translateX(-50%)
-    translateY(-3px);
-
-  padding: 6px 9px;
-
-  border: 
-    1px solid 
-    var(--border-control);
-  border-radius: 7px;
-
-  background: var(--bg-tooltip);
-
-  box-shadow:
-    0 6px 18px
-    rgba(0, 0, 0, 0.35);
-
-  color: var(--text-primary);
-
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 500;
-
-  line-height: 1;
-
-  white-space: nowrap;
-
-  opacity: 0;
-  visibility: hidden;
-
-  pointer-events: none;
-
-  transition:
-    opacity 0.12s ease,
-    transform 0.12s ease,
-    visibility 0.12s ease;
-}
-
-
-/* Tiny arrow */
-
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip]::before {
-  content: "";
-
-  position: absolute;
-
-  top: calc(100% + 4px);
-  left: 50%;
-
-  z-index: 101;
-
-  width: 7px;
-  height: 7px;
-
-  background: var(--bg-tooltip);
-
-  border-left: 
-    1px solid 
-    var(--border-control);
-  border-top: 
-    1px solid 
-    var(--border-control);
-
-  transform:
-    translateX(-50%)
-    rotate(45deg);
-
-  opacity: 0;
-  visibility: hidden;
-
-  pointer-events: none;
-}
-
-
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip]:hover::after,
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip]:hover::before,
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip]:focus-visible::after,
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip]:focus-visible::before {
-  opacity: 1;
-  visibility: visible;
-}
-
-
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip]:hover::after {
-  transform:
-    translateX(-50%)
-    translateY(0);
 }
 
 /* ================================================== */
@@ -1781,4 +1631,988 @@ button[data-tooltip]:hover::after {
   margin-top: 1px;
 
   opacity: 0.8;
+}
+
+.note-workspace .graph-panel-header-actions {
+  min-width: 0;
+
+  flex: 1;
+
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+
+  gap: 12px;
+
+  margin-left: auto;
+}
+
+.note-workspace .graph-header-error {
+  min-width: 0;
+  max-width: 290px;
+
+  overflow: hidden;
+
+  color:
+    var(--text-muted);
+
+  font-size: 11px;
+  font-weight: 400;
+
+  text-align: right;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ================================================== */
+/* Graph Node Toolbar                                 */
+/* ================================================== */
+
+.note-workspace .graph-node-toolbar {
+  height: 43px;
+  min-height: 43px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+
+  gap: 3px;
+
+  padding: 0 18px;
+
+  border-bottom:
+    1px solid
+    var(--border-control);
+
+  background:
+    var(--bg-toolbar);
+
+  color:
+    var(--toolbar-button-text);
+}
+
+
+/* ================================================== */
+/* Toolbar Buttons                                    */
+/* ================================================== */
+
+.note-workspace .graph-toolbar-button {
+  position: relative;
+
+  height: 31px;
+  min-width: 31px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0 6px;
+
+  border: none;
+  border-radius: 5px;
+
+  background: transparent;
+
+  color:
+    var(--toolbar-button-text);
+
+  font-family: inherit;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+
+.note-workspace
+.graph-toolbar-button svg {
+  color: currentColor;
+}
+
+
+.note-workspace
+.graph-toolbar-button:hover:not(:disabled) {
+  background:
+    var(--toolbar-button-hover-bg);
+
+  color:
+    var(--toolbar-button-hover-text);
+}
+
+
+.note-workspace
+.graph-toolbar-button-active {
+  background:
+    var(--accent-primary);
+
+  color:
+    var(--text-on-accent);
+}
+
+
+.note-workspace
+.graph-toolbar-button-active:hover:not(:disabled) {
+  background:
+    var(--accent-primary-hover);
+
+  color:
+    var(--text-on-accent);
+}
+
+
+.note-workspace
+.graph-toolbar-button:disabled {
+  opacity: 0.35;
+
+  cursor: default;
+}
+
+
+/* ================================================== */
+/* Toolbar Divider                                    */
+/* ================================================== */
+
+.note-workspace .graph-toolbar-divider {
+  width: 1px;
+  height: 22px;
+
+  margin: 0 5px;
+
+  background:
+    var(--border-control);
+}
+
+
+/* ================================================== */
+/* Colour Button                                      */
+/* ================================================== */
+
+.note-workspace
+.graph-toolbar-popover-wrapper {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+}
+
+
+.note-workspace
+.graph-toolbar-color-icon {
+  position: relative;
+
+  width: 19px;
+  height: 22px;
+
+  display: flex;
+  justify-content: center;
+}
+
+
+.note-workspace
+.graph-toolbar-color-indicator {
+  position: absolute;
+
+  left: 2px;
+  right: 2px;
+  bottom: 0;
+
+  height: 2px;
+
+  border-radius: 4px;
+
+  pointer-events: none;
+}
+
+
+.note-workspace
+.graph-hidden-color-input {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+
+  opacity: 0;
+
+  pointer-events: none;
+}
+
+
+/* ================================================== */
+/* Shape Trigger                                      */
+/* ================================================== */
+
+.note-workspace .graph-shape-trigger {
+  width: auto;
+
+  gap: 2px;
+
+  padding-left: 7px;
+  padding-right: 5px;
+}
+
+
+/* ================================================== */
+/* Shape Popover                                      */
+/* ================================================== */
+
+.note-workspace .graph-shape-popover {
+  position: absolute;
+
+  top: calc(100% + 9px);
+  left: 50%;
+
+  z-index: 600;
+
+  display: flex;
+  align-items: center;
+
+  gap: 3px;
+
+  padding: 7px;
+
+  transform:
+    translateX(-50%);
+
+  border:
+    1px solid
+    var(--border-control);
+
+  border-radius: 8px;
+
+  background:
+    var(--bg-panel-secondary);
+
+  box-shadow:
+    var(--shadow-popover);
+}
+
+
+.note-workspace
+.graph-shape-popover::before {
+  content: "";
+
+  position: absolute;
+
+  top: -5px;
+  left: 50%;
+
+  width: 8px;
+  height: 8px;
+
+  transform:
+    translateX(-50%)
+    rotate(45deg);
+
+  border-left:
+    1px solid
+    var(--border-control);
+
+  border-top:
+    1px solid
+    var(--border-control);
+
+  background:
+    var(--bg-panel-secondary);
+}
+
+
+.note-workspace .graph-shape-option {
+  position: relative;
+
+  width: 34px;
+  height: 32px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border:
+    1px solid
+    transparent;
+
+  border-radius: 5px;
+
+  background: transparent;
+
+  color:
+    var(--toolbar-button-text);
+
+  cursor: pointer;
+}
+
+
+.note-workspace
+.graph-shape-option:hover {
+  background:
+    var(--toolbar-button-hover-bg);
+
+  color:
+    var(--toolbar-button-hover-text);
+}
+
+
+.note-workspace
+.graph-shape-option-active {
+  border-color:
+    var(--border-accent-strong);
+
+  background:
+    var(--accent-primary);
+
+  color:
+    var(--text-on-accent);
+}
+
+
+/* ================================================== */
+/* Graph Canvas Overlay Container                     */
+/* ================================================== */
+
+.note-workspace .graph-canvas-shell {
+  position: relative;
+
+  flex: 1;
+
+  min-width: 0;
+  min-height: 0;
+
+  display: flex;
+
+  overflow: hidden;
+}
+
+
+.note-workspace
+.graph-canvas-shell
+.graph-container {
+  flex: 1;
+
+  min-width: 0;
+  min-height: 0;
+}
+
+
+/* ================================================== */
+/* Selected Node Overlay                              */
+/* ================================================== */
+
+.note-workspace
+.graph-selected-node-overlay {
+  position: absolute;
+
+  top: 12px;
+  left: 12px;
+
+  z-index: 40;
+
+  min-width: 125px;
+  max-width: 190px;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 2px;
+
+  padding: 8px 11px;
+
+  border:
+    1px solid
+    var(--border-accent-muted);
+
+  border-radius: 7px;
+
+  background:
+    var(--bg-panel-elevated);
+
+  box-shadow:
+    var(--shadow-panel);
+
+  pointer-events: none;
+}
+
+
+.note-workspace
+.graph-selected-node-overlay span {
+  color:
+    var(--text-muted);
+
+  font-size: 9px;
+  font-weight: 600;
+
+  letter-spacing: 0.06em;
+
+  text-transform: uppercase;
+}
+
+
+.note-workspace
+.graph-selected-node-overlay strong {
+  overflow: hidden;
+
+  color:
+    var(--text-primary);
+
+  font-size: 12px;
+  font-weight: 600;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* ================================================== */
+/* Link Mode Overlay                                  */
+/* ================================================== */
+
+.note-workspace
+.graph-link-mode-overlay {
+  position: absolute;
+
+  top: 12px;
+  right: 12px;
+
+  z-index: 50;
+
+  display: flex;
+  align-items: center;
+
+  gap: 9px;
+
+  max-width: 240px;
+
+  padding: 8px 9px;
+
+  border:
+    1px solid
+    var(--border-accent-muted);
+
+  border-radius: 8px;
+
+  background:
+    var(--bg-panel-elevated);
+
+  box-shadow:
+    var(--shadow-panel);
+
+  color:
+    var(--text-primary);
+}
+
+
+.note-workspace
+.graph-link-mode-overlay > svg {
+  flex-shrink: 0;
+
+  color:
+    var(--text-accent);
+}
+
+
+.note-workspace
+.graph-link-mode-overlay div {
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 1px;
+}
+
+
+.note-workspace
+.graph-link-mode-overlay strong {
+  overflow: hidden;
+
+  font-size: 11px;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.note-workspace
+.graph-link-mode-overlay span {
+  color:
+    var(--text-muted);
+
+  font-size: 10px;
+}
+
+
+.note-workspace
+.graph-link-mode-overlay button {
+  width: 26px;
+  height: 26px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin-left: 3px;
+  padding: 0;
+
+  border: none;
+  border-radius: 5px;
+
+  background: transparent;
+
+  color:
+    var(--text-secondary);
+
+  cursor: pointer;
+}
+
+
+.note-workspace
+.graph-link-mode-overlay button:hover {
+  background:
+    var(--bg-hover);
+
+  color:
+    var(--text-primary);
+}
+
+.note-workspace .graph-selected-node-overlay,
+.note-workspace .graph-link-mode-overlay {
+  background:
+    color-mix(
+      in srgb,
+      var(--bg-panel-elevated) 60%,
+      transparent
+    );
+
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+/* ================================================== */
+/* Link Success                                       */
+/* ================================================== */
+
+.note-workspace
+.graph-link-feedback {
+  position: absolute;
+
+  left: 50%;
+  bottom: 12px;
+
+  z-index: 50;
+
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  padding: 8px 11px;
+
+  transform:
+    translateX(-50%);
+
+  border:
+    1px solid
+    var(--status-success);
+
+  border-radius: 7px;
+
+  background:
+    var(--bg-panel-elevated);
+
+  color:
+    var(--status-success);
+
+  box-shadow:
+    var(--shadow-panel);
+
+  font-size: 11px;
+  font-weight: 600;
+
+  white-space: nowrap;
+}
+
+/* ================================================== */
+/* Workspace Tooltips                                 */
+/* ================================================== */
+
+.note-workspace
+.raw-notes-toolbar
+button[data-tooltip],
+
+.note-workspace
+.graph-node-toolbar
+button[data-tooltip],
+
+.note-workspace
+.graph-shape-popover
+button[data-tooltip],
+
+.note-workspace
+.search-submit-button[data-tooltip] {
+  position: relative;
+}
+
+
+/* Tooltip box */
+
+.note-workspace
+.raw-notes-toolbar
+button[data-tooltip]::after,
+
+.note-workspace
+.graph-node-toolbar
+button[data-tooltip]::after,
+
+.note-workspace
+.graph-shape-popover
+button[data-tooltip]::after,
+
+.note-workspace
+.search-submit-button[data-tooltip]::after {
+  content: attr(data-tooltip);
+
+  position: absolute;
+
+  top: calc(100% + 8px);
+  left: 50%;
+
+  z-index: 1000;
+
+  transform:
+    translateX(-50%)
+    translateY(-3px);
+
+  padding: 6px 9px;
+
+  border:
+    1px solid
+    var(--border-control);
+
+  border-radius: 7px;
+
+  background:
+    var(--bg-tooltip);
+
+  box-shadow:
+    var(--shadow-popover);
+
+  color:
+    var(--text-primary);
+
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+
+  white-space: nowrap;
+
+  opacity: 0;
+  visibility: hidden;
+
+  pointer-events: none;
+
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease,
+    visibility 0.12s ease;
+}
+
+
+/* Little diamond / pointer */
+
+.note-workspace
+.raw-notes-toolbar
+button[data-tooltip]::before,
+
+.note-workspace
+.graph-node-toolbar
+button[data-tooltip]::before,
+
+.note-workspace
+.graph-shape-popover
+button[data-tooltip]::before,
+
+.note-workspace
+.search-submit-button[data-tooltip]::before {
+  content: "";
+
+  position: absolute;
+
+  top: calc(100% + 4px);
+  left: 50%;
+
+  z-index: 1001;
+
+  width: 7px;
+  height: 7px;
+
+  background:
+    var(--bg-tooltip);
+
+  border-left:
+    1px solid
+    var(--border-control);
+
+  border-top:
+    1px solid
+    var(--border-control);
+
+  transform:
+    translateX(-50%)
+    rotate(45deg);
+
+  opacity: 0;
+  visibility: hidden;
+
+  pointer-events: none;
+}
+
+
+/* Show tooltip */
+
+.note-workspace
+.raw-notes-toolbar
+button[data-tooltip]:hover::after,
+
+.note-workspace
+.raw-notes-toolbar
+button[data-tooltip]:hover::before,
+
+.note-workspace
+.graph-node-toolbar
+button[data-tooltip]:hover::after,
+
+.note-workspace
+.graph-node-toolbar
+button[data-tooltip]:hover::before,
+
+.note-workspace
+.graph-shape-popover
+button[data-tooltip]:hover::after,
+
+.note-workspace
+.graph-shape-popover
+button[data-tooltip]:hover::before,
+
+.note-workspace
+.search-submit-button[data-tooltip]:hover::after,
+
+.note-workspace
+.search-submit-button[data-tooltip]:hover::before {
+  opacity: 1;
+  visibility: visible;
+}
+
+
+/* Tooltip entrance */
+
+.note-workspace
+.raw-notes-toolbar
+button[data-tooltip]:hover::after,
+
+.note-workspace
+.graph-node-toolbar
+button[data-tooltip]:hover::after,
+
+.note-workspace
+.graph-shape-popover
+button[data-tooltip]:hover::after,
+
+.note-workspace
+.search-submit-button[data-tooltip]:hover::after {
+  transform:
+    translateX(-50%)
+    translateY(0);
+}
+
+/* ================================================== */
+/* Edge-aware tooltip: Semantic Search                */
+/* ================================================== */
+
+.note-workspace
+.search-submit-button[data-tooltip]::after {
+  left: auto;
+  right: 0;
+
+  transform:
+    translateY(-3px);
+}
+
+.note-workspace
+.search-submit-button[data-tooltip]::before {
+  left: auto;
+  right: 10px;
+
+  transform:
+    rotate(45deg);
+}
+
+.note-workspace
+.search-submit-button[data-tooltip]:hover::after,
+.note-workspace
+.search-submit-button[data-tooltip]:focus-visible::after {
+  transform:
+    translateY(0);
+}
+
+/* Tooltip whose box should extend right */
+
+.note-workspace
+.tooltip-align-left[data-tooltip]::after {
+  left: 0;
+  right: auto;
+
+  transform:
+    translateY(-3px);
+}
+
+.note-workspace
+.tooltip-align-left[data-tooltip]::before {
+  left: 10px;
+  right: auto;
+
+  transform:
+    rotate(45deg);
+}
+
+
+/* Tooltip whose box should extend left */
+
+.note-workspace
+.tooltip-align-right[data-tooltip]::after {
+  left: auto;
+  right: 0;
+
+  transform:
+    translateY(-3px);
+}
+
+.note-workspace
+.tooltip-align-right[data-tooltip]::before {
+  left: auto;
+  right: 10px;
+
+  transform:
+    rotate(45deg);
+}
+
+
+/* Preserve entrance animation */
+
+.note-workspace
+.tooltip-align-left[data-tooltip]:hover::after,
+.note-workspace
+.tooltip-align-left[data-tooltip]:focus-visible::after,
+.note-workspace
+.tooltip-align-right[data-tooltip]:hover::after,
+.note-workspace
+.tooltip-align-right[data-tooltip]:focus-visible::after {
+  transform:
+    translateY(0);
+}
+
+/* Keep tooltip-producing controls above surrounding content */
+
+.note-workspace .raw-notes-heading {
+  position: relative;
+  z-index: 100;
+}
+
+.note-workspace .graph-node-toolbar {
+  position: relative;
+  z-index: 100;
+
+  overflow: visible;
+}
+
+.note-workspace .graph-canvas-shell {
+  position: relative;
+  z-index: 1;
+}
+
+/* ================================================== */
+/* Editor corner cleanup                              */
+/* ================================================== */
+
+.note-workspace .raw-notes-toolbar,
+.note-workspace .graph-node-toolbar {
+  border-radius: 6px 6px 0 0;
+  background-clip: padding-box;
+}
+
+.note-workspace .raw-notes-content,
+.note-workspace .graph-canvas-shell {
+  border-radius: 0 0 6px 6px;
+  background-clip: padding-box;
+}
+
+/* ================================================== */
+/* Summary scrollbar                                  */
+/* ================================================== */
+
+.note-workspace
+.summary-panel textarea {
+  scrollbar-color:
+    var(--editor-scrollbar-thumb)
+    transparent;
+}
+
+
+/* Chrome / Edge / Safari */
+
+.note-workspace
+.summary-panel textarea::-webkit-scrollbar {
+  width: 8px;
+}
+
+
+.note-workspace
+.summary-panel textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+
+.note-workspace
+.summary-panel textarea::-webkit-scrollbar-thumb {
+  background:
+    var(--editor-scrollbar-thumb);
+
+  border: 2px solid transparent;
+
+  border-radius: 999px;
+
+  background-clip: padding-box;
+}
+
+
+.note-workspace
+.summary-panel textarea::-webkit-scrollbar-thumb:hover {
+  background:
+    var(--editor-scrollbar-thumb-hover);
+
+  border: 2px solid transparent;
+
+  background-clip: padding-box;
+}
+
+
+.note-workspace
+.summary-panel textarea::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Raw Notes still needs clipping for its rounded editor */
+.note-workspace .raw-notes-editor {
+  overflow: hidden;
+}
+
+/* Graph toolbar needs to let tooltips/popovers escape */
+.note-workspace .graph-editor {
+  position: relative;
+  overflow: visible;
 }

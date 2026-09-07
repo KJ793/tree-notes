@@ -53,16 +53,6 @@
 
 .profile-save-button {
   padding: 0 22px;
-  border: 
-    1px solid 
-    var(--border-accent-strong);
-  background: var(--accent-primary);
-  color: var(--text-on-accent);
-  box-shadow: var(--shadow-panel);
-}
-
-.profile-save-button:hover {
-  background: var(--accent-primary-hover);
 }
 
 .profile-save-button:active {
@@ -372,27 +362,58 @@
 }
 
 .profile-modal-close {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  place-items: top center;
-  border: 
-    1px solid 
-    var(--border-control);
-  border-radius: 9px;
-  background: var(--bg-panel-secondary);
+  width: 32px;
+  height: 32px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border: 1px solid var(--border-control);
+  border-radius: 8px;
+
+  background: transparent;
   color: var(--text-secondary);
-  font: inherit;
-  font-size: 1.45rem;
-  line-height: 1;
+
   cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .profile-modal-close:hover {
-  border-color: var(--bg-hover);
-  background: var(--text-primary);
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 10%,
+      transparent
+    );
+
+  border-color: var(--accent-primary);
   color: var(--accent-primary);
+}
+
+.profile-modal-close:active {
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 18%,
+      transparent
+    );
+}
+
+.profile-modal-close svg {
+  width: 18px;
+  height: 18px;
+
+  color: currentColor;
+  stroke: currentColor;
+
+  pointer-events: none;
 }
 
 .profile-password-form {
@@ -430,6 +451,15 @@
   padding-top: 4px;
 }
 
+.profile-security-button {
+  width: 100%;
+  height: 40px;
+
+  margin-top: 18px;
+
+  flex-shrink: 0;
+}
+
 @media (max-width: 520px) {
   .profile-modal-backdrop {
     padding: 14px;
@@ -448,4 +478,14 @@
   .profile-modal-actions .profile-secondary-button {
     width: 100%;
   }
+}
+.profile-modal-actions
+.primary-action:disabled {
+  opacity: 1;
+
+  background: var(--bg-control);
+  border-color: var(--border-control);
+  color: var(--text-muted);
+
+  cursor: not-allowed;
 }

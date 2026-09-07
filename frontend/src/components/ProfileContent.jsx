@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./ProfileContent.css";
+import { X } from "lucide-react";
 import { useTheme } from "../context/ThemeContext.jsx";
 
 // Initial state for the profile data. This is used to reset the form when the component is first loaded or when the user logs out.
@@ -125,6 +126,10 @@ function ProfileContent() {
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordForm, setPasswordForm] = useState(emptyPasswordForm);
   const [passwordMessage, setPasswordMessage] = useState(null);
+  const passwordFieldsComplete =
+  passwordForm.oldPassword.trim().length > 0 &&
+  passwordForm.newPassword.trim().length > 0 &&
+  passwordForm.confirmPassword.trim().length > 0;
 
   // Load the currently logged-in user's profile when this page opens.
   useEffect(() => {
@@ -308,7 +313,7 @@ function ProfileContent() {
         </div>
 
         <button
-          className="profile-save-button"
+          className="profile-save-button primary-action"
           type="submit"
           form="profile-form"
         >
@@ -429,7 +434,7 @@ function ProfileContent() {
             </div>
 
             <button
-              className="profile-secondary-button profile-full-button"
+              className="profile-security-button secondary-action"
               type="button"
               onClick={openPasswordModal}
             >
@@ -467,7 +472,10 @@ function ProfileContent() {
                 onClick={closePasswordModal}
                 aria-label="Close change password dialog"
               >
-                x
+                <X
+                  size={18}
+                  strokeWidth={1.9}
+                />
               </button>
             </div>
 
@@ -517,13 +525,17 @@ function ProfileContent() {
 
               <div className="profile-modal-actions">
                 <button
-                  className="profile-secondary-button"
+                  className="profile-secondary-button secondary-action"
                   type="button"
                   onClick={closePasswordModal}
                 >
                   Cancel
                 </button>
-                <button className="profile-save-button" type="submit">
+                <button 
+                className="profile-save-button primary-action"
+                type="submit"
+                disabled={!passwordFieldsComplete}
+                >
                   Update password
                 </button>
               </div>

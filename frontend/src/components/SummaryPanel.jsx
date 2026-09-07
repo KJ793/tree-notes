@@ -460,12 +460,11 @@ function SummaryPanel({ rawNotes }) {
 
             <button
               type="button"
-              className="summary-action-button"
+              className="summary-action-button primary-action"
               onClick={generateSummary}
               disabled={summaryLoading}
             >
               <RefreshCw
-                size={17}
                 strokeWidth={1.9}
               />
 
@@ -557,7 +556,7 @@ function SummaryPanel({ rawNotes }) {
 
               <button
                 type="button"
-                className="summary-action-button"
+                className="summary-action-button secondary-action"
                 onClick={reviewMySummary}
                 disabled={reviewLoading}
               >

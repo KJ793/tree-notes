@@ -1594,3 +1594,146 @@ body{
     translateX(-50%)
     translateY(0);
 }
+
+/* ================================================== */
+/* Button Style Hierarchy - Primary Action Button     */
+/* ================================================== */
+
+.primary-action {
+  min-height: 34px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 7px;
+
+  padding: 0 12px;
+
+  border:
+    1px solid
+    var(--border-accent-muted);
+
+  border-radius: 7px;
+
+  background:
+    var(--accent-primary);
+
+  color:
+    var(--text-on-accent);
+
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+
+  white-space: nowrap;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    transform 0.12s ease;
+}
+
+.primary-action svg {
+  width: 17px;
+  height: 17px;
+
+  flex-shrink: 0;
+
+  color: currentColor;
+}
+
+.primary-action:hover:not(:disabled) {
+  background:
+    var(--accent-primary-hover);
+}
+
+.primary-action:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.primary-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ================================================== */
+/* Button Style Hierarchy - Secondary Action Button   */
+/* ================================================== */
+
+.secondary-action {
+  min-height: 34px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 7px;
+
+  padding: 0 12px;
+
+  border:
+    1px solid
+    var(--accent-primary);
+
+  border-radius: 7px;
+
+  background: transparent;
+
+  color:
+    var(--accent-primary);
+
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+
+  white-space: nowrap;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
+}
+
+
+.secondary-action svg {
+  width: 17px;
+  height: 17px;
+
+  flex-shrink: 0;
+
+  color: currentColor;
+}
+
+
+.secondary-action:hover:not(:disabled) {
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 12%,
+      transparent
+    );
+}
+
+
+.secondary-action:active:not(:disabled) {
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 20%,
+      transparent
+    );
+
+  transform:
+    translateY(1px);
+}
+
+
+.secondary-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

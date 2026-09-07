@@ -1,6 +1,48 @@
 import { useRef, useEffect, useState, forwardRef, useImperativeHandle,} from "react";
-import { ChartLine } from "lucide-react";
+import {
+  ChartLine,
+  Palette,
+  Shapes,
+  Circle,
+  RectangleHorizontal,
+  Squircle,
+  Diamond,
+  Triangle,
+  Link2,
+  Sparkles,
+  ChevronDown,
+  X,
+  Check,
+} from "lucide-react";
 import cytoscape from "cytoscape";
+
+const NODE_SHAPES = [
+  {
+    value: "ellipse",
+    label: "Circle",
+    Icon: Circle,
+  },
+  {
+    value: "rectangle",
+    label: "Rectangle",
+    Icon: RectangleHorizontal,
+  },
+  {
+    value: "round-rectangle",
+    label: "Rounded",
+    Icon: Squircle,
+  },
+  {
+    value: "diamond",
+    label: "Diamond",
+    Icon: Diamond,
+  },
+  {
+    value: "triangle",
+    label: "Triangle",
+    Icon: Triangle,
+  },
+];
 
 const GraphPanel = forwardRef(function GraphPanel(
   { rawNotes, selectedText, addNodeTrigger, noteId },
@@ -29,11 +71,30 @@ const GraphPanel = forwardRef(function GraphPanel(
   const [selectedNode, setSelectedNode] = useState(null);
 
   // To link nodes// 
-const [linkMode, setLinkMode] = useState(false);
+  const [linkMode, setLinkMode] = useState(false);
 
-// TO save first node clicked to link to second //
+  // TO save first node clicked to link to second //
 
-const [firstNodeToLink, setFirstNodeToLink] = useState(null);
+  const [firstNodeToLink, setFirstNodeToLink] = useState(null);
+
+  // =========================================================
+  // Graph Toolbar
+  // =========================================================
+
+  // Hidden native colour picker
+  const nodeColorInputRef = useRef(null);
+
+  // Shape selector popover
+  const shapeMenuRef = useRef(null);
+  const [shapeMenuOpen, setShapeMenuOpen] =
+    useState(false);
+
+  // Temporary success message after creating a link
+  const [linkFeedback, setLinkFeedback] =
+    useState("");
+
+  // Used to clear the link-success message
+  const linkFeedbackTimerRef = useRef(null);
 
   async function generateGraph() {
     if (!rawNotes || rawNotes.trim() === "") {
@@ -179,11 +240,32 @@ const [firstNodeToLink, setFirstNodeToLink] = useState(null);
           },
         },
 
+        // highlight the source node when linking
+        {
+          selector: "node.link-source",
+          style: {
+            "border-width": 4,
+            "border-color": "#f2c94c",
+
+            "overlay-color": "#f2c94c",
+            "overlay-opacity": 0.12,
+            "overlay-padding": "8px",
+          },
+        },
+
         // If node has saved colour data, use it //
         {
           selector: "node[color]",
           style: {
             "background-color": "data(color)",
+          },
+        },
+
+        // If node has saved shape data, use it //
+        {
+          selector: "node[shape]",
+          style: {
+            shape: "data(shape)",
           },
         },
 
@@ -225,20 +307,62 @@ const [firstNodeToLink, setFirstNodeToLink] = useState(null);
 
     // Detect selected node //
   cy.on("tap", "node", (event) => {
-  const clickedNode = event.target;
+  const clickedNode =
+    event.target;
 
-  // Normal node selection
+  const clickedNodeData = {
+    ...clickedNode.data(),
+
+    color:
+      clickedNode.data("color") ||
+      "#6366F1",
+
+    shape:
+      clickedNode.data("shape") ||
+      "round-rectangle",
+  };
+
+
+  // Always update normal node selection
+  setSelectedNode(
+    clickedNodeData
+  );
+
+
+  // =====================================================
+  // NORMAL NODE SELECTION
+  // =====================================================
+
   if (!linkModeRef.current) {
-    setSelectedNode(clickedNode.data());
-    console.log("Selected node:", clickedNode.data());
+    console.log(
+      "Selected node:",
+      clickedNode.data()
+    );
+
     return;
   }
 
-  // First node selected for linking
-  if (!firstNodeToLinkRef.current) {
-    firstNodeToLinkRef.current = clickedNode.id();
 
-    setFirstNodeToLink(clickedNode.id());
+  // =====================================================
+  // LINK MODE: SELECT FIRST NODE
+  // =====================================================
+
+  if (!firstNodeToLinkRef.current) {
+
+    firstNodeToLinkRef.current =
+      clickedNode.id();
+
+    setFirstNodeToLink(
+      clickedNode.id()
+    );
+
+    /*
+      Make first selected link node
+      visually obvious.
+    */
+    clickedNode.addClass(
+      "link-source"
+    );
 
     console.log(
       "First node selected for link:",
@@ -248,25 +372,104 @@ const [firstNodeToLink, setFirstNodeToLink] = useState(null);
     return;
   }
 
-  // Prevent linking node to itself
-  if (firstNodeToLinkRef.current === clickedNode.id()) {
-    console.log("Cannot link a node to itself");
+
+  // =====================================================
+  // PREVENT SELF LINK
+  // =====================================================
+
+  if (
+    firstNodeToLinkRef.current ===
+    clickedNode.id()
+  ) {
     return;
   }
 
-  const sourceId = firstNodeToLinkRef.current;
-  const targetId = clickedNode.id();
 
-  const edgeId = `manual-edge-${Date.now()}`;
+  // =====================================================
+  // CREATE LINK
+  // =====================================================
+
+  const sourceId =
+    firstNodeToLinkRef.current;
+
+  const targetId =
+    clickedNode.id();
+
+
+  const sourceNode =
+    cy.getElementById(
+      sourceId
+    );
+
+
+  const sourceLabel =
+    sourceNode.data("label") ||
+    sourceId;
+
+  const targetLabel =
+    clickedNode.data("label") ||
+    targetId;
+
+
+  const edgeId =
+    `manual-edge-${Date.now()}`;
+
 
   cy.add({
     group: "edges",
+
     data: {
       id: edgeId,
-      source: sourceId,
-      target: targetId,
+
+      source:
+        sourceId,
+
+      target:
+        targetId,
     },
   });
+
+
+  // Remove first-node highlight
+  sourceNode.removeClass(
+    "link-source"
+  );
+
+
+  // Exit link mode
+  linkModeRef.current = false;
+
+  firstNodeToLinkRef.current =
+    null;
+
+  setLinkMode(false);
+
+  setFirstNodeToLink(null);
+
+
+  // =====================================================
+  // USER FEEDBACK
+  // =====================================================
+
+  setLinkFeedback(
+    `Link created: ${sourceLabel} → ${targetLabel}`
+  );
+
+
+  if (
+    linkFeedbackTimerRef.current
+  ) {
+    clearTimeout(
+      linkFeedbackTimerRef.current
+    );
+  }
+
+
+  linkFeedbackTimerRef.current =
+    setTimeout(() => {
+      setLinkFeedback("");
+    }, 2500);
+
 
   console.log(
     "Nodes linked:",
@@ -274,13 +477,6 @@ const [firstNodeToLink, setFirstNodeToLink] = useState(null);
     "→",
     targetId
   );
-
-  // Exit link mode
-  linkModeRef.current = false;
-  firstNodeToLinkRef.current = null;
-
-  setLinkMode(false);
-  setFirstNodeToLink(null);
 });
 
 cy.one("layoutstop", () => {
@@ -405,6 +601,57 @@ async function saveGraph() {
   } catch (error) {
     console.error("Graph save error:", error);
   }
+}
+
+function startLinkMode() {
+  /*
+    Clicking the active Link button
+    again cancels link mode.
+  */
+  if (linkModeRef.current) {
+    cancelLinkMode();
+    return;
+  }
+
+
+  cyRef.current
+    ?.nodes()
+    .removeClass(
+      "link-source"
+    );
+
+
+  linkModeRef.current = true;
+
+  firstNodeToLinkRef.current =
+    null;
+
+
+  setLinkMode(true);
+
+  setFirstNodeToLink(null);
+
+  setLinkFeedback("");
+}
+
+
+function cancelLinkMode() {
+  cyRef.current
+    ?.nodes()
+    .removeClass(
+      "link-source"
+    );
+
+
+  linkModeRef.current = false;
+
+  firstNodeToLinkRef.current =
+    null;
+
+
+  setLinkMode(false);
+
+  setFirstNodeToLink(null);
 }
 
 function createLinkedTextNode(label, linkColor) {
@@ -592,6 +839,142 @@ function setLinkedNodeColor(
   );
 }
 
+function getSelectedCyNode() {
+  if (
+    !cyRef.current ||
+    !selectedNode?.id
+  ) {
+    return null;
+  }
+
+  const node =
+    cyRef.current.getElementById(
+      selectedNode.id
+    );
+
+  if (!node || node.empty()) {
+    return null;
+  }
+
+  return node;
+}
+
+
+function changeSelectedNodeColor(newColor) {
+  const node = getSelectedCyNode();
+
+  if (!node) {
+    return;
+  }
+
+  // Change visually
+  node.style(
+    "background-color",
+    newColor
+  );
+
+  // Preserve for saving
+  node.data(
+    "color",
+    newColor
+  );
+
+  // Update toolbar indicator
+  setSelectedNode((current) => ({
+    ...current,
+    color: newColor,
+  }));
+}
+
+
+function changeSelectedNodeShape(newShape) {
+  const node = getSelectedCyNode();
+
+  if (!node) {
+    return;
+  }
+
+  // Change visually
+  node.style(
+    "shape",
+    newShape
+  );
+
+  // Preserve for saving
+  node.data(
+    "shape",
+    newShape
+  );
+
+  // Update toolbar/popover
+  setSelectedNode((current) => ({
+    ...current,
+    shape: newShape,
+  }));
+
+  setShapeMenuOpen(false);
+}
+
+useEffect(() => {
+
+  function handleClickOutside(event) {
+    if (
+      shapeMenuRef.current &&
+      !shapeMenuRef.current.contains(
+        event.target
+      )
+    ) {
+      setShapeMenuOpen(false);
+    }
+  }
+
+
+  function handleEscape(event) {
+    if (event.key === "Escape") {
+
+      setShapeMenuOpen(false);
+
+      if (linkModeRef.current) {
+        cancelLinkMode();
+      }
+    }
+  }
+
+
+  document.addEventListener(
+    "mousedown",
+    handleClickOutside
+  );
+
+  document.addEventListener(
+    "keydown",
+    handleEscape
+  );
+
+
+  return () => {
+
+    document.removeEventListener(
+      "mousedown",
+      handleClickOutside
+    );
+
+    document.removeEventListener(
+      "keydown",
+      handleEscape
+    );
+
+    if (
+      linkFeedbackTimerRef.current
+    ) {
+      clearTimeout(
+        linkFeedbackTimerRef.current
+      );
+    }
+  };
+
+}, []);
+
 useImperativeHandle(ref, () => ({
 
   getGraphData() {
@@ -642,15 +1025,14 @@ useImperativeHandle(ref, () => ({
 
   return (
     <section className="graph-panel">
-      
-      {/* =============================================== */}
-      {/* Graph Panel Header                              */}
-      {/* =============================================== */}
+
+      {/* ================================================= */}
+      {/* GRAPH HEADER                                      */}
+      {/* ================================================= */}
 
       <div className="graph-panel-heading">
 
         <div className="graph-panel-heading-title">
-
           <h2>Graph View</h2>
 
           <ChartLine
@@ -658,169 +1040,350 @@ useImperativeHandle(ref, () => ({
             strokeWidth={1.8}
             aria-hidden="true"
           />
+        </div>
+
+
+        <div className="graph-panel-header-actions">
+
+          {/* Error/status now lives in header */}
+          {error && (
+            <span className="graph-header-error">
+              {error}
+            </span>
+          )}
+
+
+          <button
+            type="button"
+            className="graph-generate-button primary-action"
+            onClick={generateGraph}
+            disabled={loading}
+          >
+            <Sparkles
+              strokeWidth={1.8}
+            />
+
+            <span>
+              {loading
+                ? "Generating..."
+                : "Generate Graph"}
+            </span>
+          </button>
 
         </div>
 
       </div>
 
-      {/* =============================================== */}
-      {/* Graph Content                                   */}
-      {/* =============================================== */}
 
-      <div className="graph-placeholder">
+      {/* ================================================= */}
+      {/* GRAPH EDITOR                                      */}
+      {/* Mirrors raw-notes-editor                          */}
+      {/* ================================================= */}
 
-        {!graphData && !loading && (
-          <p>Graph will appear here</p>
-        )}
+      <div className="graph-editor">
 
-        {loading && (
-          <p>Generating graph...</p>
-        )}
-
-        {error && (
-          <p className="graph-error">{error}</p>
-        )}
+        {/* =============================================== */}
+        {/* GRAPH TOOLBAR                                   */}
+        {/* =============================================== */}
 
         <div
-          ref={graphContainerRef}
-          className="graph-container"
-        ></div>
+          className="graph-node-toolbar"
+          role="toolbar"
+          aria-label="Graph editing"
+        >
 
-        <div className="graph-toolbar">
+          {/* NODE COLOUR */}
 
-          <div className="graph-edit-controls">
+          <div className="graph-toolbar-popover-wrapper">
 
-            {selectedNode ? (
-              <>
-                <span className="selected-node-name">
-                  {selectedNode.label}
-                </span>
+            <button
+              type="button"
+              className="graph-toolbar-button tooltip-align-left"
+              disabled={!selectedNode}
+              onClick={() =>
+                nodeColorInputRef.current?.click()
+              }
+              data-tooltip={
+                selectedNode
+                  ? "Node colour"
+                  : "Select a node first"
+              }
+              aria-label="Node colour"
+            >
+              <span className="graph-toolbar-color-icon">
 
-                {/* NODE COLOUR */}
-                <label className="graph-control">
-                  Color
+                <Palette
+                  size={19}
+                  strokeWidth={1.8}
+                />
 
-                  <input
-                    type="color"
-                    value={selectedNode.color || "#6366F1"}
-                    onChange={(e) => {
-                      const newColor = e.target.value;
+                <span
+                  className="graph-toolbar-color-indicator"
+                  style={{
+                    backgroundColor:
+                      selectedNode?.color ||
+                      "#6366F1",
+                  }}
+                />
 
-                      const node =
-                        cyRef.current.getElementById(
-                          selectedNode.id
-                        );
-
-                      // Change node visually //
-                      node.style(
-                        "background-color",
-                        newColor
-                      );
-
-                      // Store colour inside Cytoscape node data //
-                      node.data("color", newColor);
-
-                      // Update editor UI //
-                      setSelectedNode((prevNode) => ({
-                        ...prevNode,
-                        color: newColor,
-                      }));
-                    }}
-                  />
-                </label>
-
-                {/* NODE SHAPE */}
-                <label className="graph-control">
-                  Shape
-
-                  <select
-                    value={selectedNode.shape || "ellipse"}
-                    onChange={(e) => {
-                      const newShape = e.target.value;
-
-                      const node =
-                        cyRef.current.getElementById(
-                          selectedNode.id
-                        );
-
-                      // Change node visually //
-                      node.style(
-                        "shape",
-                        newShape
-                      );
-
-                      // Store shape inside Cytoscape node data //
-                      node.data(
-                        "shape",
-                        newShape
-                      );
-
-                      // Update editor UI //
-                      setSelectedNode((prevNode) => ({
-                        ...prevNode,
-                        shape: newShape,
-                      }));
-                    }}
-                  >
-                    <option value="ellipse">
-                      Circle
-                    </option>
-
-                    <option value="rectangle">
-                      Rectangle
-                    </option>
-
-                    <option value="round-rectangle">
-                      Rounded
-                    </option>
-
-                    <option value="diamond">
-                      Diamond
-                    </option>
-
-                    <option value="triangle">
-                      Triangle
-                    </option>
-                  </select>
-                </label>
-              </>
-            ) : (
-              <span className="no-node-selected">
-                Select a node to edit
               </span>
+            </button>
+
+
+            <input
+              ref={nodeColorInputRef}
+              className="graph-hidden-color-input"
+              type="color"
+              value={
+                selectedNode?.color ||
+                "#6366F1"
+              }
+              onChange={(event) =>
+                changeSelectedNodeColor(
+                  event.target.value
+                )
+              }
+            />
+
+          </div>
+
+
+          {/* NODE SHAPE */}
+
+          <div
+            className="graph-toolbar-popover-wrapper"
+            ref={shapeMenuRef}
+          >
+
+            <button
+              type="button"
+
+              className={`graph-toolbar-button graph-shape-trigger ${
+                shapeMenuOpen
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
+
+              disabled={!selectedNode}
+
+              onClick={() =>
+                setShapeMenuOpen(
+                  (current) => !current
+                )
+              }
+
+              data-tooltip={
+                selectedNode
+                  ? "Node shape"
+                  : "Select a node first"
+              }
+
+              aria-label="Node shape"
+              aria-haspopup="true"
+              aria-expanded={shapeMenuOpen}
+            >
+              <Shapes
+                size={19}
+                strokeWidth={1.8}
+              />
+
+              <ChevronDown
+                size={12}
+                strokeWidth={1.8}
+              />
+            </button>
+
+
+            {shapeMenuOpen && (
+              <div className="graph-shape-popover">
+
+                {NODE_SHAPES.map(
+                  ({
+                    value,
+                    label,
+                    Icon,
+                  }) => (
+
+                    <button
+                      key={value}
+                      type="button"
+
+                      className={`graph-shape-option ${
+                        (
+                          selectedNode?.shape ||
+                          "round-rectangle"
+                        ) === value
+                          ? "graph-shape-option-active"
+                          : ""
+                      }`}
+
+                      onClick={() =>
+                        changeSelectedNodeShape(
+                          value
+                        )
+                      }
+
+                      data-tooltip={label}
+                      aria-label={label}
+                    >
+                      <Icon
+                        size={18}
+                        strokeWidth={1.8}
+                      />
+                    </button>
+
+                  )
+                )}
+
+              </div>
             )}
 
           </div>
 
+
+          <span className="graph-toolbar-divider" />
+
+
+          {/* LINK NODES */}
+
           <button
             type="button"
-            className="generate-graph-button"
-            onClick={generateGraph}
-            disabled={loading}
+
+            className={`graph-toolbar-button ${
+              linkMode
+                ? "graph-toolbar-button-active"
+                : ""
+            }`}
+
+            onClick={startLinkMode}
+
+            data-tooltip={
+              linkMode
+                ? "Cancel link mode"
+                : "Link nodes"
+            }
+
+            aria-label="Link nodes"
+            aria-pressed={linkMode}
           >
-            {loading
-              ? "Generating..."
-              : "Generate Graph"}
+            <Link2
+              size={19}
+              strokeWidth={1.8}
+            />
           </button>
 
-          <button
-            type="button"
-            className="generate-graph-button"
-            onClick={() => {
-                setLinkMode(true);
-                setFirstNodeToLink(null);
+        </div>
 
-                linkModeRef.current = true;
-                firstNodeToLinkRef.current = null;
 
-                console.log("Link mode started");
-            }}
-            >
-            Link Nodes
-            </button>
+        {/* =============================================== */}
+        {/* GRAPH CANVAS                                    */}
+        {/* =============================================== */}
+
+        <div className="graph-canvas-shell">
+
+          <div
+            ref={graphContainerRef}
+            className="graph-container"
+          />
+
+
+          {/* SELECTED NODE */}
+
+          {selectedNode && (
+            <div className="graph-selected-node-overlay">
+
+              <span>
+                Selected node
+              </span>
+
+              <strong>
+                {selectedNode.label}
+              </strong>
+
+            </div>
+          )}
+
+
+          {/* LINK MODE */}
+
+          {linkMode && (
+            <div className="graph-link-mode-overlay">
+
+              <Link2
+                size={16}
+                strokeWidth={1.8}
+              />
+
+              <div>
+
+                {!firstNodeToLink ? (
+                  <>
+                    <strong>
+                      Link nodes
+                    </strong>
+
+                    <span>
+                      Select the first node
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <strong>
+                      First node:{" "}
+                      {
+                        cyRef.current
+                          ?.getElementById(
+                            firstNodeToLink
+                          )
+                          .data("label")
+                      }
+                    </strong>
+
+                    <span>
+                      Select the second node
+                    </span>
+                  </>
+                )}
+
+              </div>
+
+
+              <button
+                type="button"
+                onClick={cancelLinkMode}
+                aria-label="Cancel linking"
+              >
+                <X
+                  size={15}
+                  strokeWidth={1.8}
+                />
+              </button>
+
+            </div>
+          )}
+
+
+          {/* SUCCESS MESSAGE */}
+
+          {linkFeedback && (
+            <div className="graph-link-feedback">
+
+              <Check
+                size={16}
+                strokeWidth={2}
+              />
+
+              <span>
+                {linkFeedback}
+              </span>
+
+            </div>
+          )}
 
         </div>
+
       </div>
+
     </section>
   );
 
