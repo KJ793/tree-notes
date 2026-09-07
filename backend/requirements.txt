@@ -4,3 +4,8 @@ sqlalchemy
 alembic
 psycopg2-binary
 python-dotenv
+requests
+passlib
+bcrypt==4.0.1
+itsdangerous
+email-validator>=2.0.0
