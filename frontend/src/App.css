@@ -588,29 +588,6 @@ body{
   }
 }
 
-
-.note-workspace{
-
-  width: 100%;
-
-}
-
-.note-title{
-  width: 100%;
-  padding: 10px;
-  margin-bottom: 15px;
-}
-
-.notes-layout{
-  display: flex;
-  gap: 20px;
-}
-
-.raw-notes,
-.graph-panel {
-  flex: 1;
-}
-
 .graph-panel {
   padding: 16px;
 
