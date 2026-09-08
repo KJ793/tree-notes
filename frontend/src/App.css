@@ -417,6 +417,483 @@ body{
   border-color: var(--border-accent-muted);
 }
 
+/* ================================================== */
+/* Sidebar Notes                                      */
+/* ================================================== */
+
+.sidebar-note-button-active {
+  border-color:
+    var(--accent-primary);
+
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 12%,
+      var(--bg-control)
+    );
+
+  color:
+    var(--text-primary);
+}
+
+.sidebar-note-title {
+  display: block;
+
+  width: 100%;
+  min-width: 0;
+
+  overflow: hidden;
+
+  text-align: left;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-new-note-button {
+  width: 100%;
+
+  min-height: 32px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 6px;
+
+  padding: 6px 10px;
+
+  border:
+    1px solid transparent;
+
+  border-radius: 6px;
+
+  background:
+    transparent;
+
+  color:
+    var(--text-secondary);
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+
+.sidebar-new-note-button:hover {
+  border-color:
+    transparent;
+
+  background:
+    var(--bg-control-hover);
+
+  color:
+    var(--text-primary);
+}
+
+
+.sidebar-new-note-button svg {
+  flex-shrink: 0;
+}
+
+.sidebar-note-empty {
+  padding: 8px 10px;
+
+  color:
+    var(--text-muted);
+
+  font-size: 11px;
+
+  text-align: center;
+}
+
+.sidebar-arrow {
+  margin-left: auto;
+
+  transition:
+    transform 0.18s ease;
+}
+
+
+.sidebar-arrow-expanded {
+  transform:
+    rotate(90deg);
+}
+
+.sidebar-note-list {
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
+
+  max-height: 390px;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  padding-right: 3px;
+}
+
+/* ================================================== */
+/* Sidebar Notes List Scrollbar                       */
+/* ================================================== */
+
+.sidebar-note-scroll {
+  display: flex;
+  flex-direction: column;
+
+  gap: 6px;
+
+  max-height: 374px;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  padding-right: 3px;
+  scrollbar-color:
+    var(--page-scrollbar-thumb)
+    transparent;
+  
+}
+
+/* ================================================== */
+/* Sidebar Note Delete Buttton                        */
+/* ================================================== */
+
+.sidebar-note-row {
+  position: relative;
+
+  width: 100%;
+}
+
+
+.sidebar-note-row
+.sidebar-note-button {
+  padding-right: 34px;
+}
+
+
+.sidebar-note-delete-button {
+  position: absolute;
+
+  top: 50%;
+  right: 5px;
+
+  width: 24px !important;
+  height: 24px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border: none;
+
+  border-radius: 5px;
+
+  background: transparent;
+
+  color: var(--text-muted);
+
+  opacity: 0;
+
+  transform:
+    translateY(-50%);
+
+  cursor: pointer;
+
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+
+.sidebar-note-row:hover
+.sidebar-note-delete-button,
+.sidebar-note-row-active
+.sidebar-note-delete-button {
+  opacity: 1;
+}
+
+
+.sidebar-note-delete-button:hover {
+  background:
+    color-mix(
+      in srgb,
+      var(--status-error) 14%,
+      transparent
+    );
+
+  color:
+    var(--status-error);
+}
+
+/* ================================================== */
+/* Sidebar Delete Note Modal                          */
+/* ================================================== */
+
+.note-delete-backdrop {
+  position: fixed;
+  inset: 0;
+
+  z-index: 5000;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 100vw;
+  height: 100vh;
+
+  padding: 24px;
+
+  background:
+    rgba(3, 8, 20, 0.68);
+
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.note-delete-modal {
+  width: min(
+    450px,
+    calc(100vw - 32px)
+  );
+
+  overflow: hidden;
+
+  border:
+    1px solid
+    var(--border-secondary);
+
+  border-radius: 12px;
+
+  background:
+    var(--bg-panel);
+
+  color:
+    var(--text-primary);
+
+  box-shadow:
+    var(--shadow-modal);
+}
+
+.note-delete-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap: 20px;
+
+  padding: 22px 22px 18px;
+
+  border-bottom:
+    1px solid
+    var(--border-secondary);
+}
+
+
+.note-delete-modal-heading {
+  min-width: 0;
+}
+
+
+.note-delete-eyebrow {
+  display: block;
+
+  margin-bottom: 8px;
+
+  color:
+    var(--status-error);
+
+  font-size: 11px;
+  font-weight: 700;
+
+  letter-spacing: 0.08em;
+
+  text-transform: uppercase;
+}
+
+
+.note-delete-modal-header h2 {
+  margin: 0;
+
+  color:
+    var(--text-primary);
+
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+
+.note-delete-subtitle {
+  margin:
+    7px
+    0
+    0;
+
+  max-width: 330px;
+
+  color:
+    var(--text-secondary);
+
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.note-delete-modal-body {
+  padding:
+    20px
+    22px
+    18px;
+
+  color:
+    var(--text-secondary);
+
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+
+.note-delete-modal-body p {
+  margin: 0;
+}
+
+
+.note-delete-modal-body strong {
+  color:
+    var(--text-primary);
+
+  font-weight: 600;
+}
+
+
+.note-delete-warning {
+  margin-top:
+    10px !important;
+
+  color:
+    var(--text-muted);
+}
+
+
+.note-delete-error {
+  margin-top:
+    14px !important;
+
+  padding:
+    10px 12px;
+
+  border:
+    1px solid
+    var(--status-error);
+
+  border-radius: 7px;
+
+  background:
+    color-mix(
+      in srgb,
+      var(--status-error) 8%,
+      transparent
+    );
+
+  color:
+    var(--status-error);
+}
+
+.note-delete-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+
+  gap: 10px;
+
+  padding:
+    0
+    22px
+    22px;
+}
+
+.danger-action {
+  min-height: 36px;
+
+  padding: 0 16px;
+
+  border:
+    1px solid
+    var(--status-error);
+
+  border-radius: 7px;
+
+  background:
+    var(--status-error);
+
+  color: #ffffff;
+
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+
+.danger-action:hover:not(:disabled) {
+  background:
+    color-mix(
+      in srgb,
+      var(--status-error) 84%,
+      white
+    );
+
+  border-color:
+    color-mix(
+      in srgb,
+      var(--status-error) 84%,
+      white
+    );
+
+  color: #ffffff;
+}
+
+
+.danger-action:active:not(:disabled) {
+  background:
+    color-mix(
+      in srgb,
+      var(--status-error) 88%,
+      black
+    );
+
+  border-color:
+    color-mix(
+      in srgb,
+      var(--status-error) 88%,
+      black
+    );
+}
+
+
+.danger-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /*Sidebar toggle button*/
 
 .sidebar-toggle-button {
@@ -1733,4 +2210,32 @@ body{
 .secondary-action:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* ================================================== */
+/* Button Style Hierarchy - Modal Close Button        */
+/* ================================================== */
+
+.modal-close-button {
+  width: 31px;
+  min-width: 31px;
+
+  height: 31px;
+  min-height: 31px;
+
+  flex: 0 0 31px;
+
+  padding: 0;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+.modal-close-button svg {
+  width: 17px;
+  height: 17px;
+
+  pointer-events: none;
 }

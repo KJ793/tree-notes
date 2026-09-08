@@ -467,7 +467,7 @@ function ProfileContent() {
               </div>
 
               <button
-                className="profile-modal-close"
+                className="profile-modal-close modal-close-button"
                 type="button"
                 onClick={closePasswordModal}
                 aria-label="Close change password dialog"
