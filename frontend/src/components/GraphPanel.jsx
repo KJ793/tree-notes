@@ -61,6 +61,11 @@ const GraphPanel = forwardRef(function GraphPanel(
   // References the HTML div where Cytoscape renders //
   const graphContainerRef = useRef(null);
 
+  // References the Graph Editor container for focus management //
+  const graphEditorRef = useRef(null);
+  const [graphEditorActive, setGraphEditorActive] =
+    useState(false);
+
   // Stores the Cytoscape instance so other functions can access it //
   const cyRef = useRef(null);
 
@@ -916,6 +921,29 @@ function changeSelectedNodeShape(newShape) {
 }
 
 useEffect(() => {
+  function handlePointerDownOutside(event) {
+    if (
+      graphEditorRef.current &&
+      !graphEditorRef.current.contains(event.target)
+    ) {
+      setGraphEditorActive(false);
+    }
+  }
+
+  document.addEventListener(
+    "pointerdown",
+    handlePointerDownOutside
+  );
+
+  return () => {
+    document.removeEventListener(
+      "pointerdown",
+      handlePointerDownOutside
+    );
+  };
+}, []);
+
+useEffect(() => {
 
   function handleClickOutside(event) {
     if (
@@ -1080,7 +1108,17 @@ useImperativeHandle(ref, () => ({
       {/* Mirrors raw-notes-editor                          */}
       {/* ================================================= */}
 
-      <div className="graph-editor">
+      <div
+        ref={graphEditorRef}
+        className={`graph-editor ${
+          graphEditorActive
+            ? "graph-editor-active"
+            : ""
+        }`}
+        onPointerDownCapture={() => {
+          setGraphEditorActive(true);
+        }}
+      >
 
         {/* =============================================== */}
         {/* GRAPH TOOLBAR                                   */}
