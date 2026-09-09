@@ -13,8 +13,13 @@ import {
   ChevronDown,
   X,
   Check,
+  CircleAlert,
+  LoaderCircle,
+  Search,
+  ArrowUp,
 } from "lucide-react";
 import cytoscape from "cytoscape";
+import { semanticSearchGraph,} from "../api/graphApi";
 
 const NODE_SHAPES = [
   {
@@ -91,15 +96,25 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   // Shape selector popover
   const shapeMenuRef = useRef(null);
-  const [shapeMenuOpen, setShapeMenuOpen] =
-    useState(false);
+  const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
 
-  // Temporary success message after creating a link
-  const [linkFeedback, setLinkFeedback] =
-    useState("");
+  // Generic temporary feedback for graph actions
+  const [graphFeedback, setGraphFeedback] = useState(null);
 
-  // Used to clear the link-success message
-  const linkFeedbackTimerRef = useRef(null);
+  // Used to clear graph feedback automatically
+  const graphFeedbackTimerRef = useRef(null);
+
+  // =========================================================
+  // Graph Semantic Search
+  // =========================================================
+
+  const [semanticSearchOpen, setSemanticSearchOpen] = useState(false);
+
+  const [semanticSearchQuery, setSemanticSearchQuery] = useState("");
+
+  const [semanticSearchLoading, setSemanticSearchLoading] = useState(false);
+
+  const semanticSearchRef = useRef(null);
 
   async function generateGraph() {
     if (!rawNotes || rawNotes.trim() === "") {
@@ -456,25 +471,10 @@ const GraphPanel = forwardRef(function GraphPanel(
   // USER FEEDBACK
   // =====================================================
 
-  setLinkFeedback(
-    `Link created: ${sourceLabel} → ${targetLabel}`
+  showGraphFeedback(
+    `Link created: ${sourceLabel} → ${targetLabel}`,
+    "success"
   );
-
-
-  if (
-    linkFeedbackTimerRef.current
-  ) {
-    clearTimeout(
-      linkFeedbackTimerRef.current
-    );
-  }
-
-
-  linkFeedbackTimerRef.current =
-    setTimeout(() => {
-      setLinkFeedback("");
-    }, 2500);
-
 
   console.log(
     "Nodes linked:",
@@ -636,7 +636,7 @@ function startLinkMode() {
 
   setFirstNodeToLink(null);
 
-  setLinkFeedback("");
+  setGraphFeedback(null);
 }
 
 
@@ -920,6 +920,133 @@ function changeSelectedNodeShape(newShape) {
   setShapeMenuOpen(false);
 }
 
+function showGraphFeedback(
+  message,
+  type = "success"
+) {
+  setGraphFeedback({
+    message,
+    type,
+  });
+
+  if (graphFeedbackTimerRef.current) {
+    clearTimeout(
+      graphFeedbackTimerRef.current
+    );
+  }
+
+  graphFeedbackTimerRef.current =
+    setTimeout(() => {
+      setGraphFeedback(null);
+    }, 2500);
+}
+
+async function handleSemanticSearch() {
+  const query =
+    semanticSearchQuery.trim();
+
+  if (!query) {
+    return;
+  }
+
+  // Collapse the search UI as soon as the search is submitted.
+  setSemanticSearchOpen(false);
+
+  if (!noteId) {
+    showGraphFeedback(
+      "Unable to search because no note is selected.",
+      "error"
+    );
+    return;
+  }
+
+  setSemanticSearchLoading(true);
+
+  try {
+    showGraphFeedback(
+      `Searching graph for "${query}"...`,
+      "info"
+    );
+
+    const result =
+      await semanticSearchGraph(
+        noteId,
+        query
+      );
+
+    if (!result?.match) {
+      showGraphFeedback(
+        `No matching node found for "${query}".`,
+        "error"
+      );
+      return;
+    }
+
+    const match = result.match;
+
+    const found =
+      focusNode(match.node_id);
+
+    if (!found) {
+      showGraphFeedback(
+        "The matching node could not be found in the current graph.",
+        "error"
+      );
+      return;
+    }
+
+    showGraphFeedback(
+      `Closest match to "${query}": ${match.label}`,
+      "success"
+    );
+
+    setSemanticSearchQuery("");
+
+  } catch (error) {
+    console.error(
+      "Semantic graph search failed:",
+      error
+    );
+
+    showGraphFeedback(
+      "Unable to search the graph. Please try again.",
+      "error"
+    );
+
+  } finally {
+    setSemanticSearchLoading(false);
+  }
+}
+
+useEffect(() => {
+  if (!semanticSearchOpen) {
+    return;
+  }
+
+  function handleSemanticSearchOutside(event) {
+    if (
+      semanticSearchRef.current &&
+      !semanticSearchRef.current.contains(event.target)
+    ) {
+      setSemanticSearchOpen(false);
+    }
+  }
+
+  document.addEventListener(
+    "pointerdown",
+    handleSemanticSearchOutside,
+    true
+  );
+
+  return () => {
+    document.removeEventListener(
+      "pointerdown",
+      handleSemanticSearchOutside,
+      true
+    );
+  };
+}, [semanticSearchOpen]);
+
 useEffect(() => {
   function handlePointerDownOutside(event) {
     if (
@@ -993,10 +1120,10 @@ useEffect(() => {
     );
 
     if (
-      linkFeedbackTimerRef.current
+      graphFeedbackTimerRef.current
     ) {
       clearTimeout(
-        linkFeedbackTimerRef.current
+        graphFeedbackTimerRef.current
       );
     }
   };
@@ -1401,22 +1528,135 @@ useImperativeHandle(ref, () => ({
           )}
 
 
-          {/* SUCCESS MESSAGE */}
+          {/* GRAPH FEEDBACK */}
 
-          {linkFeedback && (
-            <div className="graph-link-feedback">
-
-              <Check
-                size={16}
-                strokeWidth={2}
-              />
+          {graphFeedback && (
+            <div
+              className={`graph-feedback graph-feedback-${graphFeedback.type}`}
+            >
+              {graphFeedback.type === "error" ? (
+                <CircleAlert
+                  size={16}
+                  strokeWidth={2}
+                />
+              ) : graphFeedback.type === "info" ? (
+                <LoaderCircle
+                  size={16}
+                  strokeWidth={2}
+                  className="graph-feedback-spinner"
+                />
+              ) :(
+                <Check
+                  size={16}
+                  strokeWidth={2}
+                />
+              )}
 
               <span>
-                {linkFeedback}
+                {graphFeedback.message}
               </span>
-
             </div>
           )}
+
+          {/* SEMANTIC GRAPH SEARCH */}
+
+          <div
+            ref={semanticSearchRef}
+            className={`graph-semantic-search ${
+              semanticSearchOpen
+                ? "graph-semantic-search-open"
+                : ""
+            }`}
+          >
+
+            {semanticSearchOpen ? (
+
+              <>
+                <Search
+                  size={17}
+                  strokeWidth={1.8}
+                  className="graph-semantic-search-icon"
+                />
+
+
+                <input
+                  type="text"
+
+                  value={semanticSearchQuery}
+
+                  onChange={(event) =>
+                    setSemanticSearchQuery(event.target.value)
+                  }
+
+                  placeholder="Search graph..."
+
+                  autoFocus
+
+                  onKeyDown={(event) => {
+
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleSemanticSearch();
+                    }
+
+                    if (event.key === "Escape") {
+                      setSemanticSearchOpen(false);
+                    }
+
+                  }}
+                />
+
+                <button
+                  type="button"
+
+                  className="graph-semantic-submit"
+
+                  aria-label="Search graph"
+
+                  data-tooltip="Semantic search"
+
+                  disabled={
+                    semanticSearchLoading ||
+                    !semanticSearchQuery.trim()
+                  }
+
+                  onClick={handleSemanticSearch}
+                >
+
+                  <ArrowUp
+                    size={17}
+                    strokeWidth={2}
+                  />
+
+                </button>
+              </>
+
+            ) : (
+
+              <button
+                type="button"
+
+                className="graph-semantic-search-toggle"
+
+                aria-label="Semantic graph search"
+
+                data-tooltip="Semantic search"
+
+                onClick={() =>
+                  setSemanticSearchOpen(true)
+                }
+              >
+
+                <Search
+                  size={18}
+                  strokeWidth={1.9}
+                />
+
+              </button>
+
+            )}
+
+          </div>
 
         </div>
 

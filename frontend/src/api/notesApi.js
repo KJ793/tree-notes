@@ -1,6 +1,69 @@
+/* =========================================================
+   NOTES API
+   =========================================================
+
+   TEMPORARY FRONTEND DEVELOPMENT MODE
+   -----------------------------------
+   While USE_MOCK_NOTES is true, TreeNotes stores notes in
+   browser localStorage.
+
+   This allows the frontend to demonstrate:
+   - loading notes
+   - creating notes
+   - editing/saving notes
+   - deleting notes
+   - persistence after page refresh
+
+   WITHOUT requiring the real backend database yet.
+
+   Once the backend endpoints are implemented, simply set:
+
+       const USE_MOCK_NOTES = false;
+
+   The exported frontend functions do not need to change.
+
+   Expected backend endpoints:
+
+       GET    /api/notes
+       POST   /api/notes
+       PATCH  /api/notes/:noteId
+       DELETE /api/notes/:noteId
+   ========================================================= */
+
+
 const USE_MOCK_NOTES = true;
 
-const STORAGE_KEY = "treenotes-dev-notes";
+
+/*
+  If VITE_API_URL is not supplied, this uses the
+  current frontend origin with /api.
+
+  Example .env later:
+
+  VITE_API_URL=http://localhost:3000/api
+*/
+const API_BASE =
+  import.meta.env.VITE_API_URL ??
+  "/api";
+
+
+const STORAGE_KEY =
+  "treenotes-dev-notes";
+
+
+
+/* =========================================================
+   TEMPORARY MOCK DEFAULT NOTES
+   =========================================================
+
+   These exist ONLY to provide starter/demo content while
+   the frontend is running without the backend database.
+
+   They are inserted only the FIRST time localStorage is
+   initialised.
+
+   If the user deletes every note, they are NOT recreated.
+   ========================================================= */
 
 const MOCK_DEFAULT_NOTES = [
   {
@@ -52,6 +115,19 @@ const MOCK_DEFAULT_NOTES = [
   },
 ];
 
+
+
+/* =========================================================
+   NOTE NORMALISATION
+   =========================================================
+
+   Keeps the frontend note structure consistent whether the
+   data came from:
+
+   - localStorage mock data
+   - the future backend/database
+   ========================================================= */
+
 function normaliseNote(note) {
   const plainText =
     note.notes_section ??
@@ -65,8 +141,18 @@ function normaliseNote(note) {
       note.title ||
       "Untitled Note",
 
-    content: plainText,
-    notes_section: plainText,
+    /*
+      content and notes_section currently represent the
+      plain-text/raw-note content.
+
+      Keeping both populated means existing frontend code
+      continues to work while backend naming is finalised.
+    */
+    content:
+      plainText,
+
+    notes_section:
+      plainText,
 
     notes_section_html:
       note.notes_section_html ??
@@ -75,8 +161,58 @@ function normaliseNote(note) {
     summary:
       note.summary ??
       "",
+
+    created_at:
+      note.created_at ??
+      null,
+
+    updated_at:
+      note.updated_at ??
+      null,
   };
 }
+
+
+
+/*
+  Ensures updates using either:
+
+      content
+
+  or:
+
+      notes_section
+
+  keep both frontend fields synchronised.
+*/
+function normaliseNoteUpdates(
+  updates = {}
+) {
+  const normalised = {
+    ...updates,
+  };
+
+
+  if (
+    updates.notes_section !== undefined
+  ) {
+    normalised.content =
+      updates.notes_section;
+  }
+
+
+  if (
+    updates.content !== undefined &&
+    updates.notes_section === undefined
+  ) {
+    normalised.notes_section =
+      updates.content;
+  }
+
+
+  return normalised;
+}
+
 
 
 /* =========================================================
@@ -84,7 +220,6 @@ function normaliseNote(note) {
    ========================================================= */
 
 function readMockNotes() {
-
   const stored =
     localStorage.getItem(
       STORAGE_KEY
@@ -93,11 +228,10 @@ function readMockNotes() {
 
   /*
     If this key has NEVER existed,
-    initialise the mock database using
-    our two template notes.
+    initialise the temporary mock database
+    with the two demonstration notes.
   */
   if (stored === null) {
-
     const initialNotes =
       MOCK_DEFAULT_NOTES.map(
         normaliseNote
@@ -117,18 +251,31 @@ function readMockNotes() {
 
 
   /*
-    Otherwise load whatever the user
-    currently has saved.
+    Otherwise load whatever currently exists.
 
-    This includes an empty array.
-    We must NOT recreate templates just
-    because all notes were deleted.
+    Important:
+    An empty array is valid.
+
+    We must NOT recreate the starter notes merely
+    because the user deleted every note.
   */
   try {
+    const parsed =
+      JSON.parse(stored);
 
-    return JSON
-      .parse(stored)
-      .map(normaliseNote);
+
+    if (!Array.isArray(parsed)) {
+      console.error(
+        "Mock notes storage was not an array."
+      );
+
+      return [];
+    }
+
+
+    return parsed.map(
+      normaliseNote
+    );
 
   } catch (error) {
 
@@ -143,6 +290,7 @@ function readMockNotes() {
 }
 
 
+
 function writeMockNotes(notes) {
   localStorage.setItem(
     STORAGE_KEY,
@@ -151,67 +299,221 @@ function writeMockNotes(notes) {
 }
 
 
+
+/* =========================================================
+   BACKEND RESPONSE HELPER
+   ========================================================= */
+
+async function handleApiResponse(
+  response,
+  fallbackMessage
+) {
+  if (!response.ok) {
+    let message =
+      fallbackMessage;
+
+
+    try {
+      const data =
+        await response.json();
+
+
+      message =
+        data.message ??
+        data.error ??
+        message;
+
+    } catch {
+      /*
+        Backend did not return JSON.
+        Use the fallback message.
+      */
+    }
+
+
+    throw new Error(message);
+  }
+
+
+  /*
+    DELETE commonly returns HTTP 204 with
+    no JSON response body.
+  */
+  if (response.status === 204) {
+    return null;
+  }
+
+
+  return response.json();
+}
+
+
+
 /* =========================================================
    LIST NOTES
+   =========================================================
+
+   FRONTEND USAGE:
+
+       const notes = await getNotes();
+
+   MOCK:
+       Reads localStorage.
+
+   BACKEND:
+       GET /api/notes
+
+   Recommended backend response:
+
+       {
+         "notes": [...]
+       }
+
+   An array response is also accepted temporarily.
    ========================================================= */
 
 export async function getNotes() {
+
+  /* -----------------------------------------
+     TEMPORARY MOCK IMPLEMENTATION
+     ----------------------------------------- */
 
   if (USE_MOCK_NOTES) {
     return readMockNotes();
   }
 
 
+  /* -----------------------------------------
+     REAL BACKEND IMPLEMENTATION
+     ----------------------------------------- */
+
   const response =
-    await fetch("/api/notes", {
-      credentials: "include",
-    });
+    await fetch(
+      `${API_BASE}/notes`,
+      {
+        method: "GET",
+
+        /*
+          Assumes authentication is currently
+          handled through session cookies.
+        */
+        credentials:
+          "include",
+      }
+    );
 
 
-  if (!response.ok) {
-    throw new Error(
+  const data =
+    await handleApiResponse(
+      response,
       "Unable to load notes."
+    );
+
+
+  const notes =
+    data?.notes ??
+    data ??
+    [];
+
+
+  if (!Array.isArray(notes)) {
+    throw new Error(
+      "Backend returned an invalid notes response."
     );
   }
 
 
-  const data =
-    await response.json();
-
-
-  return (
-    data.notes ??
-    data
-  ).map(normaliseNote);
+  return notes.map(
+    normaliseNote
+  );
 }
+
 
 
 /* =========================================================
    CREATE NOTE
+   =========================================================
+
+   Existing frontend code can continue calling:
+
+       createNote()
+
+   with no arguments.
+
+   It can also later call:
+
+       createNote({
+         title: "...",
+         notes_section: "..."
+       })
+
+   MOCK:
+       Creates note in localStorage.
+
+   BACKEND:
+       POST /api/notes
+
+   Recommended response:
+
+       {
+         "note": {
+           ...
+         }
+       }
+
+   or simply the note object itself.
    ========================================================= */
 
-export async function createNote() {
+export async function createNote(
+  noteData = {}
+) {
+
+  const now =
+    new Date().toISOString();
+
+
+  const requestedNote =
+    normaliseNote({
+      title:
+        noteData.title ??
+        "Untitled Note",
+
+      notes_section:
+        noteData.notes_section ??
+        noteData.content ??
+        "",
+
+      notes_section_html:
+        noteData.notes_section_html ??
+        "",
+
+      summary:
+        noteData.summary ??
+        "",
+
+      created_at:
+        now,
+
+      updated_at:
+        now,
+    });
+
+
+
+  /* -----------------------------------------
+     TEMPORARY MOCK IMPLEMENTATION
+     ----------------------------------------- */
 
   if (USE_MOCK_NOTES) {
 
-    const note = normaliseNote({
-      id:
-        crypto.randomUUID?.() ??
-        `local-${Date.now()}`,
+    const note =
+      normaliseNote({
+        ...requestedNote,
 
-      title: "Untitled Note",
-
-      notes_section: "",
-      notes_section_html: "",
-
-      summary: "",
-
-      created_at:
-        new Date().toISOString(),
-
-      updated_at:
-        new Date().toISOString(),
-    });
+        id:
+          crypto.randomUUID?.() ??
+          `local-${Date.now()}`,
+      });
 
 
     const notes =
@@ -228,44 +530,79 @@ export async function createNote() {
   }
 
 
+
+  /* -----------------------------------------
+     REAL BACKEND IMPLEMENTATION
+     ----------------------------------------- */
+
   const response =
-    await fetch("/api/notes", {
-      method: "POST",
+    await fetch(
+      `${API_BASE}/notes`,
+      {
+        method: "POST",
 
-      headers: {
-        "Content-Type":
-          "application/json",
-      },
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
 
-      credentials: "include",
+        credentials:
+          "include",
 
-      body: JSON.stringify({
-        title: "Untitled Note",
-        notes_section: "",
-        notes_section_html: "",
-      }),
-    });
+        body:
+          JSON.stringify({
+            title:
+              requestedNote.title,
 
+            notes_section:
+              requestedNote.notes_section,
 
-  if (!response.ok) {
-    throw new Error(
-      "Unable to create note."
+            notes_section_html:
+              requestedNote.notes_section_html,
+
+            summary:
+              requestedNote.summary,
+          }),
+      }
     );
-  }
 
 
   const data =
-    await response.json();
+    await handleApiResponse(
+      response,
+      "Unable to create note."
+    );
 
 
   return normaliseNote(
-    data.note ?? data
+    data?.note ??
+    data
   );
 }
 
 
+
 /* =========================================================
-   UPDATE NOTE
+   UPDATE / SAVE NOTE
+   =========================================================
+
+   FRONTEND USAGE:
+
+       updateNote(noteId, {
+         title,
+         notes_section,
+         notes_section_html,
+         summary
+       });
+
+   MOCK:
+       Updates localStorage.
+
+   BACKEND:
+       PATCH /api/notes/:noteId
+
+   PATCH is intentionally used because TreeNotes may save
+   only part of a note at a time.
    ========================================================= */
 
 export async function updateNote(
@@ -273,42 +610,72 @@ export async function updateNote(
   updates
 ) {
 
+  const safeUpdates =
+    normaliseNoteUpdates(
+      updates
+    );
+
+
+
+  /* -----------------------------------------
+     TEMPORARY MOCK IMPLEMENTATION
+     ----------------------------------------- */
+
   if (USE_MOCK_NOTES) {
 
     let updatedNote = null;
 
 
     const notes =
-      readMockNotes().map((note) => {
+      readMockNotes().map(
+        (note) => {
 
-        if (note.id !== noteId) {
-          return note;
+          if (
+            note.id !== noteId
+          ) {
+            return note;
+          }
+
+
+          updatedNote =
+            normaliseNote({
+              ...note,
+
+              ...safeUpdates,
+
+              updated_at:
+                new Date()
+                  .toISOString(),
+            });
+
+
+          return updatedNote;
         }
-
-
-        updatedNote =
-          normaliseNote({
-            ...note,
-            ...updates,
-
-            updated_at:
-              new Date().toISOString(),
-          });
-
-
-        return updatedNote;
-      });
+      );
 
 
     writeMockNotes(notes);
+
+
+    if (!updatedNote) {
+      throw new Error(
+        "Unable to find note to update."
+      );
+    }
+
 
     return updatedNote;
   }
 
 
+
+  /* -----------------------------------------
+     REAL BACKEND IMPLEMENTATION
+     ----------------------------------------- */
+
   const response =
     await fetch(
-      `/api/notes/${noteId}`,
+      `${API_BASE}/notes/${noteId}`,
       {
         method: "PATCH",
 
@@ -317,65 +684,120 @@ export async function updateNote(
             "application/json",
         },
 
-        credentials: "include",
+        credentials:
+          "include",
 
         body:
-          JSON.stringify(updates),
+          JSON.stringify(
+            safeUpdates
+          ),
       }
     );
 
 
-  if (!response.ok) {
-    throw new Error(
+  const data =
+    await handleApiResponse(
+      response,
       "Unable to save note."
     );
-  }
-
-
-  const data =
-    await response.json();
 
 
   return normaliseNote(
-    data.note ?? data
+    data?.note ??
+    data
   );
 }
 
 
+
 /* =========================================================
    DELETE NOTE
+   =========================================================
+
+   FRONTEND USAGE:
+
+       await deleteNote(noteId);
+
+   MOCK:
+       Removes note from localStorage.
+
+   BACKEND:
+       DELETE /api/notes/:noteId
+
+   Backend should also remove/cascade associated data
+   belonging to this note, such as:
+
+       - graph nodes
+       - graph edges
+       - summary data
+       - AI metadata
+
+   if those are stored separately.
    ========================================================= */
 
-export async function deleteNote(noteId) {
+export async function deleteNote(
+  noteId
+) {
+
+  /* -----------------------------------------
+     TEMPORARY MOCK IMPLEMENTATION
+     ----------------------------------------- */
 
   if (USE_MOCK_NOTES) {
 
     const notes =
-      readMockNotes().filter(
+      readMockNotes();
+
+
+    const noteExists =
+      notes.some(
+        (note) =>
+          note.id === noteId
+      );
+
+
+    if (!noteExists) {
+      throw new Error(
+        "Unable to find note to delete."
+      );
+    }
+
+
+    const remainingNotes =
+      notes.filter(
         (note) =>
           note.id !== noteId
       );
 
 
-    writeMockNotes(notes);
+    writeMockNotes(
+      remainingNotes
+    );
+
 
     return;
   }
 
 
+
+  /* -----------------------------------------
+     REAL BACKEND IMPLEMENTATION
+     ----------------------------------------- */
+
   const response =
     await fetch(
-      `/api/notes/${noteId}`,
+      `${API_BASE}/notes/${noteId}`,
       {
         method: "DELETE",
-        credentials: "include",
+
+        credentials:
+          "include",
       }
     );
 
 
-  if (!response.ok) {
-    throw new Error(
-      "Unable to delete note."
-    );
-  }
+  await handleApiResponse(
+    response,
+    "Unable to delete note."
+  );
 }

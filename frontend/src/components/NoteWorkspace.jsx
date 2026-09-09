@@ -7,7 +7,6 @@ import {
 } from "react";
 import GraphPanel from "./GraphPanel";
 import SummaryPanel from "./SummaryPanel";
-import SearchBar from "./SearchBar";
 import {
   Bold,
   Italic,
@@ -31,79 +30,6 @@ import {
 } from "lucide-react";
 
 import "./NoteWorkspace.css";
-
-/* =========================================================
-   BACKEND / AI INTEGRATION
-   ========================================================= */
-
-
-// Backend / AI
-// Function for semantic/fuzzy searching Raw Notes
-async function semanticSearchRawNotes(
-  searchTerm,
-  rawNotes
-) {
-  /*
-    HANS / BACKEND TODO:
-
-    Send the user's semantic search query together with
-    the current Raw Notes to the AI/backend.
-
-    Frontend provides:
-
-    {
-      searchTerm: string,
-      rawNotes: string
-    }
-
-
-    Example future API request:
-
-    const response = await fetch(
-      "/api/ai/semantic-search",
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-        },
-
-        body: JSON.stringify({
-          search_input: searchTerm,
-          rawNotes: rawNotes,
-        }),
-      }
-    );
-
-
-    if (!response.ok) {
-      throw new Error(
-        "Semantic search failed."
-      );
-    }
-
-
-    return await response.json();
-
-
-    Suggested backend response:
-
-    {
-      result:
-        "Python functions are described in the section about reusable blocks of code."
-    }
-  */
-
-
-  // Temporary frontend mock response
-  // until Hans connects the AI/backend.
-  return {
-    backendConnected: false,
-
-    result:
-      `Semantic search requested for "${searchTerm}". AI backend still needs to be connected.`,
-  };
-}
 
 const NoteWorkspace = forwardRef(function NoteWorkspace(
   { note },
@@ -155,20 +81,6 @@ const GRAPH_LINK_COLORS = [
 
 // << RAW NOTES SEARCH >> //
 
-// << AI SEMANTIC SEARCH >> //
-
-// Text returned from semantic search
-const [semanticSearchResult, setSemanticSearchResult] =
-  useState("");
-
-// Shows whether AI search is currently running
-const [semanticSearchLoading, setSemanticSearchLoading] =
-  useState(false);
-
-// Stores errors returned from semantic search
-const [semanticSearchError, setSemanticSearchError] =
-  useState("");
-
 // << frontend dev >> //
   // Stores the current note title //
   const [title, setTitle] = useState(note.title);
@@ -209,56 +121,7 @@ const [semanticSearchError, setSemanticSearchError] =
     justify: AlignJustify,
   };
 
-
   const ActiveAlignmentIcon = alignmentIcons[activeAlignment] || AlignLeft;
-
-  /* ---------------------------------------------------------
-   Semantic Search
-   --------------------------------------------------------- */
-
-  async function handleSemanticSearch(
-      searchTerm
-    ) {
-      setSemanticSearchLoading(true);
-      setSemanticSearchError("");
-      setSemanticSearchResult("");
-
-
-      try {
-
-        const response =
-          await semanticSearchRawNotes(
-            searchTerm,
-            rawNotes
-          );
-
-
-        if (response?.result) {
-          setSemanticSearchResult(
-            response.result
-          );
-        }
-
-
-      } catch (error) {
-
-        console.error(
-          "Semantic search error:",
-          error
-        );
-
-
-        setSemanticSearchError(
-          "Unable to complete semantic search."
-        );
-
-
-      } finally {
-
-        setSemanticSearchLoading(false);
-
-      }
-    }
 
   /* ---------------------------------------------------------
    Raw Notes Formatting
@@ -1565,41 +1428,6 @@ const [semanticSearchError, setSemanticSearchError] =
                 strokeWidth={2}
                 aria-hidden="true"
               />
-            </div>
-
-
-            <div className="semantic-search-area">
-
-              {semanticSearchLoading && (
-                <span className="semantic-search-status">
-                  Searching...
-                </span>
-              )}
-
-
-              {!semanticSearchLoading &&
-                semanticSearchResult && (
-                  <span className="semantic-search-result">
-                    {semanticSearchResult}
-                  </span>
-                )}
-
-
-              {!semanticSearchLoading &&
-                semanticSearchError && (
-                  <span className="semantic-search-error">
-                    {semanticSearchError}
-                  </span>
-                )}
-
-
-              <SearchBar
-                placeholder="Semantic search..."
-                ariaLabel="Semantic search raw notes"
-                onSearch={handleSemanticSearch}
-                loading={semanticSearchLoading}
-              />
-
             </div>
 
           </div>

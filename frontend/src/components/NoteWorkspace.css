@@ -953,177 +953,6 @@
 }
 
 /* ================================================== */
-/* Semantic Search                                    */
-/* ================================================== */
-
-.note-workspace .semantic-search-area {
-  min-width: 0;
-
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-
-  gap: 12px;
-
-  flex: 1;
-
-  margin: 0;
-  padding: 0;
-}
-
-.note-workspace .search-bar {
-  width: 250px;
-  height: 36px;
-
-  margin: 0;
-
-  display: flex;
-  align-items: center;
-
-  flex-shrink: 0;
-
-  padding: 0 5px 0 12px;
-
-  box-sizing: border-box;
-
-  border: 
-    1px solid 
-    var(--border-control);
-  border-radius: 6px;
-
-  background: var(--bg-input);
-
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.note-workspace .search-bar:focus-within {
-  border-color: var(--accent-focus);
-
-  background: var(--bg-input-focus);
-
-  box-shadow:
-    0 0 0 1px var(--accent-focus);
-}
-
-
-/* ================================================ */
-/* Search input                                     */
-/* ================================================ */
-
-.note-workspace .search-bar input {
-  flex: 1;
-
-  min-width: 0;
-
-  height: 100%;
-
-  padding: 0;
-
-  border: none;
-  outline: none;
-
-  background: transparent;
-
-  color: var(--text-primary);
-
-  font-family: inherit;
-  font-size: 13px;
-}
-
-
-.note-workspace .search-bar input::placeholder {
-  color: var(--text-placeholder);
-}
-
-
-/* ================================================ */
-/* Semantic Search Button                           */
-/* ================================================ */
-
-.note-workspace .search-submit-button {
-  width: 28px;
-  height: 28px;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  flex-shrink: 0;
-
-  padding: 0;
-
-  border: none;
-  border-radius: 5px;
-
-  background: transparent;
-
-  color: var(--text-secondary);
-
-  cursor: pointer;
-
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
-}
-
-.note-workspace .search-submit-button svg {
-  color: currentColor;
-}
-
-.note-workspace .search-submit-button:hover:not(:disabled) {
-  background: var(--accent-primary);
-
-  color: var(--text-on-accent);
-}
-
-
-.note-workspace .search-submit-button:active:not(:disabled) {
-  background: var(--accent-primary-active);
-}
-
-
-.note-workspace .search-submit-button:disabled {
-  opacity: 0.35;
-
-  cursor: default;
-}
-
-/* ================================================== */
-/* AI Response                                        */
-/* ================================================== */
-
-.note-workspace .semantic-search-result,
-.note-workspace .semantic-search-status,
-.note-workspace .semantic-search-error {
-  max-width: 330px;
-
-  overflow: hidden;
-
-  font-size: 12px;
-
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-
-.note-workspace .semantic-search-result {
-  color: var(--status-info);
-}
-
-
-.note-workspace .semantic-search-status {
-  color: var(--text-muted);
-}
-
-
-.note-workspace .semantic-search-error {
-  color: var(--status-error);
-}
-
-/* ================================================== */
 /* Raw Notes Scroll Bar                               */
 /* ================================================== */
 
@@ -2010,6 +1839,7 @@
 
 .note-workspace .graph-canvas-shell {
   position: relative;
+  z-index: 1;
 
   flex: 1;
 
@@ -2226,11 +2056,11 @@
 }
 
 /* ================================================== */
-/* Link Success                                       */
+/* Graph Feedback                                     */
 /* ================================================== */
 
 .note-workspace
-.graph-link-feedback {
+.graph-feedback {
   position: absolute;
 
   left: 50%;
@@ -2249,16 +2079,12 @@
     translateX(-50%);
 
   border:
-    1px solid
-    var(--status-success);
+    1px solid;
 
   border-radius: 7px;
 
   background:
     var(--bg-panel-elevated);
-
-  color:
-    var(--status-success);
 
   box-shadow:
     var(--shadow-panel);
@@ -2267,6 +2093,46 @@
   font-weight: 600;
 
   white-space: nowrap;
+}
+
+.note-workspace
+.graph-feedback-success {
+  border-color:
+    var(--status-success);
+
+  color:
+    var(--status-success);
+}
+
+
+.note-workspace
+.graph-feedback-error {
+  border-color:
+    var(--status-error);
+
+  color:
+    var(--status-error);
+}
+
+
+.note-workspace
+.graph-feedback-info {
+  border-color:
+    var(--accent-primary);
+
+  color:
+    var(--text-accent);
+}
+
+.note-workspace
+.graph-feedback-spinner {
+  animation: graph-feedback-spin 0.9s linear infinite;
+}
+
+@keyframes graph-feedback-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ================================================== */
@@ -2563,11 +2429,6 @@ button[data-tooltip]:hover::after,
   overflow: visible;
 }
 
-.note-workspace .graph-canvas-shell {
-  position: relative;
-  z-index: 1;
-}
-
 /* ================================================== */
 /* Editor corner cleanup                              */
 /* ================================================== */
@@ -2669,4 +2530,198 @@ button[data-tooltip]:hover::after,
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
+}
+
+/* =========================================================
+   GRAPH SEMANTIC SEARCH
+   ========================================================= */
+
+.graph-semantic-search {
+  position: absolute;
+
+  right: 14px;
+  bottom: 14px;
+
+  z-index: 30;
+
+  display: flex;
+  align-items: center;
+}
+
+.graph-semantic-search-toggle {
+  width: 36px;
+  height: 36px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border:
+    1px solid
+    var(--border-control);
+
+  border-radius: 8px;
+
+  background:
+    var(--bg-panel);
+
+  color:
+    var(--text-secondary);
+
+  cursor: pointer;
+
+  box-shadow:
+    0 4px 14px
+    rgba(0, 0, 0, 0.16);
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+
+.graph-semantic-search-toggle:hover {
+  background:
+    var(--accent-primary);
+
+  border-color:
+    var(--accent-primary);
+
+  color:
+    #ffffff;
+}
+
+.graph-semantic-search-open {
+  width:
+    min(
+      320px,
+      calc(100% - 28px)
+    );
+
+  min-height: 38px;
+
+  padding:
+    0
+    5px
+    0
+    11px;
+
+  gap: 8px;
+
+  border:
+    1px solid
+    var(--accent-primary);
+
+  border-radius: 8px;
+
+  background:
+    var(--bg-panel);
+
+  box-shadow:
+    0 5px 18px
+    rgba(0, 0, 0, 0.18);
+}
+
+
+.graph-semantic-search-open input {
+  flex: 1;
+
+  min-width: 0;
+
+  height: 36px;
+
+  padding: 0;
+
+  border: none;
+  outline: none;
+
+  background: transparent;
+
+  color:
+    var(--text-primary);
+
+  font: inherit;
+  font-size: 12px;
+}
+
+
+.graph-semantic-search-open input::placeholder {
+  color:
+    var(--text-muted);
+}
+
+
+.graph-semantic-search-icon {
+  flex-shrink: 0;
+
+  color:
+    var(--text-muted);
+}
+
+.graph-semantic-submit {
+  width: 28px;
+  height: 28px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border: none;
+
+  border-radius: 6px;
+
+  background:
+    var(--accent-primary);
+
+  color:
+    #ffffff;
+
+  cursor: pointer;
+}
+
+
+.graph-semantic-submit:hover:not(:disabled) {
+  filter:
+    brightness(1.08);
+}
+
+
+.graph-semantic-submit:disabled {
+  opacity: 0.4;
+
+  cursor: default;
+}
+
+/* =========================================================
+   GRAPH FLOATING GLASS PANELS
+   Keep near the END of NoteWorkspace.css
+   ========================================================= */
+
+.note-workspace .graph-selected-node-overlay,
+.note-workspace .graph-link-mode-overlay,
+.note-workspace .graph-feedback,
+.note-workspace .graph-semantic-search-toggle,
+.note-workspace .graph-semantic-search.graph-semantic-search-open {
+  background:
+    color-mix(
+      in srgb,
+      var(--bg-panel-elevated) 60%,
+      transparent
+    );
+
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.note-workspace .graph-semantic-search-toggle:hover {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #ffffff;
 }
