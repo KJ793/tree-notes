@@ -14,8 +14,8 @@ import { useTheme } from "../context/ThemeContext";
 
 
 const initialNavbarUser = {
-  displayName: "",
-  initials: "",
+  displayName: "devuser",
+  initials: "DEV",
   profileImage: null,
 };
 

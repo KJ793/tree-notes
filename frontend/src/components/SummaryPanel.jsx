@@ -1,9 +1,9 @@
 import { useState } from "react";
 
 import {
-  RefreshCw,
   Sparkles,
   Check,
+  NotebookPen,
 } from "lucide-react";
 
 
@@ -16,8 +16,6 @@ function SummaryPanel({ rawNotes }) {
   // Controls which summary tab is currently displayed
   // "ai" = AI generated summary
   // "user" = User written summary
-  const [activeTab, setActiveTab] = useState("ai");
-
 
   // =========================================================
   // AI SUMMARY STATE
@@ -63,6 +61,39 @@ function SummaryPanel({ rawNotes }) {
   // Optional improved summary returned by AI
   const [improvedSummary, setImprovedSummary] = useState("");
 
+  // =========================================================
+  // UNIFIED SUMMARY AI BUTTON STATE
+  // =========================================================
+
+  // Determines whether the user currently has a summary
+  const hasUserSummary =
+    mySummary.trim().length > 0;
+
+  // Either AI operation can make the main button busy
+  const aiLoading =
+    summaryLoading || reviewLoading;
+
+  // Button automatically changes depending on whether
+  // the user has already written/generated a summary
+  const aiButtonText = aiLoading
+    ? hasUserSummary
+      ? "Improving..."
+      : "Generating..."
+    : hasUserSummary
+      ? "Improve with AI"
+      : "Generate Summary";
+
+  // =========================================================
+  // HANDLE AI SUMMARY GENARATION/REVIEW
+  // =========================================================
+
+  async function handleSummaryAI() {
+    if (hasUserSummary) {
+      await reviewMySummary();
+    } else {
+      await generateSummary();
+    }
+  }
 
   // =========================================================
   // GENERATE AI SUMMARY
@@ -171,9 +202,17 @@ function SummaryPanel({ rawNotes }) {
       // Hans advises using data.aiSummary rather than
       // data.summary to distinguish summary types
 
-      setAiSummary(
-        data.aiSummary || ""
-      );
+      const generatedSummary =
+        data.aiSummary || "";
+
+      setAiSummary(generatedSummary);
+      setMySummary(generatedSummary);
+
+      // A newly generated summary has not been reviewed yet
+      setSummaryScore(null);
+      setSummaryFeedback("");
+      setImprovedSummary("");
+      setReviewError("");
 
 
     } catch (error) {
@@ -392,7 +431,9 @@ function SummaryPanel({ rawNotes }) {
     setSummaryScore(null);
     setSummaryFeedback("");
     setImprovedSummary("");
+
     setReviewError("");
+    setSummaryError("");
   }
 
 
@@ -400,278 +441,154 @@ function SummaryPanel({ rawNotes }) {
     <section className="summary-panel">
 
       {/* ================================================= */}
-      {/* SUMMARY TABS                                      */}
+      {/* SUMMARY HEADING                                   */}
       {/* ================================================= */}
 
-      <div className="summary-tabs">
+      <div className="summary-panel-heading">
 
-        <button
-          type="button"
-          className={`summary-tab ${
-            activeTab === "ai"
-              ? "summary-tab-active"
-              : ""
-          }`}
-          onClick={() =>
-            setActiveTab("ai")
-          }
-        >
-          AI Summary
-        </button>
+        <div className="summary-panel-heading-title">
+          <h2>Summary</h2>
+
+          <NotebookPen
+            size={20}
+            strokeWidth={1.9}
+            aria-hidden="true"
+          />
+        </div>
 
 
-        <button
-          type="button"
-          className={`summary-tab ${
-            activeTab === "user"
-              ? "summary-tab-active"
-              : ""
-          }`}
-          onClick={() =>
-            setActiveTab("user")
-          }
-        >
-          My Summary
-        </button>
+        <div className="summary-heading-actions">
+
+          {(summaryError || reviewError) && (
+            <span className="summary-header-error">
+              {summaryError || reviewError}
+            </span>
+          )}
+
+          {summaryScore !== null && (
+            <div className="summary-score">
+              <span>Score</span>
+
+              <strong>
+                {summaryScore}/100
+              </strong>
+            </div>
+          )}
+
+
+          <button
+            type="button"
+            className="summary-action-button primary-action"
+            onClick={handleSummaryAI}
+            disabled={
+              aiLoading ||
+              !rawNotes?.trim()
+            }
+          >
+            <Sparkles
+              size={17}
+              strokeWidth={1.9}
+            />
+
+            <span>
+              {aiButtonText}
+            </span>
+          </button>
+
+        </div>
 
       </div>
 
 
       {/* ================================================= */}
-      {/* AI SUMMARY TAB                                    */}
+      {/* SUMMARY CONTENT                                   */}
       {/* ================================================= */}
 
-      {activeTab === "ai" && (
+      <div className="summary-view">
 
-        <div className="summary-view">
-
-          <div className="summary-view-header">
-
-            <div className="summary-view-title">
-              <h3>
-                AI Summary
-              </h3>
-
-              <p>
-                Generate a concise summary from your Raw Notes.
-              </p>
-            </div>
+        <textarea
+          className="user-summary-input"
+          value={mySummary}
+          onChange={handleMySummaryChange}
+          placeholder="Summarise your notes in your own words..."
+        />
 
 
-            <button
-              type="button"
-              className="summary-action-button"
-              onClick={generateSummary}
-              disabled={summaryLoading}
-            >
-              <RefreshCw
-                size={17}
-                strokeWidth={1.9}
-              />
+        {/* ================================================= */}
+        {/* AI REVIEW                                        */}
+        {/* ================================================= */}
 
-              <span>
-                {summaryLoading
-                  ? "Generating..."
-                  : aiSummary
-                    ? "Regenerate"
-                    : "Generate Summary"}
-              </span>
-            </button>
+        {(summaryFeedback ||
+          improvedSummary) && (
 
-          </div>
+          <div className="summary-review">
 
 
-          {summaryError && (
-            <p className="summary-error">
-              {summaryError}
-            </p>
-          )}
+            {/* AI Feedback */}
+
+            {summaryFeedback && (
+
+              <div className="summary-feedback">
+
+                <span className="summary-review-label">
+                  AI Feedback
+                </span>
+
+                <p>
+                  {summaryFeedback}
+                </p>
+
+              </div>
+
+            )}
 
 
-          <div className="ai-summary-content">
+            {/* Suggested improved summary */}
 
-            {aiSummary ? (
+            {improvedSummary && (
 
-              <p>
-                {aiSummary}
-              </p>
+              <div className="improved-summary">
 
-            ) : (
+                <div className="improved-summary-header">
 
-              <p className="summary-placeholder">
-                AI-generated summary will appear here...
-              </p>
+                  <span className="summary-review-label">
+                    Suggested Improvement
+                  </span>
+
+
+                  <button
+                    type="button"
+                    className="use-improved-summary-button"
+                    onClick={useImprovedSummary}
+                  >
+
+                    <Check
+                      size={15}
+                      strokeWidth={2}
+                    />
+
+                    <span>
+                      Use this version
+                    </span>
+
+                  </button>
+
+                </div>
+
+
+                <p>
+                  {improvedSummary}
+                </p>
+
+              </div>
 
             )}
 
           </div>
 
-        </div>
+        )}
 
-      )}
-
-
-      {/* ================================================= */}
-      {/* MY SUMMARY TAB                                    */}
-      {/* ================================================= */}
-
-      {activeTab === "user" && (
-
-        <div className="summary-view">
-
-          <div className="summary-view-header">
-
-            <div className="summary-view-title">
-
-              <h3>
-                My Summary
-              </h3>
-
-              <p>
-                Summarise the notes in your own words and ask AI for feedback.
-              </p>
-
-            </div>
-
-
-            <div className="summary-user-actions">
-
-              {/* Score only appears after AI review */}
-
-              {summaryScore !== null && (
-
-                <div className="summary-score">
-
-                  <span>
-                    Score
-                  </span>
-
-                  <strong>
-                    {summaryScore}/100
-                  </strong>
-
-                </div>
-
-              )}
-
-
-              <button
-                type="button"
-                className="summary-action-button"
-                onClick={reviewMySummary}
-                disabled={reviewLoading}
-              >
-                <Sparkles
-                  size={17}
-                  strokeWidth={1.9}
-                />
-
-                <span>
-                  {reviewLoading
-                    ? "Reviewing..."
-                    : "Improve with AI"}
-                </span>
-              </button>
-
-            </div>
-
-          </div>
-
-
-          {/* ============================================= */}
-          {/* USER SUMMARY TEXT                             */}
-          {/* ============================================= */}
-
-          <textarea
-            className="user-summary-input"
-            value={mySummary}
-            onChange={handleMySummaryChange}
-            placeholder="Write your own summary here..."
-          />
-
-
-          {reviewError && (
-            <p className="summary-error">
-              {reviewError}
-            </p>
-          )}
-
-
-          {/* ============================================= */}
-          {/* AI REVIEW                                     */}
-          {/* ============================================= */}
-
-          {(summaryFeedback ||
-            improvedSummary) && (
-
-            <div className="summary-review">
-
-
-              {/* AI Feedback */}
-
-              {summaryFeedback && (
-
-                <div className="summary-feedback">
-
-                  <span className="summary-review-label">
-                    AI Feedback
-                  </span>
-
-                  <p>
-                    {summaryFeedback}
-                  </p>
-
-                </div>
-
-              )}
-
-
-              {/* Suggested improved summary */}
-
-              {improvedSummary && (
-
-                <div className="improved-summary">
-
-                  <div className="improved-summary-header">
-
-                    <span className="summary-review-label">
-                      Suggested Improvement
-                    </span>
-
-
-                    <button
-                      type="button"
-                      className="use-improved-summary-button"
-                      onClick={useImprovedSummary}
-                    >
-                      <Check
-                        size={15}
-                        strokeWidth={2}
-                      />
-
-                      <span>
-                        Use this version
-                      </span>
-                    </button>
-
-                  </div>
-
-
-                  <p>
-                    {improvedSummary}
-                  </p>
-
-                </div>
-
-              )}
-
-            </div>
-
-          )}
-
-        </div>
-
-      )}
+      </div>
 
     </section>
   );

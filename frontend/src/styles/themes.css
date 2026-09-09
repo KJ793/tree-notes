@@ -27,6 +27,7 @@
   --bg-panel: #111a2b;
   --bg-panel-secondary: #121c2d;
   --bg-panel-elevated: #162135;
+  --bg-workspace-canvas: #121c2d;
 
   --bg-editor: #192335;
   --bg-toolbar: #172133;
@@ -159,12 +160,15 @@
   /* ---------------------------------------------------------
      Scrollbars
      --------------------------------------------------------- */
-
-  --scrollbar-thumb: #3b4962;
-  --scrollbar-thumb-hover: #53617b;
-
+   /* Editor scrollbar */
+  --editor-scrollbar-thumb: #34445d;
+  --editor-scrollbar-thumb-hover: #4a5d7a;
   --scrollbar-thumb-secondary: #35445d;
 
+   /* Page scrollbar */
+  --page-scrollbar-track: #0c1524;
+  --page-scrollbar-thumb: #2f3d52;
+  --page-scrollbar-thumb-hover: #465873;
     /* ---------------------------------------------------------
      Toolbar buttons
      --------------------------------------------------------- */
@@ -273,6 +277,7 @@
   --bg-panel: #ffffff;
   --bg-panel-secondary: #f8fafc;
   --bg-panel-elevated: #f3f6fb;
+  --bg-workspace-canvas: #f8fafc;
 
   --bg-editor: #f7f9fc;
   --bg-toolbar: #eef2f7;
@@ -404,11 +409,15 @@
   /* ---------------------------------------------------------
      Scrollbars
      --------------------------------------------------------- */
-
-  --scrollbar-thumb: #b8c4d3;
-  --scrollbar-thumb-hover: #98a8bc;
-
+   /* Editor scrollbar */
+  --editor-scrollbar-thumb: #aeb9c8;
+  --editor-scrollbar-thumb-hover: #8e9bab;
   --scrollbar-thumb-secondary: #c3ccd8;
+
+   /* Page scrollbar */
+  --page-scrollbar-track: #edf2f7;
+  --page-scrollbar-thumb: #b3bfce;
+  --page-scrollbar-thumb-hover: #929fb0;
 
       /* ---------------------------------------------------------
      Toolbar buttons

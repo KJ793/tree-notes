@@ -34,7 +34,6 @@
   transition:
     border-color 0.18s ease,
     box-shadow 0.18s ease,
-    background 0.18s ease;
 }
 
 .note-workspace .note-title:hover {
@@ -55,7 +54,9 @@
 
 .note-workspace .notes-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.28fr) minmax(340px, 1fr);
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
 }
@@ -63,13 +64,17 @@
 .note-workspace .raw-notes,
 .note-workspace .graph-panel {
   min-width: 0;
+
+  height: 480px;
   min-height: 480px;
+  max-height: 480px;
+
   padding: 0;
 
   display: flex;
   flex-direction: column;
 
-  overflow: hidden;
+  overflow: visible;
 
   border: 
     1px solid 
@@ -84,10 +89,6 @@
 /* ---------------------------------------------------------
    Raw Notes editor
    --------------------------------------------------------- */
-
-.note-workspace .raw-notes {
-  padding-bottom: 16px;
-}
 
 .note-workspace .text-area {
   width: auto;
@@ -152,16 +153,26 @@
 }
 
 .note-workspace .graph-container {
-  width: 100%;
-  height: auto;
-  min-height: 320px;
+  position: relative;
+
   flex: 1;
 
-  position: relative;
-  overflow: hidden;
+  width: 100%;
+  height: 100%;
 
-  border-radius: 6px;
-  background: var(--bg-panel);
+  min-width: 0;
+  min-height: 0;
+
+  border: none;
+  border-radius: 0;
+
+  box-shadow: none;
+}
+
+.note-workspace .raw-notes-content,
+.note-workspace .graph-canvas-shell,
+.note-workspace .graph-container {
+  background: var(--bg-workspace-canvas);
 }
 
 .note-workspace .graph-placeholder > button {
@@ -210,76 +221,114 @@
 .note-workspace .summary-panel {
   width: 100%;
 
-  margin-top: 8px;
+  padding: 0;
 
   overflow: hidden;
 
-  border: 
-    1px solid 
-    var(--border-primary);
-  border-radius: 9px;
+  border:
+    1px solid
+    var(--border-secondary);
 
-  background: var(--bg-panel);
+  border-radius: 7px;
+
+  background:
+    var(--bg-panel);
 }
 
 
 /* ================================================== */
-/* Summary Tabs                                       */
+/* Summary Header                                     */
 /* ================================================== */
 
-.note-workspace .summary-tabs {
-  min-height: 30px;
+.note-workspace .summary-panel-heading {
+  width: 100%;
+  height: 52px;
+  min-height: 52px;
 
   display: flex;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: space-between;
 
-  gap: 4px;
+  gap: 16px;
 
-  padding: 0 13px;
+  padding: 0 16px;
 
-  border-bottom: 
-    1px solid 
+  box-sizing: border-box;
+
+  border-bottom:
+    1px solid
     var(--border-subtle);
 }
 
 
-.note-workspace .summary-tab {
-  height: 34px;
+/* Summary + icon */
 
-  padding: 0 13px;
+.note-workspace .summary-panel-heading-title {
+  display: flex;
+  align-items: center;
 
-  border: 1px solid transparent;
-  border-radius: 6px 6px 0 0;
+  gap: 7px;
 
-  background: transparent;
-
-  color: var(--text-tertiary);
-
-  font-family: inherit;
-  font-size: 12px;
-
-  cursor: pointer;
-
-  transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
+  min-width: 0;
+  flex-shrink: 0;
 }
 
 
-.note-workspace .summary-tab:hover {
-  color: var(--text-primary);
+.note-workspace .summary-panel-heading-title h2 {
+  margin: 0;
 
-  background: var(--bg-input);
+  color:
+    var(--text-primary);
+
+  font: inherit;
+
+  font-size: 20px;
+  font-weight: 600;
+
+  line-height: 1;
 }
 
 
-.note-workspace .summary-tab-active {
-  border-color: var(--accent-primary);
+.note-workspace .summary-panel-heading-title svg {
+  width: 21px;
+  height: 21px;
 
-  background: var(--accent-primary);
+  flex-shrink: 0;
 
-  color: var(--text-on-accent);
+  color:
+    var(--text-primary);
+}
+
+
+/* ================================================== */
+/* Right side of Summary header                       */
+/* ================================================== */
+
+.note-workspace .summary-heading-actions {
+  min-width: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+
+  gap: 10px;
+
+  margin-left: auto;
+}
+
+
+/* Score + AI button */
+
+.note-workspace .summary-heading-actions {
+  min-width: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+
+  gap: 10px;
+
+  margin-left: auto;
 }
 
 
@@ -288,90 +337,13 @@
 /* ================================================== */
 
 .note-workspace .summary-view {
-  padding: 12px 16px 14px;
-}
-
-
-.note-workspace .summary-view-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-
-  gap: 18px;
-
-  margin-bottom: 10px;
-}
-
-
-.note-workspace .summary-view-header h3 {
-  margin: 0 0 3px;
-
-  color: var(--text-primary);
-
-  font-size: 16px;
-  font-weight: 600;
-}
-
-
-.note-workspace .summary-view-header p {
-  margin: 0;
-
-  color: var(--text-muted);
-
-  font-size: 11px;
-}
-
-
-/* ================================================== */
-/* Summary Action Buttons                             */
-/* ================================================== */
-
-.note-workspace .summary-action-button {
-  min-height: 36px;
+  padding: 16px;
 
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
 
-  gap: 8px;
-
-  padding: 0 13px;
-
-  border: 
-    1px solid 
-    var(--accent-primary);
-  border-radius: 6px;
-
-  background: transparent;
-
-  color: var(--text-accent);
-
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 600;
-
-  cursor: pointer;
-
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
+  gap: 14px;
 }
-
-
-.note-workspace
-.summary-action-button:hover:not(:disabled) {
-  background: var(--accent-primary);
-
-  color: #ffffff;
-}
-
-
-.note-workspace .summary-action-button:disabled {
-  opacity: 0.5;
-
-  cursor: default;
-}
-
 
 /* ================================================== */
 /* AI Summary                                         */
@@ -420,7 +392,7 @@
   width: 100%;
 
   height: 180px;
-  min-height: 180px;
+  min-height: 150px;
 
   padding: 14px 16px;
 
@@ -468,37 +440,46 @@
   gap: 10px;
 }
 
-
 .note-workspace .summary-score {
-  display: flex;
+  height: 30px;
+
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
 
-  gap: 7px;
+  gap: 5px;
 
-  padding: 7px 10px;
+  padding: 0 9px;
 
-  border: 
-    1px solid 
+  border:
+    1px solid
     var(--border-secondary);
+
   border-radius: 6px;
 
-  background: var(--bg-input);
+  background:
+    var(--bg-control);
+
+  white-space: nowrap;
 }
 
 
 .note-workspace .summary-score span {
-  color: var(--text-muted);
+  color:
+    var(--text-muted);
 
-  font-size: 10px;
+  font-size: 9px;
+  font-weight: 500;
 }
 
 
 .note-workspace .summary-score strong {
-  color: var(--text-accent);
+  color:
+    var(--accent-primary);
 
   font-size: 12px;
+  font-weight: 700;
 }
-
 
 /* ================================================== */
 /* AI Review                                          */
@@ -508,8 +489,6 @@
   display: grid;
 
   gap: 10px;
-
-  margin-top: 12px;
 }
 
 
@@ -594,12 +573,26 @@
 /* Errors                                             */
 /* ================================================== */
 
-.note-workspace .summary-error {
-  margin: 0 0 10px;
+.note-workspace .summary-header-error {
+  min-width: 0;
+  max-width: 290px;
+
+  overflow: hidden;
 
   color: var(--status-error);
 
   font-size: 11px;
+  font-weight: 400;
+
+  text-align: right;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-workspace .summary-header-error,
+.note-workspace .graph-header-error {
+  flex: 0 1 290px;
 }
 
 /* ================================================== */
@@ -731,7 +724,7 @@
 
 
 .note-workspace .raw-notes-heading svg,
-.note-workspace .graph-panel-heading svg {
+.note-workspace .graph-panel-heading-title svg {
   width: 21px;
   height: 21px;
 
@@ -745,22 +738,22 @@
    Rich Text Editor
    --------------------------------------------------------- */
 
-.note-workspace .raw-notes-editor {
+.note-workspace .raw-notes-editor,
+.note-workspace .graph-editor {
   flex: 1;
+  min-height: 0;
 
   display: flex;
   flex-direction: column;
 
   margin: 16px;
 
-  overflow: hidden;
-
   border: 
     1px solid 
     var(--border-secondary);
   border-radius: 7px;
 
-  background: var(--bg-editor);
+  background: var(--bg-workspace-canvas);
 }
 
 
@@ -855,8 +848,7 @@
 .note-workspace .raw-notes-content {
   flex: 1;
 
-  min-height: 300px;
-  max-height: 350px;
+  min-height: 0;
 
   overflow-y: auto;
   overflow-x: hidden;
@@ -864,8 +856,6 @@
   margin: 0;
 
   padding: 20px 31px;
-
-  overflow-y: auto;
 
   border: none;
   border-radius: 0;
@@ -962,179 +952,20 @@
 }
 
 /* ================================================== */
-/* Semantic Search                                    */
-/* ================================================== */
-
-.note-workspace .semantic-search-area {
-  min-width: 0;
-
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-
-  gap: 12px;
-
-  flex: 1;
-
-  margin: 0;
-  padding: 0;
-}
-
-.note-workspace .search-bar {
-  width: 250px;
-  height: 36px;
-
-  margin: 0;
-
-  display: flex;
-  align-items: center;
-
-  flex-shrink: 0;
-
-  padding: 0 5px 0 12px;
-
-  box-sizing: border-box;
-
-  border: 
-    1px solid 
-    var(--border-control);
-  border-radius: 6px;
-
-  background: var(--bg-input);
-
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.note-workspace .search-bar:focus-within {
-  border-color: var(--accent-focus);
-
-  background: var(--bg-input-focus);
-
-  box-shadow:
-    0 0 0 1px var(--accent-focus);
-}
-
-
-/* ================================================ */
-/* Search input                                     */
-/* ================================================ */
-
-.note-workspace .search-bar input {
-  flex: 1;
-
-  min-width: 0;
-
-  height: 100%;
-
-  padding: 0;
-
-  border: none;
-  outline: none;
-
-  background: transparent;
-
-  color: var(--text-primary);
-
-  font-family: inherit;
-  font-size: 13px;
-}
-
-
-.note-workspace .search-bar input::placeholder {
-  color: var(--text-placeholder);
-}
-
-
-/* ================================================ */
-/* Semantic Search Button                           */
-/* ================================================ */
-
-.note-workspace .search-submit-button {
-  width: 28px;
-  height: 28px;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  flex-shrink: 0;
-
-  padding: 0;
-
-  border: none;
-  border-radius: 5px;
-
-  background: transparent;
-
-  color: var(--text-secondary);
-
-  cursor: pointer;
-
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
-}
-
-
-.note-workspace .search-submit-button:hover:not(:disabled) {
-  background: var(--accent-primary);
-
-  color: var(--text-on-accent);
-}
-
-
-.note-workspace .search-submit-button:active:not(:disabled) {
-  background: var(--accent-primary-active);
-}
-
-
-.note-workspace .search-submit-button:disabled {
-  opacity: 0.35;
-
-  cursor: default;
-}
-
-/* ================================================== */
-/* AI Response                                        */
-/* ================================================== */
-
-.note-workspace .semantic-search-result,
-.note-workspace .semantic-search-status,
-.note-workspace .semantic-search-error {
-  max-width: 330px;
-
-  overflow: hidden;
-
-  font-size: 12px;
-
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-
-.note-workspace .semantic-search-result {
-  color: var(--status-info);
-}
-
-
-.note-workspace .semantic-search-status {
-  color: var(--text-muted);
-}
-
-
-.note-workspace .semantic-search-error {
-  color: var(--status-error);
-}
-
-/* ================================================== */
 /* Raw Notes Scroll Bar                               */
 /* ================================================== */
 
+.note-workspace .raw-notes-content {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+
+  scrollbar-color:
+    var(--editor-scrollbar-thumb)
+    transparent;
+}
+
 .note-workspace .raw-notes-content::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 
@@ -1144,14 +975,23 @@
 
 
 .note-workspace .raw-notes-content::-webkit-scrollbar-thumb {
-  border-radius: 10px;
+  background:
+    var(--editor-scrollbar-thumb);
 
-  background: #3b4962;
+  border: 2px solid transparent;
+
+  border-radius: 999px;
+
+  background-clip: padding-box;
 }
 
-
 .note-workspace .raw-notes-content::-webkit-scrollbar-thumb:hover {
-  background: #53617b;
+  background:
+    var(--editor-scrollbar-thumb-hover);
+
+  border: 2px solid transparent;
+
+  background-clip: padding-box;
 }
 
 /* ================================================== */
@@ -1179,7 +1019,6 @@
   background: var(--bg-panel-secondary);
 
   box-shadow:
-    0 10px 30px 
     var(--shadow-popover);
 
   color: var(--text-primary);
@@ -1360,132 +1199,6 @@
 }
 
 /* ================================================== */
-/* Toolbar Tooltips                                   */
-/* ================================================== */
-
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip] {
-  position: relative;
-}
-
-
-/* Tooltip box */
-
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip]::after {
-  content: attr(data-tooltip);
-
-  position: absolute;
-
-  top: calc(100% + 8px);
-  left: 50%;
-
-  z-index: 100;
-
-  transform:
-    translateX(-50%)
-    translateY(-3px);
-
-  padding: 6px 9px;
-
-  border: 
-    1px solid 
-    var(--border-control);
-  border-radius: 7px;
-
-  background: var(--bg-tooltip);
-
-  box-shadow:
-    0 6px 18px
-    rgba(0, 0, 0, 0.35);
-
-  color: var(--text-primary);
-
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 500;
-
-  line-height: 1;
-
-  white-space: nowrap;
-
-  opacity: 0;
-  visibility: hidden;
-
-  pointer-events: none;
-
-  transition:
-    opacity 0.12s ease,
-    transform 0.12s ease,
-    visibility 0.12s ease;
-}
-
-
-/* Tiny arrow */
-
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip]::before {
-  content: "";
-
-  position: absolute;
-
-  top: calc(100% + 4px);
-  left: 50%;
-
-  z-index: 101;
-
-  width: 7px;
-  height: 7px;
-
-  background: var(--bg-tooltip);
-
-  border-left: 
-    1px solid 
-    var(--border-control);
-  border-top: 
-    1px solid 
-    var(--border-control);
-
-  transform:
-    translateX(-50%)
-    rotate(45deg);
-
-  opacity: 0;
-  visibility: hidden;
-
-  pointer-events: none;
-}
-
-
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip]:hover::after,
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip]:hover::before,
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip]:focus-visible::after,
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip]:focus-visible::before {
-  opacity: 1;
-  visibility: visible;
-}
-
-
-.note-workspace
-.raw-notes-toolbar
-button[data-tooltip]:hover::after {
-  transform:
-    translateX(-50%)
-    translateY(0);
-}
-
-/* ================================================== */
 /* Graph Linked Text                                  */
 /* ================================================== */
 
@@ -1625,7 +1338,6 @@ button[data-tooltip]:hover::after {
   background: var(--bg-panel-secondary);
 
   box-shadow:
-    0 10px 30px
     var(--shadow-popover);
 
   color: var(--text-primary);
@@ -1781,4 +1493,1234 @@ button[data-tooltip]:hover::after {
   margin-top: 1px;
 
   opacity: 0.8;
+}
+
+.note-workspace .graph-panel-header-actions {
+  min-width: 0;
+
+  flex: 1;
+
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+
+  gap: 12px;
+
+  margin-left: auto;
+}
+
+.note-workspace .graph-header-error {
+  min-width: 0;
+  max-width: 290px;
+
+  overflow: hidden;
+
+  color: var(--status-error);
+
+  font-size: 11px;
+  font-weight: 400;
+
+  text-align: right;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ================================================== */
+/* Graph Node Toolbar                                 */
+/* ================================================== */
+
+.note-workspace .graph-node-toolbar {
+  height: 43px;
+  min-height: 43px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+
+  gap: 3px;
+
+  padding: 0 18px;
+
+  border-bottom:
+    1px solid
+    var(--border-control);
+
+  background:
+    var(--bg-toolbar);
+
+  color:
+    var(--toolbar-button-text);
+}
+
+
+/* ================================================== */
+/* Toolbar Buttons                                    */
+/* ================================================== */
+
+.note-workspace .graph-toolbar-button {
+  position: relative;
+
+  height: 31px;
+  min-width: 31px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0 6px;
+
+  border: none;
+  border-radius: 5px;
+
+  background: transparent;
+
+  color:
+    var(--toolbar-button-text);
+
+  font-family: inherit;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+
+.note-workspace
+.graph-toolbar-button svg {
+  color: currentColor;
+}
+
+
+.note-workspace
+.graph-toolbar-button:hover:not(:disabled) {
+  background:
+    var(--toolbar-button-hover-bg);
+
+  color:
+    var(--toolbar-button-hover-text);
+}
+
+
+.note-workspace
+.graph-toolbar-button-active {
+  background:
+    var(--accent-primary);
+
+  color:
+    var(--text-on-accent);
+}
+
+
+.note-workspace
+.graph-toolbar-button-active:hover:not(:disabled) {
+  background:
+    var(--accent-primary-hover);
+
+  color:
+    var(--text-on-accent);
+}
+
+
+.note-workspace
+.graph-toolbar-button:disabled {
+  opacity: 0.35;
+
+  cursor: default;
+}
+
+
+/* ================================================== */
+/* Toolbar Divider                                    */
+/* ================================================== */
+
+.note-workspace .graph-toolbar-divider {
+  width: 1px;
+  height: 22px;
+
+  margin: 0 5px;
+
+  background:
+    var(--border-control);
+}
+
+
+/* ================================================== */
+/* Colour Button                                      */
+/* ================================================== */
+
+.note-workspace
+.graph-toolbar-popover-wrapper {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+}
+
+
+.note-workspace
+.graph-toolbar-color-icon {
+  position: relative;
+
+  width: 19px;
+  height: 22px;
+
+  display: flex;
+  justify-content: center;
+}
+
+
+.note-workspace
+.graph-toolbar-color-indicator {
+  position: absolute;
+
+  left: 2px;
+  right: 2px;
+  bottom: 0;
+
+  height: 2px;
+
+  border-radius: 4px;
+
+  pointer-events: none;
+}
+
+
+.note-workspace
+.graph-hidden-color-input {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+
+  opacity: 0;
+
+  pointer-events: none;
+}
+
+
+/* ================================================== */
+/* Shape Trigger                                      */
+/* ================================================== */
+
+.note-workspace .graph-shape-trigger {
+  width: auto;
+
+  gap: 2px;
+
+  padding-left: 7px;
+  padding-right: 5px;
+}
+
+
+/* ================================================== */
+/* Shape Popover                                      */
+/* ================================================== */
+
+.note-workspace .graph-shape-popover {
+  position: absolute;
+
+  top: calc(100% + 9px);
+  left: 50%;
+
+  z-index: 600;
+
+  display: flex;
+  align-items: center;
+
+  gap: 3px;
+
+  padding: 7px;
+
+  transform:
+    translateX(-50%);
+
+  border:
+    1px solid
+    var(--border-control);
+
+  border-radius: 8px;
+
+  background:
+    var(--bg-panel-secondary);
+
+  box-shadow:
+    var(--shadow-popover);
+}
+
+
+.note-workspace
+.graph-shape-popover::before {
+  content: "";
+
+  position: absolute;
+
+  top: -5px;
+  left: 50%;
+
+  width: 8px;
+  height: 8px;
+
+  transform:
+    translateX(-50%)
+    rotate(45deg);
+
+  border-left:
+    1px solid
+    var(--border-control);
+
+  border-top:
+    1px solid
+    var(--border-control);
+
+  background:
+    var(--bg-panel-secondary);
+}
+
+
+.note-workspace .graph-shape-option {
+  position: relative;
+
+  width: 34px;
+  height: 32px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border:
+    1px solid
+    transparent;
+
+  border-radius: 5px;
+
+  background: transparent;
+
+  color:
+    var(--toolbar-button-text);
+
+  cursor: pointer;
+}
+
+
+.note-workspace
+.graph-shape-option:hover {
+  background:
+    var(--toolbar-button-hover-bg);
+
+  color:
+    var(--toolbar-button-hover-text);
+}
+
+
+.note-workspace
+.graph-shape-option-active {
+  border-color:
+    var(--border-accent-strong);
+
+  background:
+    var(--accent-primary);
+
+  color:
+    var(--text-on-accent);
+}
+
+
+/* ================================================== */
+/* Graph Canvas Overlay Container                     */
+/* ================================================== */
+
+.note-workspace .graph-canvas-shell {
+  position: relative;
+  z-index: 1;
+
+  flex: 1;
+
+  min-width: 0;
+  min-height: 0;
+
+  display: flex;
+
+  overflow: hidden;
+}
+
+
+.note-workspace
+.graph-canvas-shell
+.graph-container {
+  flex: 1;
+
+  min-width: 0;
+  min-height: 0;
+}
+
+
+/* ================================================== */
+/* Selected Node Overlay                              */
+/* ================================================== */
+
+.note-workspace
+.graph-selected-node-overlay {
+  position: absolute;
+
+  top: 12px;
+  left: 12px;
+
+  z-index: 40;
+
+  min-width: 125px;
+  max-width: 190px;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 2px;
+
+  padding: 8px 11px;
+
+  border:
+    1px solid
+    var(--border-accent-muted);
+
+  border-radius: 7px;
+
+  background:
+    var(--bg-panel-elevated);
+
+  box-shadow:
+    var(--shadow-panel);
+
+  pointer-events: none;
+}
+
+
+.note-workspace
+.graph-selected-node-overlay span {
+  color:
+    var(--text-muted);
+
+  font-size: 9px;
+  font-weight: 600;
+
+  letter-spacing: 0.06em;
+
+  text-transform: uppercase;
+}
+
+
+.note-workspace
+.graph-selected-node-overlay strong {
+  overflow: hidden;
+
+  color:
+    var(--text-primary);
+
+  font-size: 12px;
+  font-weight: 600;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* ================================================== */
+/* Link Mode Overlay                                  */
+/* ================================================== */
+
+.note-workspace
+.graph-link-mode-overlay {
+  position: absolute;
+
+  top: 12px;
+  right: 12px;
+
+  z-index: 50;
+
+  display: flex;
+  align-items: center;
+
+  gap: 9px;
+
+  max-width: 240px;
+
+  padding: 8px 9px;
+
+  border:
+    1px solid
+    var(--border-accent-muted);
+
+  border-radius: 8px;
+
+  background:
+    var(--bg-panel-elevated);
+
+  box-shadow:
+    var(--shadow-panel);
+
+  color:
+    var(--text-primary);
+}
+
+
+.note-workspace
+.graph-link-mode-overlay > svg {
+  flex-shrink: 0;
+
+  color:
+    var(--text-accent);
+}
+
+
+.note-workspace
+.graph-link-mode-overlay div {
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 1px;
+}
+
+
+.note-workspace
+.graph-link-mode-overlay strong {
+  overflow: hidden;
+
+  font-size: 11px;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.note-workspace
+.graph-link-mode-overlay span {
+  color:
+    var(--text-muted);
+
+  font-size: 10px;
+}
+
+
+.note-workspace
+.graph-link-mode-overlay button {
+  width: 26px;
+  height: 26px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin-left: 3px;
+  padding: 0;
+
+  border: none;
+  border-radius: 5px;
+
+  background: transparent;
+
+  color:
+    var(--text-secondary);
+
+  cursor: pointer;
+}
+
+
+.note-workspace
+.graph-link-mode-overlay button:hover {
+  background:
+    var(--bg-hover);
+
+  color:
+    var(--text-primary);
+}
+
+.note-workspace .graph-selected-node-overlay,
+.note-workspace .graph-link-mode-overlay {
+  background:
+    color-mix(
+      in srgb,
+      var(--bg-panel-elevated) 60%,
+      transparent
+    );
+
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+/* ================================================== */
+/* Graph Feedback                                     */
+/* ================================================== */
+
+.note-workspace
+.graph-feedback {
+  position: absolute;
+
+  left: 50%;
+  bottom: 12px;
+
+  z-index: 50;
+
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  padding: 8px 11px;
+
+  transform:
+    translateX(-50%);
+
+  border:
+    1px solid;
+
+  border-radius: 7px;
+
+  background:
+    var(--bg-panel-elevated);
+
+  box-shadow:
+    var(--shadow-panel);
+
+  font-size: 11px;
+  font-weight: 600;
+
+  white-space: nowrap;
+}
+
+.note-workspace
+.graph-feedback-success {
+  border-color:
+    var(--status-success);
+
+  color:
+    var(--status-success);
+}
+
+
+.note-workspace
+.graph-feedback-error {
+  border-color:
+    var(--status-error);
+
+  color:
+    var(--status-error);
+}
+
+
+.note-workspace
+.graph-feedback-info {
+  border-color:
+    var(--accent-primary);
+
+  color:
+    var(--text-accent);
+}
+
+.note-workspace
+.graph-feedback-spinner {
+  animation: graph-feedback-spin 0.9s linear infinite;
+}
+
+@keyframes graph-feedback-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ================================================== */
+/* Workspace Tooltips                                 */
+/* ================================================== */
+
+.note-workspace
+.raw-notes-toolbar
+button[data-tooltip],
+
+.note-workspace
+.graph-node-toolbar
+button[data-tooltip],
+
+.note-workspace
+.graph-shape-popover
+button[data-tooltip],
+
+.note-workspace
+.search-submit-button[data-tooltip] {
+  position: relative;
+}
+
+
+/* Tooltip box */
+
+.note-workspace
+.raw-notes-toolbar
+button[data-tooltip]::after,
+
+.note-workspace
+.graph-node-toolbar
+button[data-tooltip]::after,
+
+.note-workspace
+.graph-shape-popover
+button[data-tooltip]::after,
+
+.note-workspace
+.search-submit-button[data-tooltip]::after {
+  content: attr(data-tooltip);
+
+  position: absolute;
+
+  top: calc(100% + 8px);
+  left: 50%;
+
+  z-index: 1000;
+
+  transform:
+    translateX(-50%)
+    translateY(-3px);
+
+  padding: 6px 9px;
+
+  border:
+    1px solid
+    var(--border-control);
+
+  border-radius: 7px;
+
+  background:
+    var(--bg-tooltip);
+
+  box-shadow:
+    var(--shadow-popover);
+
+  color:
+    var(--text-primary);
+
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+
+  white-space: nowrap;
+
+  opacity: 0;
+  visibility: hidden;
+
+  pointer-events: none;
+
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease,
+    visibility 0.12s ease;
+}
+
+
+/* Little diamond / pointer */
+
+.note-workspace
+.raw-notes-toolbar
+button[data-tooltip]::before,
+
+.note-workspace
+.graph-node-toolbar
+button[data-tooltip]::before,
+
+.note-workspace
+.graph-shape-popover
+button[data-tooltip]::before,
+
+.note-workspace
+.search-submit-button[data-tooltip]::before {
+  content: "";
+
+  position: absolute;
+
+  top: calc(100% + 4px);
+  left: 50%;
+
+  z-index: 1001;
+
+  width: 7px;
+  height: 7px;
+
+  background:
+    var(--bg-tooltip);
+
+  border-left:
+    1px solid
+    var(--border-control);
+
+  border-top:
+    1px solid
+    var(--border-control);
+
+  transform:
+    translateX(-50%)
+    rotate(45deg);
+
+  opacity: 0;
+  visibility: hidden;
+
+  pointer-events: none;
+}
+
+
+/* Show tooltip */
+
+.note-workspace
+.raw-notes-toolbar
+button[data-tooltip]:hover::after,
+
+.note-workspace
+.raw-notes-toolbar
+button[data-tooltip]:hover::before,
+
+.note-workspace
+.graph-node-toolbar
+button[data-tooltip]:hover::after,
+
+.note-workspace
+.graph-node-toolbar
+button[data-tooltip]:hover::before,
+
+.note-workspace
+.graph-shape-popover
+button[data-tooltip]:hover::after,
+
+.note-workspace
+.graph-shape-popover
+button[data-tooltip]:hover::before,
+
+.note-workspace
+.search-submit-button[data-tooltip]:hover::after,
+
+.note-workspace
+.search-submit-button[data-tooltip]:hover::before {
+  opacity: 1;
+  visibility: visible;
+}
+
+
+/* Tooltip entrance */
+
+.note-workspace
+.raw-notes-toolbar
+button[data-tooltip]:hover::after,
+
+.note-workspace
+.graph-node-toolbar
+button[data-tooltip]:hover::after,
+
+.note-workspace
+.graph-shape-popover
+button[data-tooltip]:hover::after,
+
+.note-workspace
+.search-submit-button[data-tooltip]:hover::after {
+  transform:
+    translateX(-50%)
+    translateY(0);
+}
+
+/* ================================================== */
+/* Edge-aware tooltip: Semantic Search                */
+/* ================================================== */
+
+.note-workspace
+.search-submit-button[data-tooltip]::after {
+  left: auto;
+  right: 0;
+
+  transform:
+    translateY(-3px);
+}
+
+.note-workspace
+.search-submit-button[data-tooltip]::before {
+  left: auto;
+  right: 10px;
+
+  transform:
+    rotate(45deg);
+}
+
+.note-workspace
+.search-submit-button[data-tooltip]:hover::after,
+.note-workspace
+.search-submit-button[data-tooltip]:focus-visible::after {
+  transform:
+    translateY(0);
+}
+
+/* Tooltip whose box should extend right */
+
+.note-workspace
+.tooltip-align-left[data-tooltip]::after {
+  left: 0;
+  right: auto;
+
+  transform:
+    translateY(-3px);
+}
+
+.note-workspace
+.tooltip-align-left[data-tooltip]::before {
+  left: 10px;
+  right: auto;
+
+  transform:
+    rotate(45deg);
+}
+
+
+/* Tooltip whose box should extend left */
+
+.note-workspace
+.tooltip-align-right[data-tooltip]::after {
+  left: auto;
+  right: 0;
+
+  transform:
+    translateY(-3px);
+}
+
+.note-workspace
+.tooltip-align-right[data-tooltip]::before {
+  left: auto;
+  right: 10px;
+
+  transform:
+    rotate(45deg);
+}
+
+
+/* Preserve entrance animation */
+
+.note-workspace
+.tooltip-align-left[data-tooltip]:hover::after,
+.note-workspace
+.tooltip-align-left[data-tooltip]:focus-visible::after,
+.note-workspace
+.tooltip-align-right[data-tooltip]:hover::after,
+.note-workspace
+.tooltip-align-right[data-tooltip]:focus-visible::after {
+  transform:
+    translateY(0);
+}
+
+/* Keep tooltip-producing controls above surrounding content */
+
+.note-workspace .raw-notes-heading {
+  position: relative;
+  z-index: 100;
+}
+
+.note-workspace .graph-node-toolbar {
+  position: relative;
+  z-index: 100;
+
+  overflow: visible;
+}
+
+/* ================================================== */
+/* Editor corner cleanup                              */
+/* ================================================== */
+
+.note-workspace .raw-notes-toolbar,
+.note-workspace .graph-node-toolbar {
+  border-radius: 6px 6px 0 0;
+  background-clip: padding-box;
+}
+
+.note-workspace .raw-notes-content,
+.note-workspace .graph-canvas-shell {
+  border-radius: 0 0 6px 6px;
+  background-clip: padding-box;
+}
+
+/* ================================================== */
+/* Summary scrollbar                                  */
+/* ================================================== */
+
+.note-workspace
+.summary-panel textarea {
+  scrollbar-color:
+    var(--editor-scrollbar-thumb)
+    transparent;
+}
+
+
+/* Chrome / Edge / Safari */
+
+.note-workspace
+.summary-panel textarea::-webkit-scrollbar {
+  width: 8px;
+}
+
+
+.note-workspace
+.summary-panel textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+
+.note-workspace
+.summary-panel textarea::-webkit-scrollbar-thumb {
+  background:
+    var(--editor-scrollbar-thumb);
+
+  border: 2px solid transparent;
+
+  border-radius: 999px;
+
+  background-clip: padding-box;
+}
+
+
+.note-workspace
+.summary-panel textarea::-webkit-scrollbar-thumb:hover {
+  background:
+    var(--editor-scrollbar-thumb-hover);
+
+  border: 2px solid transparent;
+
+  background-clip: padding-box;
+}
+
+
+.note-workspace
+.summary-panel textarea::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Raw Notes still needs clipping for its rounded editor */
+.note-workspace .raw-notes-editor {
+  overflow: hidden;
+}
+
+/* Graph toolbar needs to let tooltips/popovers escape */
+.note-workspace .graph-editor {
+  position: relative;
+  overflow: visible;
+}
+
+/* ================================================== */
+/* Active editor focus                                */
+/* ================================================== */
+
+.note-workspace .raw-notes-editor:focus-within,
+.note-workspace .graph-editor.graph-editor-active {
+  border-color: var(--accent-primary);
+
+  box-shadow:
+    0 0 0 1px
+    color-mix(
+      in srgb,
+      var(--accent-primary) 35%,
+      transparent
+    );
+
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+/* =========================================================
+   GRAPH SEMANTIC SEARCH
+   ========================================================= */
+
+.graph-semantic-search {
+  position: absolute;
+
+  right: 14px;
+  bottom: 14px;
+
+  z-index: 30;
+
+  display: flex;
+  align-items: center;
+}
+
+.graph-semantic-search-toggle {
+  width: 36px;
+  height: 36px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border:
+    1px solid
+    var(--border-control);
+
+  border-radius: 8px;
+
+  background:
+    var(--bg-panel);
+
+  color:
+    var(--text-secondary);
+
+  cursor: pointer;
+
+  box-shadow:
+    0 4px 14px
+    rgba(0, 0, 0, 0.16);
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+
+.graph-semantic-search-toggle:hover {
+  background:
+    var(--accent-primary);
+
+  border-color:
+    var(--accent-primary);
+
+  color:
+    #ffffff;
+}
+
+.graph-semantic-search-open {
+  width:
+    min(
+      320px,
+      calc(100% - 28px)
+    );
+
+  min-height: 38px;
+
+  padding:
+    0
+    5px
+    0
+    11px;
+
+  gap: 8px;
+
+  border:
+    1px solid
+    var(--accent-primary);
+
+  border-radius: 8px;
+
+  background:
+    var(--bg-panel);
+
+  box-shadow:
+    0 5px 18px
+    rgba(0, 0, 0, 0.18);
+}
+
+
+.graph-semantic-search-open input {
+  flex: 1;
+
+  min-width: 0;
+
+  height: 36px;
+
+  padding: 0;
+
+  border: none;
+  outline: none;
+
+  background: transparent;
+
+  color:
+    var(--text-primary);
+
+  font: inherit;
+  font-size: 12px;
+}
+
+
+.graph-semantic-search-open input::placeholder {
+  color:
+    var(--text-muted);
+}
+
+
+.graph-semantic-search-icon {
+  flex-shrink: 0;
+
+  color:
+    var(--text-muted);
+}
+
+.graph-semantic-submit {
+  width: 28px;
+  height: 28px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border: none;
+
+  border-radius: 6px;
+
+  background:
+    var(--accent-primary);
+
+  color:
+    #ffffff;
+
+  cursor: pointer;
+}
+
+
+.graph-semantic-submit:hover:not(:disabled) {
+  filter:
+    brightness(1.08);
+}
+
+
+.graph-semantic-submit:disabled {
+  opacity: 0.4;
+
+  cursor: default;
+}
+
+/* =========================================================
+   GRAPH FLOATING GLASS PANELS
+   Keep near the END of NoteWorkspace.css
+   ========================================================= */
+
+.note-workspace .graph-selected-node-overlay,
+.note-workspace .graph-link-mode-overlay,
+.note-workspace .graph-feedback,
+.note-workspace .graph-semantic-search-toggle,
+.note-workspace .graph-semantic-search.graph-semantic-search-open {
+  background:
+    color-mix(
+      in srgb,
+      var(--bg-panel-elevated) 60%,
+      transparent
+    );
+
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.note-workspace .graph-semantic-search-toggle:hover {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #ffffff;
 }

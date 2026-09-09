@@ -109,3 +109,47 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* ================================================== */
+/* Global page scrollbar                              */
+/* ================================================== */
+
+/* Firefox */
+html {
+
+  scrollbar-color:
+    var(--page-scrollbar-thumb)
+    var(--page-scrollbar-track);
+}
+
+
+/* Chromium / Edge / Safari */
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 10px;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track {
+  background:
+    var(--page-scrollbar-track);
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb {
+  background:
+    var(--page-scrollbar-thumb);
+
+  border-radius: 999px;
+
+  border:
+    2px solid
+    var(--page-scrollbar-track);
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover {
+  background:
+    var(--page-scrollbar-thumb-hover);
+}
