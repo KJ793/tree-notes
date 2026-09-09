@@ -21,7 +21,8 @@
 
        const USE_MOCK_GRAPH_API = false;
 
-   GraphPanel does NOT need to change.
+   GraphPanel does NOT need to change apart from passing
+   graphData into semanticSearchGraph().
 
    Expected backend endpoint:
 
@@ -60,11 +61,8 @@ const API_BASE =
 
    These search terms exist ONLY for frontend development.
 
-   They correspond to the JavaScript node in the current
-   mock Cytoscape graph:
-
-       node_id: "2"
-       label: "JavaScript"
+   They currently point toward the JavaScript node in the
+   mock graph.
 
    The backend will eventually replace this with real
    fuzzy / semantic / embedding-based matching.
@@ -82,6 +80,125 @@ const MOCK_JAVASCRIPT_NODE = {
   label: "JavaScript",
   score: 0.95,
 };
+
+
+
+/* =========================================================
+   PREPARE GRAPH FOR SEMANTIC SEARCH
+   =========================================================
+
+   Converts the frontend graph into a small backend-friendly
+   structure containing the information needed by semantic
+   search.
+
+   This gives the AI/backend:
+
+       - node IDs
+       - node labels
+       - node relationships
+       - optional semantic node/edge metadata
+
+   Cytoscape styling and position information is not needed
+   for semantic matching, so it is not included here.
+
+   Supports both:
+
+       { data: { id, label } }
+
+   and:
+
+       { id, label }
+
+   graph structures.
+   ========================================================= */
+
+function prepareGraphForSearch(
+  graphData
+) {
+
+  const nodes =
+    graphData?.nodes?.map(
+      (node) => {
+
+        const data =
+          node.data ??
+          node;
+
+
+        return {
+          id:
+            String(
+              data.id
+            ),
+
+          label:
+            data.label ??
+            "",
+
+          /*
+            Optional semantic information.
+
+            These will simply be undefined if your
+            current graph does not use them.
+          */
+          type:
+            data.type ??
+            undefined,
+
+          category:
+            data.category ??
+            undefined,
+        };
+      }
+    ) ?? [];
+
+
+  const edges =
+    graphData?.edges?.map(
+      (edge) => {
+
+        const data =
+          edge.data ??
+          edge;
+
+
+        return {
+          id:
+            data.id != null
+              ? String(data.id)
+              : null,
+
+          source:
+            String(
+              data.source
+            ),
+
+          target:
+            String(
+              data.target
+            ),
+
+          /*
+            Useful later if relationships receive
+            names such as "uses", "contains", etc.
+          */
+          label:
+            data.label ??
+            undefined,
+
+          type:
+            data.type ??
+            undefined,
+        };
+      }
+    ) ?? [];
+
+
+  return {
+    nodes,
+    edges,
+  };
+}
 
 
 
@@ -122,7 +239,9 @@ async function handleApiResponse(
     }
 
 
-    throw new Error(message);
+    throw new Error(
+      message
+    );
   }
 
 
@@ -130,7 +249,10 @@ async function handleApiResponse(
     Some future graph operations may return
     HTTP 204 with no response body.
   */
-  if (response.status === 204) {
+  if (
+    response.status === 204
+  ) {
+
     return null;
   }
 
@@ -166,7 +288,9 @@ async function handleApiResponse(
    converts numeric database IDs if necessary.
    ========================================================= */
 
-function normaliseSearchResult(data) {
+function normaliseSearchResult(
+  data
+) {
 
   const match =
     data?.match ??
@@ -174,6 +298,7 @@ function normaliseSearchResult(data) {
 
 
   if (!match) {
+
     return {
       match: null,
     };
@@ -212,7 +337,8 @@ function normaliseSearchResult(data) {
        const result =
          await semanticSearchGraph(
            noteId,
-           query
+           query,
+           graphData
          );
 
 
@@ -226,10 +352,14 @@ function normaliseSearchResult(data) {
        script
        programming
 
-   currently return:
+   currently return the JavaScript node.
 
-       JavaScript
-       node_id "2"
+   Importantly, the mock now tries to locate JavaScript
+   inside the CURRENT graph data instead of always assuming
+   node ID "2".
+
+   This makes the mock more representative of how the real
+   backend will operate.
 
    Any other search returns:
 
@@ -247,8 +377,30 @@ function normaliseSearchResult(data) {
    Request:
 
        {
-         "query": "java"
+         "query": "java",
+
+         "graph": {
+           "nodes": [
+             {
+               "id": "1",
+               "label": "React"
+             },
+             {
+               "id": "2",
+               "label": "JavaScript"
+             }
+           ],
+
+           "edges": [
+             {
+               "id": "edge-1",
+               "source": "1",
+               "target": "2"
+             }
+           ]
+         }
        }
+
 
    Recommended successful backend response:
 
@@ -260,6 +412,7 @@ function normaliseSearchResult(data) {
          }
        }
 
+
    No semantic match:
 
        {
@@ -270,13 +423,26 @@ function normaliseSearchResult(data) {
 
 export async function semanticSearchGraph(
   noteId,
-  query
+  query,
+  graphData
 ) {
 
   const normalizedQuery =
     query
       .trim()
       .toLowerCase();
+
+
+  /*
+    Prepare the graph once.
+
+    Both mock mode and real backend mode can therefore
+    inspect the exact same graph structure.
+  */
+  const searchGraph =
+    prepareGraphForSearch(
+      graphData
+    );
 
 
 
@@ -291,6 +457,8 @@ export async function semanticSearchGraph(
       {
         noteId,
         query,
+        graph:
+          searchGraph,
       }
     );
 
@@ -332,6 +500,47 @@ export async function semanticSearchGraph(
 
     if (hasMockMatch) {
 
+      /*
+        Prefer the JavaScript node found in the current
+        graph rather than relying on a hard-coded ID.
+      */
+      const javascriptNode =
+        searchGraph.nodes.find(
+          (node) =>
+            node.label
+              ?.trim()
+              .toLowerCase() ===
+            "javascript"
+        );
+
+
+      if (javascriptNode) {
+
+        return {
+          match: {
+
+            node_id:
+              javascriptNode.id,
+
+            label:
+              javascriptNode.label,
+
+            score:
+              0.95,
+          },
+        };
+      }
+
+
+      /*
+        Temporary fallback.
+
+        This keeps your original mock working even if
+        GraphPanel has not supplied graphData yet.
+
+        Once GraphPanel definitely passes graphData,
+        this fallback could eventually be removed.
+      */
       return {
         match: {
           ...MOCK_JAVASCRIPT_NODE,
@@ -371,7 +580,8 @@ export async function semanticSearchGraph(
     await fetch(
       `${API_BASE}/notes/${noteId}/graph/search`,
       {
-        method: "POST",
+        method:
+          "POST",
 
         headers: {
           "Content-Type":
@@ -385,10 +595,20 @@ export async function semanticSearchGraph(
         credentials:
           "include",
 
+        /*
+          IMPORTANT:
+
+          The graph is sent alongside the query so
+          the semantic-search backend can reason about
+          both node meaning AND node relationships.
+        */
         body:
           JSON.stringify({
             query:
               query.trim(),
+
+            graph:
+              searchGraph,
           }),
       }
     );
@@ -458,7 +678,8 @@ export async function getGraph(
     await fetch(
       `${API_BASE}/notes/${noteId}/graph`,
       {
-        method: "GET",
+        method:
+          "GET",
 
         credentials:
           "include",
@@ -544,7 +765,8 @@ export async function saveGraph(
     await fetch(
       `${API_BASE}/notes/${noteId}/graph`,
       {
-        method: "PUT",
+        method:
+          "PUT",
 
         headers: {
           "Content-Type":

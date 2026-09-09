@@ -971,7 +971,8 @@ async function handleSemanticSearch() {
     const result =
       await semanticSearchGraph(
         noteId,
-        query
+        query,
+        graphData
       );
 
     if (!result?.match) {
