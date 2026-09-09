@@ -13,9 +13,11 @@ alembic needs -c because the code lives at /app/backend while `docker compose
 run` starts in /app, so alembic.ini is not in the working directory.
 """
 
-import logging
 import os
-
+import sys
+import logging
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware

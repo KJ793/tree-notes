@@ -19,6 +19,7 @@ services:
     env_file:
       - .env
     environment:
+      - PYTHONPATH=/app
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT}/${POSTGRES_DB}
       # Only takes effect if watchfiles is installed (uvicorn[standard]); the
       # current requirements.txt has plain uvicorn, so the reloader falls back

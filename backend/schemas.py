@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import BaseModel, ConfigDict, computed_field, Field, validator
 
 class NoteBase(BaseModel):
     title: str
@@ -156,3 +156,15 @@ class SummaryResponse(BaseModel):
     aiSummary: str
     userSummaryReview: str = ""
     userScore: int = 0
+
+
+class UserRegister(BaseModel):
+    username: str = Field(..., min_length = 3, max_length = 50, description = "username")
+    email: str = Field(..., description = "emailAddress")
+    password: str = Field(..., min_length = 8, description = "password")
+
+    @validator("email")
+    def validate_email(cls, value):
+        if '@' not in value or '.' not in value:
+            raise ValueError("Invalid email format")
+        return value

@@ -21,7 +21,7 @@ function LoginCard({ onCreateAccount }) {
 
     setLoading(true);
     setError("");
-
+    let LoginSuccess = false;
     try {
 
       /* =========================================
@@ -69,11 +69,8 @@ function LoginCard({ onCreateAccount }) {
       */
 
       const data = await response.json();
-
+      LoginSuccess = true;
       console.log("Logged in user:", data);
-
-      navigate("/dashboard", { replace: true });
-
     } catch (error) {
       console.error("Login error:", error);
 
@@ -83,6 +80,9 @@ function LoginCard({ onCreateAccount }) {
 
     } finally {
       setLoading(false);
+      if (LoginSuccess) {
+        navigate("/dashboard", { replace: true });
+      }
     }
   }
 
