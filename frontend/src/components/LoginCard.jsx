@@ -71,7 +71,6 @@ function LoginCard({ onCreateAccount }) {
       const data = await response.json();
       LoginSuccess = true;
       console.log("Logged in user:", data);
-      
     } catch (error) {
       console.error("Login error:", error);
 

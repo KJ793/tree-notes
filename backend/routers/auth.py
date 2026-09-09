@@ -15,7 +15,6 @@ def login(
         request: Request,
         db: Session = Depends(get_db),
 ) -> LoginResponse:
-    print("Login reached")
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not pwd_context.verify(payload.password, user.password_hash):
         raise HTTPException(
