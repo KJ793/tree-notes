@@ -24,7 +24,6 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from backend.routers import ai_adapter, auth, groups, notes, profile
 
-from backend.ai.ai import router as ai_router
 from backend.ai.ai import warm_ollama
 
 app = FastAPI(
@@ -91,4 +90,3 @@ app.include_router(profile.router, prefix="/api", tags=["profile"])
 app.include_router(ai_adapter.router, prefix="/api", tags=["ai-adapter"])
 app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
 app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
-app.include_router(ai_router)

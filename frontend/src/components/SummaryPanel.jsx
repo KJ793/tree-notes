@@ -88,18 +88,19 @@ function SummaryPanel({ rawNotes }) {
   // =========================================================
 
   async function handleSummaryAI() {
-    if (hasUserSummary) {
-      await reviewMySummary();
-    } else {
-      await generateSummary();
-    }
+    await generateOrReviewSummary();
+//     if (hasUserSummary) {
+//       await reviewMySummary();
+//     } else {
+//       await generateSummary();
+//     }
   }
 
   // =========================================================
   // GENERATE AI SUMMARY
   // =========================================================
 
-  async function generateSummary() {
+  async function generateSummary() { // uses deprecated logic
 
     // << FRONTEND DEV >> //
     // rawNotes is provided from NoteWorkspace
@@ -235,6 +236,48 @@ function SummaryPanel({ rawNotes }) {
     }
   }
 
+  async function generateOrReviewSummary() {
+    if (!rawNotes || rawNotes.trim() == "") {
+      setSummaryError("Please write some notes before generating a summary.");
+      return;
+    }
+
+    setSummaryLoading(true);
+    setSummaryError("");
+
+    try {
+      const response = await fetch("api/summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rawNotes,
+//           graphJson: graphData ? JSON.stringify(graphData) : "",
+          userSummary: mySummary || "",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Summary generation failed. Please try again.");
+      }
+
+      const data = await response.json();
+
+      // Use backend results directly
+      setAiSummary(data.aiSummary);
+      setMySummary(data.aiSummary);
+
+      setSummaryScore(data.userScore ?? null);
+      setSummaryFeedback(data.userSummaryReview ?? "");
+
+      setImprovedSummary(data.improvedSummary ?? "");
+
+    } catch (error) {
+      console.error("Summary generation error:", error);
+      setSummaryError("Unable to generate summary. Please try again.");
+    } finally {
+      setSummaryLoading(false);
+    }
+  }
 
   // =========================================================
   // REVIEW USER SUMMARY
@@ -382,7 +425,6 @@ function SummaryPanel({ rawNotes }) {
     }
   }
 
-
   // =========================================================
   // APPLY AI IMPROVED SUMMARY
   // =========================================================
@@ -411,7 +453,6 @@ function SummaryPanel({ rawNotes }) {
     setImprovedSummary("");
   }
 
-
   // =========================================================
   // USER EDITING
   // =========================================================
@@ -435,7 +476,6 @@ function SummaryPanel({ rawNotes }) {
     setReviewError("");
     setSummaryError("");
   }
-
 
   return (
     <section className="summary-panel">

@@ -154,50 +154,6 @@ const GraphPanel = forwardRef(function GraphPanel(
     } finally {
       setLoading(false);
     }
-
-    // TEMPORARY TEST GRAPH DATA //
-    // Keep this while Docker / AI is not running //
-    const testGraphData = {
-      nodes: [
-        {
-          data: {
-            id: "1",
-            label: "React",
-          },
-        },
-        {
-          data: {
-            id: "2",
-            label: "JavaScript",
-          },
-        },
-        {
-          data: {
-            id: "3",
-            label: "Components",
-          },
-        },
-      ],
-
-      edges: [
-        {
-          data: {
-            id: "e1",
-            source: "1",
-            target: "2",
-          },
-        },
-        {
-          data: {
-            id: "e2",
-            source: "1",
-            target: "3",
-          },
-        },
-      ],
-    };
-
-    setGraphData(testGraphData);
   }
 
   // << CYTOSCAPE FRONTEND >> //
@@ -535,13 +491,11 @@ function addSelectedTextNode() {
   });
 }   
 
-
 useEffect(() => 
     { if (addNodeTrigger === 0) 
         { return; }
          addSelectedTextNode(); }, 
          [addNodeTrigger]);
-
 
 // getting latest graph with all the chnages
 function getEditedGraphData() {
@@ -638,7 +592,6 @@ function startLinkMode() {
 
   setGraphFeedback(null);
 }
-
 
 function cancelLinkMode() {
   cyRef.current
@@ -864,7 +817,6 @@ function getSelectedCyNode() {
   return node;
 }
 
-
 function changeSelectedNodeColor(newColor) {
   const node = getSelectedCyNode();
 
@@ -890,7 +842,6 @@ function changeSelectedNodeColor(newColor) {
     color: newColor,
   }));
 }
-
 
 function changeSelectedNodeShape(newShape) {
   const node = getSelectedCyNode();
