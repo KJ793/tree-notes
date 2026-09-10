@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.dependencies import get_current_user
 from backend.models import Note, User
-from backend.schemas import NoteCreate, NoteResponse, NoteUpdate
+from backend.schemas import NoteCreate, NoteResponse, NoteUpdate, SemanticSearchRequest
+from backend.ai.ai import ai_search_graph
 
 router = APIRouter()
 
@@ -49,6 +50,32 @@ def list_notes(
         .all()
     )
 
+
+def normalise_search_result(concept_id: int, graph: dict, score: float):
+    # find the node in graph.nodes with id == concept_id
+    for node in graph["nodes"]:
+        if str(node["id"]) == str(concept_id):
+            return {
+                "node_id": node["id"],
+                "label": node["label"],
+                "score": score
+            }
+    return None # if no nodes match
+
+@router.post("/{note_id}/graph/search")
+def semantic_search(
+    note_id: str, # <--- SHOULD THIS BE A STRING OR AN INTEGER? IT ONLY WORKS WHEN IT IS A STRING <!!!>
+    payload: SemanticSearchRequest,
+    current_user: User = Depends(get_current_user)
+    ):
+
+    query = payload.query
+    graph_dict = payload.graph.dict()
+
+    try:
+        return { "match": ai_search_graph(query, graph_dict) }
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Semantic search failed: {exc}")
 
 @router.get("/{note_id}", response_model=NoteResponse)
 def read_note(

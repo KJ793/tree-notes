@@ -81,6 +81,33 @@ class LinkResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SearchNode(BaseModel):
+    id: str
+    importance: float = None
+    label: str = None
+    type: str = None
+    category: str = None
+
+
+class SearchEdge(BaseModel):
+    id: str
+    label: str = None
+    source: str
+    target: str
+    weight: float = None
+    type: str = None
+
+
+class SearchGraph(BaseModel):
+    nodes: List[SearchNode]
+    edges: List[SearchEdge]
+
+
+class SemanticSearchRequest(BaseModel):
+    query: str
+    graph: SearchGraph
+
+
 class GraphResponse(BaseModel):
     groups: List[GroupResponse]
     notes: List[NoteSummary]
@@ -144,7 +171,7 @@ class RawNotesRequest(BaseModel):
     # The AI functions accept these too, but GraphPanel and SummaryPanel send
     # only rawNotes today. Defaulted so the panels work now, and so the My
     # Summary tab can start sending userSummary without a backend change.
-    graphJson: str = ""
+    graphJson: SearchGraph = None
     userSummary: str = ""
 
 

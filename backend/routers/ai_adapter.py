@@ -12,26 +12,23 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from backend.ai.ai import generate_graph, generate_summary
+from backend.ai.ai import ai_generate_graph, ai_generate_summary, ai_search_graph
 from backend.dependencies import get_current_user
 from backend.models import User
 from backend.schemas import RawNotesRequest, SummaryResponse
 
 router = APIRouter()
 
-
 def _humanise(value: str) -> str:
     """Concept names and relationships come back in snake_case per the prompt
     template. Cytoscape renders them as-is, so convert for display."""
     return (value or "").replace("_", " ").strip()
-
 
 def _relationship_label(relationship: Dict[str, Any]) -> str:
     # The prompt template declares "relationship" but its worked example emits
     # "relationships", so the model produces either. See FLAG 005.
     raw = relationship.get("relationship") or relationship.get("relationships")
     return _humanise(raw if isinstance(raw, str) else "")
-
 
 def _to_cytoscape(concepts: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
     """Map the AI concept schema onto the element shape GraphPanel renders."""
@@ -95,7 +92,6 @@ def _to_cytoscape(concepts: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, An
 
     return {"nodes": nodes, "edges": edges}
 
-
 def _require_notes(raw_notes: str) -> str:
     text = (raw_notes or "").strip()
     if not text:
@@ -105,16 +101,15 @@ def _require_notes(raw_notes: str) -> str:
         )
     return text
 
-
 @router.post("/graph")
 def graph(
-        payload: RawNotesRequest,
-        current_user: User = Depends(get_current_user),
-) -> Dict[str, List[Dict[str, Any]]]:
+    payload: RawNotesRequest,
+    current_user: User = Depends(get_current_user),) -> Dict[str, List[Dict[str, Any]]]:
+
     text = _require_notes(payload.rawNotes)
 
     try:
-        result = generate_graph(text)
+        result = ai_generate_graph(text)
     except Exception as exc:
         # The panels only branch on response.ok, so an upstream failure has to
         # be a non-2xx status. A 200 carrying an error body would render as an
@@ -133,19 +128,23 @@ def graph(
 
     return _to_cytoscape(concepts)
 
-
 @router.post("/summary", response_model=SummaryResponse)
 def summary(
-        payload: RawNotesRequest,
-        current_user: User = Depends(get_current_user),
-) -> SummaryResponse:
+    payload: RawNotesRequest,
+    current_user: User = Depends(get_current_user),) -> SummaryResponse:
     text = _require_notes(payload.rawNotes)
+
+    print("Payload.")
 
     try:
         # generate_summary requires all three arguments. SummaryPanel sends
         # only rawNotes, so the other two are supplied from the schema
         # defaults; without them the request would 422 before reaching Ollama.
-        result = generate_summary(text, payload.graphJson, payload.userSummary)
+        result = ai_generate_summary(
+            raw_data=text,
+            graph_json=payload.graphJson.dict() if payload.graphJson else {},
+            user_summary=payload.userSummary or ""
+        )
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -153,10 +152,10 @@ def summary(
         )
 
     result = result or {}
-    text = result.get("aiSummary", "")
+    ai_text = result.get("aiSummary", "")
     return SummaryResponse(
-        summary=text,
-        aiSummary=text,
+        summary=ai_text, # is this a second ai-related summary text field, or the user_summary text field?
+        aiSummary=ai_text,
         userSummaryReview=result.get("userSummaryReview", ""),
         userScore=result.get("userScore", 0),
     )

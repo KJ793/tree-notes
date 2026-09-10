@@ -34,9 +34,7 @@
        PUT /api/notes/:noteId/graph
    ========================================================= */
 
-
 const USE_MOCK_GRAPH_API = true;
-
 
 /*
   Optional backend URL.
@@ -49,11 +47,8 @@ const USE_MOCK_GRAPH_API = true;
 
       VITE_API_URL=http://localhost:3000/api
 */
-const API_BASE =
-  import.meta.env.VITE_API_URL ??
-  "/api";
 
-
+const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
 
 /* =========================================================
    TEMPORARY MOCK SEMANTIC SEARCH
@@ -74,14 +69,11 @@ const MOCK_SEMANTIC_MATCHES = [
   "programming",
 ];
 
-
 const MOCK_JAVASCRIPT_NODE = {
   node_id: "2",
   label: "JavaScript",
   score: 0.95,
 };
-
-
 
 /* =========================================================
    PREPARE GRAPH FOR SEMANTIC SEARCH
@@ -112,155 +104,66 @@ const MOCK_JAVASCRIPT_NODE = {
    graph structures.
    ========================================================= */
 
-function prepareGraphForSearch(
-  graphData
-) {
-
-  const nodes =
-    graphData?.nodes?.map(
-      (node) => {
-
-        const data =
-          node.data ??
-          node;
-
+function prepareGraphForSearch(graphData) {
+  const nodes = graphData?.nodes?.map((node) => {
+        const data = node.data ?? node;
 
         return {
-          id:
-            String(
-              data.id
-            ),
+          id: String(data.id),
+          label: data.label ?? "",
 
-          label:
-            data.label ??
-            "",
-
-          /*
-            Optional semantic information.
-
-            These will simply be undefined if your
-            current graph does not use them.
-          */
-          type:
-            data.type ??
-            undefined,
-
-          category:
-            data.category ??
-            undefined,
+          // Optional semantic information. These will simply be undefined if your current graph does not use them.
+          type: data.type ?? undefined,
+          category: data.category ?? undefined,
         };
-      }
-    ) ?? [];
+      }) ?? [];
 
-
-  const edges =
-    graphData?.edges?.map(
-      (edge) => {
-
-        const data =
-          edge.data ??
-          edge;
-
+  const edges = graphData?.edges?.map((edge) => {
+        const data = edge.data ?? edge;
 
         return {
-          id:
-            data.id != null
-              ? String(data.id)
-              : null,
+          id: data.id != null ? String(data.id) : null,
+          source:String(data.source),
+          target: String(data.target),
 
-          source:
-            String(
-              data.source
-            ),
-
-          target:
-            String(
-              data.target
-            ),
-
-          /*
-            Useful later if relationships receive
-            names such as "uses", "contains", etc.
-          */
-          label:
-            data.label ??
-            undefined,
-
-          type:
-            data.type ??
-            undefined,
+          // Useful later if relationships receive names such as "uses", "contains", etc.
+          label: data.label ?? undefined,
+          type: data.type ?? undefined,
         };
-      }
-    ) ?? [];
+      }) ?? [];
 
-
-  return {
-    nodes,
-    edges,
-  };
+  return { nodes, edges };
 }
-
-
 
 /* =========================================================
    BACKEND RESPONSE HELPER
    ========================================================= */
 
-async function handleApiResponse(
-  response,
-  fallbackMessage
-) {
+async function handleApiResponse(response, fallbackMessage) {
 
   if (!response.ok) {
-
-    let message =
-      fallbackMessage;
-
+    let message = fallbackMessage;
 
     try {
-
-      const data =
-        await response.json();
-
-
-      message =
-        data.message ??
-        data.error ??
-        message;
-
-    } catch {
-
-      /*
-        Backend did not return JSON.
-
-        Continue using the fallback message.
-      */
-
+      const data = await response.json();
+      message = data.message ?? data.error ?? message;
+    }
+    catch
+    {
+      // Backend did not return JSON. Continue using the fallback message.
     }
 
-
-    throw new Error(
-      message
-    );
+    throw new Error(message);
   }
 
+  // Some future graph operations may return HTTP 204 with no response body.
 
-  /*
-    Some future graph operations may return
-    HTTP 204 with no response body.
-  */
-  if (
-    response.status === 204
-  ) {
-
+  if (response.status === 204) {
     return null;
   }
 
-
   return response.json();
 }
-
-
 
 /* =========================================================
    SEARCH RESULT NORMALISATION
@@ -288,45 +191,18 @@ async function handleApiResponse(
    converts numeric database IDs if necessary.
    ========================================================= */
 
-function normaliseSearchResult(
-  data
-) {
+function normaliseSearchResult(data) {
+  const match = data?.match ?? null;
 
-  const match =
-    data?.match ??
-    null;
+  if (!match) { return { match: null }; }
 
-
-  if (!match) {
-
-    return {
-      match: null,
-    };
-  }
-
-
-  return {
-    match: {
-
-      ...match,
-
-      node_id:
-        String(
-          match.node_id
-        ),
-
-      label:
-        match.label ??
-        "",
-
-      score:
-        match.score ??
-        null,
-    },
-  };
+  return { match: {
+        ...match,
+        node_id: String(match.node_id),
+        label: match.label ?? "",
+        score: match.score ?? null
+  }};
 }
-
-
 
 /* =========================================================
    SEMANTIC GRAPH SEARCH
@@ -421,212 +297,77 @@ function normaliseSearchResult(
 
    ========================================================= */
 
-export async function semanticSearchGraph(
-  noteId,
-  query,
-  graphData
-) {
+export async function semanticSearchGraph(noteId, query, graphData) {
 
-  const normalizedQuery =
-    query
-      .trim()
-      .toLowerCase();
+  const normalizedQuery = query.trim().toLowerCase();
 
-
-  /*
-    Prepare the graph once.
-
-    Both mock mode and real backend mode can therefore
-    inspect the exact same graph structure.
-  */
-  const searchGraph =
-    prepareGraphForSearch(
-      graphData
-    );
-
-
+  // Prepare the graph once. Both mock mode and real backend mode can therefore inspect the exact same graph structure.
+  const searchGraph = prepareGraphForSearch(graphData);
 
   /* =======================================================
      TEMPORARY MOCK IMPLEMENTATION
      ======================================================= */
 
-  if (USE_MOCK_GRAPH_API) {
-
-    console.log(
-      "Mock semantic graph search:",
-      {
-        noteId,
-        query,
-        graph:
-          searchGraph,
-      }
-    );
-
-
-    /*
-      Simulates a short AI/backend delay so the
-      loading feedback can be demonstrated.
-    */
-    await new Promise(
-      (resolve) =>
-        setTimeout(
-          resolve,
-          500
-        )
-    );
-
-
-    /*
-      Empty query should never normally arrive here because
-      GraphPanel already prevents it, but this keeps the
-      mock API defensive.
-    */
-    if (!normalizedQuery) {
-
-      return {
-        match: null,
-      };
+  // No longer required
+    {
+      // if (USE_MOCK_GRAPH_API) {
+      //   console.log("Mock semantic graph search:", { noteId, query, graph: searchGraph });
+      //
+      //   // Simulates a short AI/backend delay so the loading feedback can be demonstrated.
+      //   await new Promise((resolve) => setTimeout(resolve, 500));
+      //
+      //   // Empty query should never normally arrive here because GraphPanel already prevents it, but this keeps the mock API defensive.
+      //   if (!normalizedQuery) { return { match: null }; }
+      //
+      //   const hasMockMatch = MOCK_SEMANTIC_MATCHES.some((keyword) => normalizedQuery.includes(keyword));
+      //
+      //   if (hasMockMatch) {
+      //
+      //     // Prefer the JavaScript node found in the current graph rather than relying on a hard-coded ID.
+      //     const javascriptNode = searchGraph.nodes.find((node) => node.label?.trim().toLowerCase() === "javascript");
+      //
+      //     if (javascriptNode) {
+      //       return { match: {
+      //           node_id: javascriptNode.id,
+      //           label: javascriptNode.label,
+      //           score: 0.95
+      //       }};
+      //     }
+      //
+      //     // Temporary fallback.
+      //     // This keeps your original mock working even if GraphPanel has not supplied graphData yet.
+      //     // Once GraphPanel definitely passes graphData, this fallback could eventually be removed.
+      //     return { match: { ...MOCK_JAVASCRIPT_NODE } };
+      //   }
+      //
+      //   return { match: null };
+      //
     }
-
-
-    const hasMockMatch =
-      MOCK_SEMANTIC_MATCHES.some(
-        (keyword) =>
-          normalizedQuery.includes(
-            keyword
-          )
-      );
-
-
-    if (hasMockMatch) {
-
-      /*
-        Prefer the JavaScript node found in the current
-        graph rather than relying on a hard-coded ID.
-      */
-      const javascriptNode =
-        searchGraph.nodes.find(
-          (node) =>
-            node.label
-              ?.trim()
-              .toLowerCase() ===
-            "javascript"
-        );
-
-
-      if (javascriptNode) {
-
-        return {
-          match: {
-
-            node_id:
-              javascriptNode.id,
-
-            label:
-              javascriptNode.label,
-
-            score:
-              0.95,
-          },
-        };
-      }
-
-
-      /*
-        Temporary fallback.
-
-        This keeps your original mock working even if
-        GraphPanel has not supplied graphData yet.
-
-        Once GraphPanel definitely passes graphData,
-        this fallback could eventually be removed.
-      */
-      return {
-        match: {
-          ...MOCK_JAVASCRIPT_NODE,
-        },
-      };
-    }
-
-
-    return {
-      match: null,
-    };
-  }
-
-
 
   /* =======================================================
      REAL BACKEND IMPLEMENTATION
      ======================================================= */
 
-  if (!noteId) {
+  if (!noteId) { throw new Error("A note ID is required to search the graph."); }
 
-    throw new Error(
-      "A note ID is required to search the graph."
-    );
-  }
+  if (!normalizedQuery) { throw new Error("A search query is required."); }
 
+  const response = await fetch(`${API_BASE}/notes/${noteId}/graph/search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include", // Assumes authentication currently uses the user's session cookie.
 
-  if (!normalizedQuery) {
+        // IMPORTANT: The graph is sent alongside the query so the semantic-search backend can reason about both node meaning AND node relationships.
+        body: JSON.stringify({
+            query: query.trim(),
+            graph: searchGraph,
+        })
+  });
 
-    throw new Error(
-      "A search query is required."
-    );
-  }
+  const data = await handleApiResponse(response, "Unable to search the graph.");
 
-
-  const response =
-    await fetch(
-      `${API_BASE}/notes/${noteId}/graph/search`,
-      {
-        method:
-          "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-
-        /*
-          Assumes authentication currently uses
-          the user's session cookie.
-        */
-        credentials:
-          "include",
-
-        /*
-          IMPORTANT:
-
-          The graph is sent alongside the query so
-          the semantic-search backend can reason about
-          both node meaning AND node relationships.
-        */
-        body:
-          JSON.stringify({
-            query:
-              query.trim(),
-
-            graph:
-              searchGraph,
-          }),
-      }
-    );
-
-
-  const data =
-    await handleApiResponse(
-      response,
-      "Unable to search the graph."
-    );
-
-
-  return normaliseSearchResult(
-    data
-  );
+  return normaliseSearchResult(data);
 }
-
-
 
 /* =========================================================
    FUTURE: LOAD SAVED GRAPH
@@ -649,51 +390,22 @@ export async function semanticSearchGraph(
    You do NOT need to use this function in GraphPanel yet.
    ========================================================= */
 
-export async function getGraph(
-  noteId
-) {
-
+export async function getGraph(noteId) {
   if (USE_MOCK_GRAPH_API) {
-
-    /*
-      Current mock graph data still lives inside
-      GraphPanel.jsx.
-
-      Returning null here makes it explicit that graph
-      persistence has not been connected yet.
-    */
-    console.log(
-      "Mock graph load skipped:",
-      {
-        noteId,
-      }
-    );
-
-
+    // Current mock graph data still lives inside GraphPanel.jsx.
+    // Returning null here makes it explicit that graph persistence has not been connected yet.
+    console.log("Mock graph load skipped:", { noteId });
     return null;
   }
 
 
-  const response =
-    await fetch(
-      `${API_BASE}/notes/${noteId}/graph`,
-      {
-        method:
-          "GET",
+  const response = await fetch(`${API_BASE}/notes/${noteId}/graph`, {
+        method: "GET",
+        credentials: "include",
+  });
 
-        credentials:
-          "include",
-      }
-    );
-
-
-  return handleApiResponse(
-    response,
-    "Unable to load graph."
-  );
+  return handleApiResponse(response, "Unable to load graph.");
 }
-
-
 
 /* =========================================================
    FUTURE: SAVE GRAPH
@@ -734,58 +446,20 @@ export async function getGraph(
    is connected.
    ========================================================= */
 
-export async function saveGraph(
-  noteId,
-  graphData
-) {
-
+export async function saveGraph(noteId, graphData) {
   if (USE_MOCK_GRAPH_API) {
-
-    /*
-      We currently do NOT persist the mock Cytoscape graph.
-
-      Keeping this as a harmless development stub means the
-      real API contract is already documented without
-      changing current frontend behaviour.
-    */
-    console.log(
-      "Mock graph save:",
-      {
-        noteId,
-        graphData,
-      }
-    );
-
-
+    // We currently do NOT persist the mock Cytoscape graph.
+    //Keeping this as a harmless development stub means the real API contract is already documented without changing current frontend behaviour.
+    console.log("Mock graph save:", { noteId, graphData });
     return graphData;
   }
 
+  const response = await fetch(`${API_BASE}/notes/${noteId}/graph`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(graphData)
+  });
 
-  const response =
-    await fetch(
-      `${API_BASE}/notes/${noteId}/graph`,
-      {
-        method:
-          "PUT",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-
-        credentials:
-          "include",
-
-        body:
-          JSON.stringify(
-            graphData
-          ),
-      }
-    );
-
-
-  return handleApiResponse(
-    response,
-    "Unable to save graph."
-  );
+  return handleApiResponse(response, "Unable to save graph.");
 }
