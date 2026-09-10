@@ -208,48 +208,6 @@ Your response as output:
 Your JSON to analyse:
 """
 
-{
-    # Semantic Matching Rules:
-    # *** Use SEMANTIC SIMILARITY, not exact matching. ***
-    # *** Consider BOTH concept_name fields AND relationship strings ***
-    # *** If multiple concepts are semantically similar, choose the one with the highest importance or weight score. ***
-    # *** If no concept is semantically similar, return ONLY "0". ***
-    #
-    # >>> First Example:
-    # Input: "folwers"
-    # JSON:
-    # {"concepts": [{"concept_id": 1,"concept_name": "bees","importance": 0.8,"relationships": [{"target_id": 2,"relationship": "collect_nectar","weight": 0.6},{"target_id": 3,"relationship": "produce_honey","weight": 0.5},]},{"concept_id": 2,"concept_name": "flowers","importance": 0.7,"relationships": [{"target_id": 1,"relationship": "provide_nectar","weight": 0.6},{"target_id": 3,"relationship": "enable_pollination","weight": 0.7},]},{"concept_id": 3,"concept_name": "nectar","importance": 0.6,"relationships": [{"target_id": 1,"relationship": "used_for_honey","weight": 0.5}]}]}
-    #
-    # Your response:
-    # "2"
-    #
-    # End of Example <<<
-    #
-    # >>> Second example:
-    # Input: "blows up"
-    # JSON:
-    # {"concepts": [{"concept_id": 1,"concept_name": "volcanoes","importance": 0.9,"relationships": [{"target_id": 2,"relationship": "erupt_when_pressure_builds","weight": 0.8},{"target_id": 3,"relationship": "flow_from_crater","weight": 0.7},{"target_id": 4,"relationship": "rise_into_sky","weight": 0.6}]},{"concept_id": 2,"concept_name": "lava","importance": 0.8,"relationships": [{"target_id": 1,"relationship": "flows_from_crater","weight": 0.7},{"target_id": 5,"relationship": "enrich_soil","weight": 0.6}]},{"concept_id": 3,"concept_name": "ash_clouds","importance": 0.7,"relationships": [{"target_id": 1,"relationship": "rise_into_sky","weight": 0.6},{"target_id": 6,"relationship": "affect_air_quality","weight": 0.5}]},{"concept_id": 4,"concept_name": "air_quality","importance": 0.7,"relationships": [{"target_id": 3,"relationship": "affect_air_quality","weight": 0.5}]},{"concept_id": 5,"concept_name": "minerals","importance": 0.6,"relationships": [{"target_id": 2,"relationship": "enrich_soil","weight": 0.6}]},{"concept_id": 6,"concept_name": "sunlight","importance": 0.7,"relationships": [{"target_id": 3,"relationship": "block_sunlight","weight": 0.5}]}]}
-    #
-    # Your response:
-    # "1"
-    #
-    # End of Example <<<
-    #
-    # >>> Third Example:
-    #
-    # Input: "aeroplane"
-    # JSON:
-    # {"concepts": [{"concept_id": 1,"concept_name": "cacti","importance": 0.9,"relationships": [{ "target_id": 2, "relationship": "store_water", "weight": 0.8 },{ "target_id": 3, "relationship": "protect_from_animals", "weight": 0.7 },{ "target_id": 4, "relationship": "reduce_water_loss", "weight": 0.6 },{ "target_id": 5, "relationship": "absorb_moisture_quickly", "weight": 0.6 },{ "target_id": 6, "relationship": "grow_new_stems", "weight": 0.5 },{ "target_id": 7, "relationship": "require_sunlight", "weight": 0.5 }]},{"concept_id": 2,"concept_name": "water_storage","importance": 0.7,"relationships": [{ "target_id": 1, "relationship": "stored_in_thick_stems", "weight": 0.7 }]},{"concept_id": 3,"concept_name": "spines","importance": 0.6,"relationships": [{ "target_id": 1, "relationship": "protect_from_animals", "weight": 0.6 },{ "target_id": 4, "relationship": "reduce_water_loss", "weight": 0.5 }]},{"concept_id": 4,"concept_name": "water_conservation","importance": 0.6,"relationships": [{ "target_id": 1, "relationship": "reduce_water_loss", "weight": 0.5 }]},{"concept_id": 5,"concept_name": "moisture_absorption","importance": 0.5,"relationships": [{ "target_id": 1, "relationship": "absorb_moisture_quickly", "weight": 0.5 }]},{"concept_id": 6,"concept_name": "growth","importance": 0.5,"relationships": [{ "target_id": 1, "relationship": "grow_new_stems", "weight": 0.4 }]},{"concept_id": 7,"concept_name": "sunlight","importance": 0.6,"relationships": [{ "target_id": 1, "relationship": "required_for_growth", "weight": 0.5 }]}]}
-    #
-    # Your response:
-    # "0"
-    #
-    # End of Example <<<
-    #
-    # Your Input and Graph To Evaluate:
-    # """
-}
-
 ### ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ## HELPER FUNCTIONS ~~~~~~~~~~~~~~~~

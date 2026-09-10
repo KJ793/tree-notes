@@ -73,9 +73,6 @@ def semantic_search(
     graph_dict = payload.graph.dict()
 
     try:
-        # concept_id, score = ai_search_graph(query, json.dumps(graph)) # retrive semantic match as an integer
-        # match = normalise_search_result(concept_id, graph, score) # convert concept_id -> node_id + label
-        # return { "match": match }
         return { "match": ai_search_graph(query, graph_dict) }
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Semantic search failed: {exc}")
