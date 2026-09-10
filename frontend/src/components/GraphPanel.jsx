@@ -8,6 +8,7 @@ import {
   Squircle,
   Diamond,
   Triangle,
+  Trash2,
   Link2,
   Sparkles,
   ChevronDown,
@@ -73,6 +74,8 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   // Stores the Cytoscape instance so other functions can access it //
   const cyRef = useRef(null);
+// STORES SELECTED EDGES STATE
+  const [selectedEdge, setSelectedEdge] = useState(null);
 
   const linkModeRef = useRef(false);
   const firstNodeToLinkRef = useRef(null);
@@ -321,6 +324,8 @@ const GraphPanel = forwardRef(function GraphPanel(
             "target-arrow-color": "#818CF8",
           },
         },
+
+        
       ],
     });
     cyRef.current = cy;
@@ -341,6 +346,20 @@ const GraphPanel = forwardRef(function GraphPanel(
       clickedNode.data("shape") ||
       "round-rectangle",
   };
+  cy.on("tap", "edge", (event) => {
+    const clickedEdge = event.target;
+  
+    setSelectedEdge({
+      ...clickedEdge.data(),
+    });
+  
+    setSelectedNode(null);
+  
+    console.log(
+      "Selected edge:",
+      clickedEdge.data()
+    );
+  });
 
 
   // Always update normal node selection
@@ -941,6 +960,66 @@ function showGraphFeedback(
     }, 2500);
 }
 
+function deleteSelectedElement() {
+  if (!cyRef.current) {
+    return;
+  }
+
+  // Delete selected node
+  if (selectedNode?.id) {
+    const node =
+      cyRef.current.getElementById(
+        selectedNode.id
+      );
+
+    if (node && !node.empty()) {
+      const nodeLabel =
+        node.data("label") ||
+        node.id();
+
+      node.remove();
+
+      setSelectedNode(null);
+      setSelectedEdge(null);
+
+      showGraphFeedback(
+        `Deleted node: ${nodeLabel}`,
+        "success"
+      );
+    }
+
+    return;
+  }
+
+  // Delete selected edge
+  if (selectedEdge?.id) {
+    const edge =
+      cyRef.current.getElementById(
+        selectedEdge.id
+      );
+
+    if (edge && !edge.empty()) {
+      const sourceLabel =
+        edge.source().data("label") ||
+        edge.source().id();
+
+      const targetLabel =
+        edge.target().data("label") ||
+        edge.target().id();
+
+      edge.remove();
+
+      setSelectedEdge(null);
+      setSelectedNode(null);
+
+      showGraphFeedback(
+        `Deleted link: ${sourceLabel} → ${targetLabel}`,
+        "success"
+      );
+    }
+  }
+}
+    
 async function handleSemanticSearch() {
   const query =
     semanticSearchQuery.trim();
@@ -1408,6 +1487,27 @@ useImperativeHandle(ref, () => ({
 
 
           <span className="graph-toolbar-divider" />
+
+        {/* DELETE ELEMENT */}
+        <button
+          type="button"
+          className="graph-toolbar-button"
+          onClick={deleteSelectedElement}
+          disabled={!selectedNode && !selectedEdge}
+          data-tooltip={
+            selectedNode
+              ? "Delete node"
+              : selectedEdge
+              ? "Delete edge"
+              : "Select a node or edge first"
+          }
+          aria-label="Delete selected item"
+        >
+          <Trash2
+            size={19}
+            strokeWidth={1.8}
+          />
+        </button>
 
 
           {/* LINK NODES */}
