@@ -129,8 +129,12 @@ def graph(
     return _to_cytoscape(concepts)
 
 @router.post("/summary", response_model=SummaryResponse)
-def summary(payload: RawNotesRequest, current_user: User = Depends(get_current_user),) -> SummaryResponse:
+def summary(
+    payload: RawNotesRequest,
+    current_user: User = Depends(get_current_user),) -> SummaryResponse:
     text = _require_notes(payload.rawNotes)
+
+    print("Payload.")
 
     try:
         # generate_summary requires all three arguments. SummaryPanel sends
@@ -138,7 +142,7 @@ def summary(payload: RawNotesRequest, current_user: User = Depends(get_current_u
         # defaults; without them the request would 422 before reaching Ollama.
         result = ai_generate_summary(
             raw_data=text,
-            graph_json=payload.graphJson.dict() or {},
+            graph_json=payload.graphJson.dict() if payload.graphJson else {},
             user_summary=payload.userSummary or ""
         )
     except Exception as exc:
