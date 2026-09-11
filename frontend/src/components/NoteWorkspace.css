@@ -1009,7 +1009,7 @@
 
   box-sizing: border-box;
 
-  overflow: hidden;
+  overflow: visible;
 
   border: 
     1px solid 
@@ -1024,7 +1024,6 @@
   color: var(--text-primary);
 }
 
-
 /* Selected-text preview */
 
 .notes-context-menu-preview {
@@ -1036,7 +1035,6 @@
   padding: 7px 9px;
 }
 
-
 .notes-context-menu-preview span {
   color: var(--text-muted);
 
@@ -1046,7 +1044,6 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-
 
 .notes-context-menu-preview strong {
   overflow: hidden;
@@ -1060,7 +1057,6 @@
   white-space: nowrap;
 }
 
-
 /* Separator */
 
 .notes-context-menu-divider {
@@ -1070,9 +1066,6 @@
 
   background: var(--border-subtle);
 }
-
-
-/* Menu action */
 
 .notes-context-menu-item {
   width: 100%;
@@ -1107,13 +1100,11 @@
     color 0.14s ease;
 }
 
-
 .notes-context-menu-item svg {
   flex-shrink: 0;
 
   color: var(--text-accent);
 }
-
 
 .notes-context-menu-item:hover {
   background: var(--accent-primary);
@@ -1121,11 +1112,9 @@
   color: var(--text-on-accent);
 }
 
-
 .notes-context-menu-item:hover svg {
   color: var(--text-on-accent);
 }
-
 
 .notes-context-menu-item:active {
   background: var(--accent-primary-active);
@@ -1141,6 +1130,237 @@
 
 .notes-context-menu-item {
   user-select: none;
+}
+
+/* Link to Node Flyout Menu */
+
+.notes-context-submenu-anchor {
+  position: relative;
+
+  width: 100%;
+
+  margin-top: 2px;
+}
+
+.notes-context-menu-item-active {
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 8%,
+      transparent
+    );
+
+  color:
+    var(--text-primary);
+
+  box-shadow:
+    inset 0 0 0 1px
+    var(--accent-primary);
+}
+
+.notes-context-menu-item-active svg {
+  color:
+    var(--accent-primary);
+}
+
+.notes-context-menu-item-active:hover {
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 14%,
+      transparent
+    );
+
+  color:
+    var(--text-primary);
+
+  box-shadow:
+    inset 0 0 0 1px
+    var(--accent-primary);
+}
+
+.notes-context-menu-item-active:hover svg {
+  color:
+    var(--accent-primary);
+}
+
+.notes-context-menu-item:not(
+  .notes-context-menu-item-active
+):hover {
+  background:
+    var(--accent-primary);
+
+  color:
+    var(--text-on-accent);
+}
+
+.notes-graph-node-menu {
+  position: absolute;
+
+  left: calc(100% + 8px);
+  top: 0;
+
+  width: 210px;
+
+  padding: 6px;
+
+  box-sizing: border-box;
+
+  border:
+    1px solid
+    var(--border-control);
+
+  border-radius: 8px;
+
+  background:
+    var(--bg-panel-secondary);
+
+  box-shadow:
+    var(--shadow-popover);
+
+  color:
+    var(--text-primary);
+
+  z-index: 1001;
+}
+
+
+.notes-graph-node-menu-heading {
+  padding: 7px 9px;
+
+  color:
+    var(--text-muted);
+
+  font-size: 10px;
+  font-weight: 500;
+
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.notes-graph-node-menu-divider {
+  height: 1px;
+
+  margin: 3px 5px;
+
+  background:
+    var(--border-subtle);
+}
+
+.notes-graph-node-menu-list {
+  --graph-node-row-height: 2.15rem;
+
+  max-height:
+    calc(
+      var(--graph-node-row-height) * 6
+    );
+
+  overflow-y: auto;
+
+  scrollbar-gutter: stable;
+}
+
+.notes-graph-node-menu-item {
+  width: 100%;
+  min-height:
+    var(--graph-node-row-height);
+
+  display: flex;
+  align-items: center;
+
+  padding: 7px 9px;
+
+  border: none;
+  border-radius: 5px;
+
+  background: transparent;
+
+  color:
+    var(--text-primary);
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+
+  text-align: left;
+
+  cursor: pointer;
+
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
+}
+
+.notes-graph-node-menu-item:hover {
+  background:
+    var(--accent-primary);
+
+  color:
+    var(--text-on-accent);
+}
+
+
+.notes-graph-node-menu-empty {
+  padding: 12px;
+
+  color: var(--text-secondary);
+
+  font-size: 0.75rem;
+
+  text-align: center;
+}
+
+.notes-context-submenu-chevron {
+  margin-left: auto;
+
+  transition:
+    transform 0.16s ease;
+}
+
+.notes-context-submenu-chevron-open {
+  transform: rotate(180deg);
+}
+
+.notes-graph-node-menu-list::-webkit-scrollbar {
+  width: 7px;
+}
+
+.notes-graph-node-menu-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.notes-graph-node-menu-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+
+  background:
+    var(--editor-scrollbar-thumb);
+}
+
+.notes-graph-node-menu-list::-webkit-scrollbar-thumb:hover {
+  background:
+    var(--editor-scrollbar-thumb-hover);
+}
+
+/* Change Link Node Flyout Menu */
+
+.notes-graph-node-menu-item.notes-graph-node-menu-item-current,
+.notes-graph-node-menu-item.notes-graph-node-menu-item-current:hover {
+
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 8%,
+      transparent
+    );
+
+  color:
+    var(--text-primary);
+
+  box-shadow:
+    inset 0 0 0 1px
+    var(--accent-primary);
+
+  cursor: default;
 }
 
 /* ================================================== */

@@ -15,7 +15,7 @@ import {
   ListOrdered,
   Link,
   Info,
-  Network,
+  CirclePlus,
   Palette,
   Highlighter,
   Unlink,
@@ -27,6 +27,8 @@ import {
   IndentIncrease,
   IndentDecrease,
   ChevronDown,
+  ChevronRight,
+  Replace,
 } from "lucide-react";
 
 import "./NoteWorkspace.css";
@@ -98,6 +100,14 @@ const GRAPH_LINK_COLORS = [
 
   // Initialising Context menu on right click //
   const [contextMenu, setContextMenu] = useState(null);
+
+  // Current live graph nodes shown in the
+  // "Link to existing node" submenu.
+  const [graphNodeOptions, setGraphNodeOptions] = useState([]);
+
+  // Controls whether the secondary graph-node
+  // picker menu is visible.
+  const [graphNodeMenuOpen, setGraphNodeMenuOpen] = useState(false);
 
   const [addNodeTrigger, setAddNodeTrigger] = useState(0);
 
@@ -935,6 +945,279 @@ const GRAPH_LINK_COLORS = [
     }
   }
 
+  function getCurrentGraphNodes() {
+
+    /*
+      Ask GraphPanel for the LIVE Cytoscape graph.
+
+      This includes unsaved frontend changes such as:
+      - newly added nodes
+      - deleted nodes
+      - renamed/edited node data
+      - manually generated nodes
+
+      We deliberately do not use GraphPanel's original
+      graphData state here because Cytoscape may have been
+      modified since that state was created.
+    */
+    const currentGraph =
+      graphPanelRef.current
+        ?.getGraphData();
+
+
+    if (!currentGraph?.nodes) {
+      return [];
+    }
+
+
+    return currentGraph.nodes
+      .map((node) => {
+
+        const data =
+          node.data ?? node;
+
+
+        return {
+          id:
+            String(data.id),
+
+          label:
+            data.label ||
+            "Untitled Node",
+
+          /*
+            Keep these available because they may
+            be useful later in the menu.
+          */
+          color:
+            data.color ??
+            null,
+
+          shape:
+            data.shape ??
+            null,
+
+          linkColor:
+            data.linkColor ??
+            null,
+        };
+
+      });
+  }
+
+  function toggleGraphNodeMenu() {
+
+    if (graphNodeMenuOpen) {
+      setGraphNodeMenuOpen(false);
+      return;
+    }
+
+    const currentNodes =
+      getCurrentGraphNodes();
+
+    setGraphNodeOptions(
+      currentNodes
+    );
+
+    setGraphNodeMenuOpen(true);
+  }
+
+  function handleLinkSelectedTextToExistingNode(node) {
+
+    const range =
+      selectedRangeRef.current;
+
+    if (!range || !node?.id) {
+      console.warn(
+        "No selected text range or graph node available."
+      );
+
+      return;
+    }
+
+
+    /*
+      Reuse the node's existing graph-link colour
+      when possible.
+
+      If this node has never been linked from Raw Notes
+      before, give it the next available link colour.
+    */
+    const linkColor =
+      node.linkColor ||
+      getNextGraphLinkColor();
+
+
+    /*
+      If this was the first Raw Notes link to this node,
+      tell GraphPanel about its new intrinsic link colour.
+    */
+    if (!node.linkColor) {
+
+      graphPanelRef.current
+        ?.setLinkedNodeColor(
+          node.id,
+          linkColor
+        );
+
+    }
+
+
+    /*
+      Wrap the currently selected Raw Notes text
+      and point it at the EXISTING graph node.
+    */
+    createGraphLinkedText(
+      range,
+      node.id,
+      linkColor
+    );
+
+
+    console.log(
+      "Linked selected Raw Notes text to existing node:",
+      {
+        nodeId: node.id,
+        label: node.label,
+        color: linkColor,
+      }
+    );
+
+
+    selectedRangeRef.current = null;
+
+    setGraphNodeMenuOpen(false);
+
+    setContextMenu(null);
+  }
+
+  function handleChangeLinkedNode(node) {
+
+    if (
+      !editorRef.current ||
+      !contextMenu ||
+      contextMenu.type !== "linked" ||
+      !node?.id
+    ) {
+      return;
+    }
+
+
+    const currentNodeId =
+      String(contextMenu.nodeId);
+
+    const newNodeId =
+      String(node.id);
+
+
+    if (currentNodeId === newNodeId) {
+      return;
+    }
+
+
+    const linkedSpan =
+      Array.from(
+        editorRef.current.querySelectorAll(
+          ".graph-linked-text"
+        )
+      ).find(
+        (span) =>
+          span.dataset.graphLinkId ===
+          String(contextMenu.linkId)
+      );
+
+
+    if (!linkedSpan) {
+      console.warn(
+        "Unable to find linked Raw Notes text."
+      );
+
+      return;
+    }
+
+
+    /*
+      IMPORTANT:
+      Keep the existing colour.
+
+      Changing the destination node should NOT
+      change the appearance of the text link.
+    */
+    const linkColor =
+      linkedSpan.dataset.graphLinkColor ||
+      contextMenu.color ||
+      "#f2c94c";
+
+
+    /*
+      Only change where the link points.
+    */
+    linkedSpan.dataset.graphNodeId =
+      newNodeId;
+
+
+    /*
+      Preserve the existing colour explicitly.
+    */
+    linkedSpan.dataset.graphLinkColor =
+      linkColor;
+
+
+    linkedSpan.style.setProperty(
+      "--graph-link-color",
+      linkColor
+    );
+
+
+    linkedSpan.style.backgroundColor =
+      hexToRgba(
+        linkColor,
+        0.38
+      );
+
+
+    /*
+      Update the open menu so the purple
+      selected-node outline moves immediately.
+    */
+    setContextMenu((current) => {
+
+      if (
+        !current ||
+        current.type !== "linked"
+      ) {
+        return current;
+      }
+
+
+      return {
+        ...current,
+
+        nodeId:
+          newNodeId,
+
+        color:
+          linkColor,
+      };
+
+    });
+
+
+    updateRawNotes();
+
+
+    console.log(
+      "Changed linked graph node:",
+      {
+        from: currentNodeId,
+        to: newNodeId,
+        label: node.label,
+        preservedColor:
+          linkColor,
+      }
+    );
+  }
+
   function getNextGraphLinkColor() {
     const color =
       GRAPH_LINK_COLORS[
@@ -1110,6 +1393,131 @@ const GRAPH_LINK_COLORS = [
     );
   }
 
+  function removeGraphTextLink(linkId) {
+
+    if (
+      !editorRef.current ||
+      !linkId
+    ) {
+      return;
+    }
+
+
+    const linkedSpan =
+      Array.from(
+        editorRef.current.querySelectorAll(
+          ".graph-linked-text"
+        )
+      ).find(
+        (span) =>
+          span.dataset.graphLinkId ===
+          String(linkId)
+      );
+
+
+    if (!linkedSpan) {
+      console.warn(
+        "Unable to find graph link to remove:",
+        linkId
+      );
+
+      return;
+    }
+
+
+    const nodeId =
+      linkedSpan.dataset.graphNodeId;
+
+    const linkColor =
+      linkedSpan.dataset.graphLinkColor;
+
+
+    /*
+      Make sure GraphPanel isn't temporarily
+      showing a hover state for this text link.
+    */
+    if (nodeId) {
+
+      graphPanelRef.current
+        ?.setLinkedNodeHover(
+          nodeId,
+          linkColor,
+          false
+        );
+
+    }
+
+
+    /*
+      UNWRAP the graph-linked span.
+
+      We do NOT delete its contents.
+
+      Example:
+
+        <span class="graph-linked-text">
+          application
+        </span>
+
+      becomes simply:
+
+        application
+
+      Any formatting nested inside the span is
+      preserved too.
+    */
+    const parent =
+      linkedSpan.parentNode;
+
+
+    if (!parent) {
+      return;
+    }
+
+
+    while (linkedSpan.firstChild) {
+
+      parent.insertBefore(
+        linkedSpan.firstChild,
+        linkedSpan
+      );
+
+    }
+
+
+    linkedSpan.remove();
+
+
+    /*
+      Merge adjacent text nodes that may have
+      been created by removing the wrapper.
+    */
+    parent.normalize();
+
+
+    /*
+      Store the now-unlinked rich HTML.
+    */
+    updateRawNotes();
+
+
+    /*
+      Close both context menus.
+    */
+    setGraphNodeMenuOpen(false);
+
+    setContextMenu(null);
+
+
+    console.log(
+      "Removed Raw Notes graph link:",
+      {
+        linkId,
+        nodeId,
+      }
+    );
+  }
+
   function handleAddSelectedTextToGraph() {
     const textToAdd =
       contextMenu?.text;
@@ -1192,7 +1600,7 @@ const GRAPH_LINK_COLORS = [
 
 
     console.log(
-      "Changing graph link colour:",
+      "Changing graph text link colour:",
       {
         nodeId,
         linkId,
@@ -1201,89 +1609,74 @@ const GRAPH_LINK_COLORS = [
     );
 
 
-    // =====================================================
-    // UPDATE RAW NOTES LINK
-    // =====================================================
+    /*
+      Find this exact Raw Notes graph link.
 
-    const linkedSpans =
-      editorRef.current.querySelectorAll(
-        ".graph-linked-text"
+      Colour now belongs to the individual text link,
+      rather than every piece of text pointing at the
+      same graph node.
+    */
+    const linkedSpan =
+      Array.from(
+        editorRef.current.querySelectorAll(
+          ".graph-linked-text"
+        )
+      ).find(
+        (span) =>
+          span.dataset.graphLinkId ===
+          String(linkId)
       );
 
 
-    linkedSpans.forEach((span) => {
+    if (!linkedSpan) {
+      console.warn(
+        "Unable to find graph-linked text:",
+        linkId
+      );
 
-      /*
-        Update everything connected to this graph node.
-
-        This means if the same node is referenced more
-        than once in Raw Notes, they all keep the same
-        intrinsic link colour.
-      */
-
-      if (
-        span.dataset.graphNodeId !==
-        String(nodeId)
-      ) {
-        return;
-      }
+      return;
+    }
 
 
-      span.dataset.graphLinkColor =
-        color;
+    linkedSpan.dataset.graphLinkColor =
+      color;
 
 
-      span.style.setProperty(
-        "--graph-link-color",
-        color
+    linkedSpan.style.setProperty(
+      "--graph-link-color",
+      color
+    );
+
+
+    linkedSpan.style.backgroundColor =
+      hexToRgba(
+        color,
+        0.38
       );
 
 
-      /*
-        Also set a concrete fallback background.
-
-        This makes the colour visibly update even if
-        color-mix() behaves unexpectedly.
-      */
-      span.style.backgroundColor =
-        hexToRgba(
-          color,
-          0.38
-        );
-    });
-
-
-    // =====================================================
-    // UPDATE GRAPH NODE LINK COLOUR
-    // =====================================================
-
-    graphPanelRef.current
-      ?.setLinkedNodeColor(
-        nodeId,
-        color
-      );
-
-
-    // =====================================================
-    // UPDATE OPEN CONTEXT MENU
-    // =====================================================
-
+    /*
+      Keep the open Graph Link context menu
+      synchronised with the new colour.
+    */
     setContextMenu((current) => {
 
-      if (!current) {
+      if (
+        !current ||
+        current.linkId !== linkId
+      ) {
         return current;
       }
 
 
       return {
         ...current,
-        color: color,
+        color,
       };
 
     });
 
 
-    // Preserve rich-note data
     updateRawNotes();
   }
 
@@ -1402,7 +1795,10 @@ const GRAPH_LINK_COLORS = [
   return (
     <div 
       className="note-workspace"
-      onClick={() => setContextMenu(null)}
+      onClick={() => {
+        setContextMenu(null);
+        setGraphNodeMenuOpen(false);
+      }}
     >
 
     {/* << frontend dev >> */}
@@ -2037,6 +2433,7 @@ const GRAPH_LINK_COLORS = [
 
                   selectedRangeRef.current = null;
 
+                  setGraphNodeMenuOpen(false);
 
                   setContextMenu({
                     type: "linked",
@@ -2120,9 +2517,9 @@ const GRAPH_LINK_COLORS = [
                 }
 
 
-                selectedRangeRef.current =
-                  range.cloneRange();
+                selectedRangeRef.current = range.cloneRange();
 
+                setGraphNodeMenuOpen(false);
 
                 setContextMenu({
                   type: "new",
@@ -2293,30 +2690,156 @@ const GRAPH_LINK_COLORS = [
 
                   {contextMenu.type === "new" ? (
 
-                    <button
-                      type="button"
-                      className="notes-context-menu-item"
+                    <>
 
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }}
+                      <button
+                        type="button"
+                        className="notes-context-menu-item"
 
-                      onClick={(event) => {
-                        event.stopPropagation();
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
 
-                        handleAddSelectedTextToGraph();
-                      }}
-                    >
-                      <Network
-                        size={17}
-                        strokeWidth={1.8}
-                      />
+                        onClick={(event) => {
+                          event.stopPropagation();
 
-                      <span>
-                        Add to Graph
-                      </span>
-                    </button>
+                          handleAddSelectedTextToGraph();
+                        }}
+                      >
+                        <CirclePlus
+                          size={17}
+                          strokeWidth={1.8}
+                        />
+
+                        <span>
+                          Create as a new node
+                        </span>
+                      </button>
+
+                      <div className="notes-context-submenu-anchor">
+
+                        <button
+                          type="button"
+
+                          className={`notes-context-menu-item ${
+                            graphNodeMenuOpen
+                              ? "notes-context-menu-item-active"
+                              : ""
+                          }`}
+
+                          aria-haspopup="menu"
+                          aria-expanded={graphNodeMenuOpen}
+
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                          }}
+
+                          onClick={(event) => {
+                            event.stopPropagation();
+
+                            toggleGraphNodeMenu();
+                          }}
+                        >
+                          <Link
+                            size={17}
+                            strokeWidth={1.8}
+                          />
+
+                          <span>
+                            Link to existing node
+                          </span>
+
+                          <ChevronRight
+                            size={15}
+                            strokeWidth={1.8}
+
+                            className={`notes-context-submenu-chevron ${
+                              graphNodeMenuOpen
+                                ? "notes-context-submenu-chevron-open"
+                                : ""
+                            }`}
+                          />
+                        </button>
+
+
+                        {graphNodeMenuOpen && (
+
+                          <div
+                            className="notes-graph-node-menu"
+
+                            contentEditable={false}
+
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+
+                            onClick={(event) => {
+                              event.stopPropagation();
+                            }}
+                          >
+
+                            <div className="notes-graph-node-menu-heading">
+                              Graph Nodes
+                            </div>
+
+
+                            <div className="notes-graph-node-menu-divider" />
+
+
+                            <div className="notes-graph-node-menu-list">
+
+                              {graphNodeOptions.length > 0 ? (
+
+                                graphNodeOptions.map((node) => (
+
+                                  <button
+                                    key={node.id}
+                                    type="button"
+
+                                    className="notes-graph-node-menu-item"
+
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                    }}
+
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+
+                                      handleLinkSelectedTextToExistingNode(
+                                        node
+                                      );
+                                    }}
+                                  >
+
+                                    <span>
+                                      {node.label}
+                                    </span>
+
+                                  </button>
+
+                                ))
+
+                              ) : (
+
+                                <div className="notes-graph-node-menu-empty">
+                                  No graph nodes available
+                                </div>
+
+                              )}
+
+                            </div>
+
+                          </div>
+
+                        )}
+
+                      </div>
+
+                    </>
 
                   ) : (
 
@@ -2395,6 +2918,146 @@ const GRAPH_LINK_COLORS = [
 
                       </div>
 
+                      <div className="notes-context-submenu-anchor">
+
+                        <button
+                          type="button"
+
+                          className={`notes-context-menu-item ${
+                            graphNodeMenuOpen
+                              ? "notes-context-menu-item-active"
+                              : ""
+                          }`}
+
+                          aria-haspopup="menu"
+                          aria-expanded={graphNodeMenuOpen}
+
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                          }}
+
+                          onClick={(event) => {
+                            event.stopPropagation();
+
+                            toggleGraphNodeMenu();
+                          }}
+                        >
+
+                          <Replace
+                            size={17}
+                            strokeWidth={1.8}
+                          />
+
+                          <span>
+                            Change linked node
+                          </span>
+
+                          <ChevronRight
+                            size={15}
+                            strokeWidth={1.8}
+
+                            className={`notes-context-submenu-chevron ${
+                              graphNodeMenuOpen
+                                ? "notes-context-submenu-chevron-open"
+                                : ""
+                            }`}
+                          />
+
+                        </button>
+
+
+                        {graphNodeMenuOpen && (
+
+                          <div
+                            className="notes-graph-node-menu"
+                            contentEditable={false}
+
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+
+                            onClick={(event) => {
+                              event.stopPropagation();
+                            }}
+                          >
+
+                            <div className="notes-graph-node-menu-heading">
+                              Graph Nodes
+                            </div>
+
+                            <div className="notes-graph-node-menu-divider" />
+
+
+                            <div className="notes-graph-node-menu-list">
+
+                              {graphNodeOptions.length > 0 ? (
+
+                                graphNodeOptions.map((node) => {
+
+                                  const isCurrentNode =
+                                    String(node.id) ===
+                                    String(contextMenu.nodeId);
+
+
+                                  return (
+
+                                    <button
+                                      key={node.id}
+                                      type="button"
+
+                                      className={`notes-graph-node-menu-item ${
+                                        isCurrentNode
+                                          ? "notes-graph-node-menu-item-current"
+                                          : ""
+                                      }`}
+
+                                      aria-current={
+                                        isCurrentNode
+                                          ? "true"
+                                          : undefined
+                                      }
+
+                                      onMouseDown={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                      }}
+
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+
+                                        handleChangeLinkedNode(
+                                          node
+                                        );
+                                      }}
+                                    >
+
+                                      <span>
+                                        {node.label}
+                                      </span>
+
+                                    </button>
+
+                                  );
+
+                                })
+
+                              ) : (
+
+                                <div className="notes-graph-node-menu-empty">
+                                  No graph nodes available
+                                </div>
+
+                              )}
+
+                            </div>
+
+                          </div>
+
+                        )}
+
+                      </div>
 
                       <button
                         type="button"
