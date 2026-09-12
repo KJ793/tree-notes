@@ -173,10 +173,7 @@ function Sidebar({
                           onSelectNote(note.id)
                         }
 
-                        title={
-                          note.title ||
-                          "Untitled Note"
-                        }
+
                       >
 
                         <span className="sidebar-note-title">

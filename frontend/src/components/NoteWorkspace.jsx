@@ -14,6 +14,7 @@ import {
   List,
   ListOrdered,
   Link,
+  Link2,
   Info,
   CirclePlus,
   Palette,
@@ -3033,8 +3034,23 @@ const GRAPH_LINK_COLORS = [
                                       }}
                                     >
 
-                                      <span>
-                                        {node.label}
+                                      <span className="notes-graph-node-menu-item-content">
+
+                                        <span className="notes-graph-node-linked-icon">
+
+                                          {isCurrentNode && (
+                                            <Link
+                                              size={13}
+                                              strokeWidth={2}
+                                            />
+                                          )}
+
+                                        </span>
+
+                                        <span className="notes-graph-node-menu-label">
+                                          {node.label}
+                                        </span>
+
                                       </span>
 
                                     </button>

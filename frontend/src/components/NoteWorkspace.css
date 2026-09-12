@@ -1137,6 +1137,8 @@
 .notes-context-submenu-anchor {
   position: relative;
 
+  margin-bottom: 2px;
+
   width: 100%;
 
   margin-top: 2px;
@@ -1248,6 +1250,10 @@
 }
 
 .notes-graph-node-menu-list {
+  display: flex;
+  flex-direction: column;
+
+  gap: 2px;
   --graph-node-row-height: 2.15rem;
 
   max-height:
@@ -1256,8 +1262,6 @@
     );
 
   overflow-y: auto;
-
-  scrollbar-gutter: stable;
 }
 
 .notes-graph-node-menu-item {
@@ -1361,6 +1365,33 @@
     var(--accent-primary);
 
   cursor: default;
+}
+
+.notes-graph-node-menu-item-content {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+
+.notes-graph-node-linked-icon {
+  width: 14px;
+  min-width: 14px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  color: var(--accent-primary);
+}
+
+
+.notes-graph-node-menu-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ================================================== */

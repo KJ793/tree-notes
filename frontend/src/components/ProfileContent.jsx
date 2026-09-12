@@ -1,6 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, } from "react";
 import "./ProfileContent.css";
-import { X } from "lucide-react";
+import { 
+  X,
+  ChevronDown,
+  Check,
+} from "lucide-react";
 import { useTheme } from "../context/ThemeContext.jsx";
 
 // Initial state for the profile data. This is used to reset the form when the component is first loaded or when the user logs out.
@@ -121,7 +125,12 @@ function getInitials(name) {
 function ProfileContent() {
   const [profile, setProfile] = useState(initialProfile);
   const [saved, setSaved] = useState(false);
-  const {theme, setTheme } = useTheme();
+  const {
+  theme,
+  setTheme,
+  colorVision,
+  setColorVision,
+} = useTheme();
 
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordForm, setPasswordForm] = useState(emptyPasswordForm);
@@ -130,6 +139,14 @@ function ProfileContent() {
   passwordForm.oldPassword.trim().length > 0 &&
   passwordForm.newPassword.trim().length > 0 &&
   passwordForm.confirmPassword.trim().length > 0;
+
+  const [
+    colorVisionOpen,
+    setColorVisionOpen,
+  ] = useState(false);
+
+  const colorVisionDropdownRef =
+    useRef(null);
 
   // Load the currently logged-in user's profile when this page opens.
   useEffect(() => {
@@ -153,6 +170,84 @@ function ProfileContent() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+
+    function handlePointerDown(event) {
+
+      if (
+        colorVisionDropdownRef.current &&
+        !colorVisionDropdownRef.current.contains(
+          event.target
+        )
+      ) {
+        setColorVisionOpen(false);
+      }
+
+    }
+
+
+    function handleKeyDown(event) {
+
+      if (event.key === "Escape") {
+        setColorVisionOpen(false);
+      }
+
+    }
+
+
+    document.addEventListener(
+      "pointerdown",
+      handlePointerDown
+    );
+
+    document.addEventListener(
+      "keydown",
+      handleKeyDown
+    );
+
+
+    return () => {
+
+      document.removeEventListener(
+        "pointerdown",
+        handlePointerDown
+      );
+
+      document.removeEventListener(
+        "keydown",
+        handleKeyDown
+      );
+
+    };
+
+  }, []);
+
+  const colorVisionOptions = [
+    {
+      value: "standard",
+      label: "Standard",
+    },
+    {
+      value: "deuteranopia",
+      label: "Deuteranopia",
+    },
+    {
+      value: "protanopia",
+      label: "Protanopia",
+    },
+    {
+      value: "tritanopia",
+      label: "Tritanopia",
+    },
+  ];
+
+
+  const selectedColorVisionLabel =
+    colorVisionOptions.find(
+      (option) =>
+        option.value === colorVision
+    )?.label ?? "Standard";
 
   // Close the password modal when the user presses Escape.
   useEffect(() => {
@@ -423,6 +518,124 @@ function ProfileContent() {
                 }
               />
             </label>
+
+            <div className="profile-select-row profile-colour-vision-row">
+              <div className="profile-select-copy">
+                <label htmlFor="colour-vision">
+                  Colour accessibility
+                </label>
+
+                <small>
+                  Adjust interface colours for improved visual distinction.
+                </small>
+              </div>
+
+              <div
+                className="profile-colour-vision-dropdown"
+                ref={colorVisionDropdownRef}
+              >
+
+                <button
+                  type="button"
+                  className={`profile-colour-vision-trigger ${
+                    colorVisionOpen
+                      ? "profile-colour-vision-trigger-open"
+                      : ""
+                  }`}
+                  aria-haspopup="listbox"
+                  aria-expanded={colorVisionOpen}
+                  onClick={() =>
+                    setColorVisionOpen(
+                      (current) => !current
+                    )
+                  }
+                >
+
+                  <span>
+                    {selectedColorVisionLabel}
+                  </span>
+
+                  <ChevronDown
+                    size={15}
+                    strokeWidth={1.8}
+                    className={`profile-colour-vision-chevron ${
+                      colorVisionOpen
+                        ? "profile-colour-vision-chevron-open"
+                        : ""
+                    }`}
+                  />
+
+                </button>
+
+
+                {colorVisionOpen && (
+
+                  <div
+                    className="profile-colour-vision-menu"
+                    role="listbox"
+                    aria-label="Colour vision mode"
+                  >
+
+                    {colorVisionOptions.map(
+                      (option) => {
+
+                        const isSelected =
+                          colorVision ===
+                          option.value;
+
+
+                        return (
+
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="option"
+                            aria-selected={
+                              isSelected
+                            }
+                            className={`profile-colour-vision-option ${
+                              isSelected
+                                ? "profile-colour-vision-option-selected"
+                                : ""
+                            }`}
+                            onClick={() => {
+
+                              setColorVision(
+                                option.value
+                              );
+
+                              setColorVisionOpen(
+                                false
+                              );
+
+                            }}
+                          >
+
+                            <span>
+                              {option.label}
+                            </span>
+
+                            {isSelected && (
+                              <Check
+                                size={14}
+                                strokeWidth={2}
+                              />
+                            )}
+
+                          </button>
+
+                        );
+
+                      }
+                    )}
+
+                  </div>
+
+                )}
+
+              </div>
+            </div>
+
           </section>
 
           <section className="profile-card">

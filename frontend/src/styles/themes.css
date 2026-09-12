@@ -198,6 +198,37 @@
 
   --graph-node-accent: #6366f1;
 
+  /* ---------------------------------------------------------
+     Graph nodes / selection / edges
+     --------------------------------------------------------- */
+
+  --graph-node-bg: #6366f1;
+  --graph-node-border: #7772ff;
+  --graph-node-text: #ffffff;
+
+  /* Currently selected node */
+  --graph-selected-border: #4fd1a1;
+  --graph-selected-glow: rgba(79, 209, 161, 0.28);
+  --graph-selected-edge: #4fd1a1;
+
+  /* First node chosen while creating a graph link */
+  --graph-link-source: #f2c94c;
+  --graph-link-source-glow: rgba(242, 201, 76, 0.28);
+
+  /* Normal graph connections */
+  --graph-edge: #465873;
+  --graph-edge-arrow: #6366f1;
+
+
+  /* ---------------------------------------------------------
+     Accessible graph-link palette
+     --------------------------------------------------------- */
+
+  --graph-link-1: #55cddd;
+  --graph-link-2: #f2c94c;
+  --graph-link-3: #ca6be6;
+  --graph-link-4: #ef7d7d;
+
 
   /* ---------------------------------------------------------
      Authentication / branding
@@ -447,6 +478,37 @@
 
   --graph-node-accent: #625df0;
 
+  /* ---------------------------------------------------------
+     Graph nodes / selection / edges
+     --------------------------------------------------------- */
+
+  --graph-node-bg: #625df0;
+  --graph-node-border: #514bcc;
+  --graph-node-text: #ffffff;
+
+  /* Currently selected node */
+  --graph-selected-border: #16865e;
+  --graph-selected-glow: rgba(22, 134, 94, 0.22);
+  --graph-selected-edge: #16865e;
+
+  /* First node chosen while creating a graph link */
+  --graph-link-source: #9a6500;
+  --graph-link-source-glow: rgba(154, 101, 0, 0.20);
+
+  /* Normal graph connections */
+  --graph-edge: #78869b;
+  --graph-edge-arrow: #625df0;
+
+
+  /* ---------------------------------------------------------
+     Accessible graph-link palette
+     --------------------------------------------------------- */
+
+  --graph-link-1: #1677a6;
+  --graph-link-2: #9a6500;
+  --graph-link-3: #8a4fa3;
+  --graph-link-4: #c53c3c;
+
 
   /* ---------------------------------------------------------
      Authentication / branding
@@ -506,3 +568,315 @@
    saturate(0.85) brightness(0.9);
 }
 
+/* =========================================================
+   COLOUR VISION ACCESSIBILITY
+
+   These modes sit ON TOP of the normal light/dark theme.
+
+   Example:
+   <html
+     data-theme="dark"
+     data-color-vision="deuteranopia"
+   >
+
+   "standard" needs no overrides because it simply uses
+   the normal light/dark theme colours above.
+   ========================================================= */
+
+
+/* =========================================================
+   DEUTERANOPIA
+   Reduced green sensitivity
+
+   Avoid using red vs green as the main distinction.
+   Blue / orange / purple are used more heavily.
+   ========================================================= */
+
+
+/* DARK */
+
+
+html[data-theme="dark"][data-color-vision="deuteranopia"] {
+
+  /* Status */
+
+  --status-info: #cc79a7;
+  --status-success: #56b4e9;
+  --status-warning: #f0b84b;
+  --status-error: #f08045;
+  --status-error-bright: #ff9a66;
+
+  --status-error-bg:
+    rgba(240, 128, 69, 0.14);
+
+
+  /* Older semantic accent tokens */
+
+  --accent-green: #56b4e9;
+  --accent-red: #f08045;
+
+
+  /* Destructive actions */
+
+  --danger-text: #ff9a66;
+  --danger-icon: #f08045;
+  --danger-hover-text: #ffb28c;
+
+
+  /* Graph / Raw Notes accessibility colours */
+
+  /* Selected = blue, link source = orange.
+     These remain distinguishable without red/green contrast. */
+  --graph-selected-border: #56b4e9;
+  --graph-selected-glow: rgba(86, 180, 233, 0.30);
+  --graph-selected-edge: #56b4e9;
+
+  --graph-link-source: #e69f00;
+  --graph-link-source-glow: rgba(230, 159, 0, 0.30);
+
+  --graph-edge: #66758c;
+  --graph-edge-arrow: #8da6ff;
+
+  --graph-link-1: #56b4e9;
+  --graph-link-2: #f0b84b;
+  --graph-link-3: #cc79a7;
+  --graph-link-4: #e8e8e8;
+}
+
+
+/* LIGHT */
+
+html[data-theme="light"][data-color-vision="deuteranopia"] {
+
+  --status-info: #8c4f7c;
+  --status-success: #0072b2;
+  --status-warning: #9a6500;
+  --status-error: #b84a00;
+  --status-error-bright: #9d3e00;
+
+  --status-error-bg:
+    rgba(184, 74, 0, 0.10);
+
+
+  --accent-green: #0072b2;
+  --accent-red: #b84a00;
+
+
+  --danger-text: #9d3e00;
+  --danger-icon: #b84a00;
+  --danger-hover-text: #7e3200;
+
+
+  /* Graph / Raw Notes accessibility colours */
+
+  /* Selected = blue, link source = orange. */
+  --graph-selected-border: #0072b2;
+  --graph-selected-glow: rgba(0, 114, 178, 0.22);
+  --graph-selected-edge: #0072b2;
+
+  --graph-link-source: #a85f00;
+  --graph-link-source-glow: rgba(168, 95, 0, 0.20);
+
+  --graph-edge: #6b7788;
+  --graph-edge-arrow: #526fc7;
+
+  --graph-link-1: #0072b2;
+  --graph-link-2: #9a6500;
+  --graph-link-3: #8c4f7c;
+  --graph-link-4: #4f5968;
+}
+
+
+
+/* =========================================================
+   PROTANOPIA
+   Reduced red sensitivity
+
+   Blue, cyan, amber and magenta provide stronger
+   separation than red / green pairs.
+   ========================================================= */
+
+
+/* DARK */
+
+html[data-theme="dark"][data-color-vision="protanopia"] {
+
+  --status-info: #a78bfa;
+  --status-success: #67c5e8;
+  --status-warning: #f4bd61;
+  --status-error: #e879b7;
+  --status-error-bright: #f59acb;
+
+  --status-error-bg:
+    rgba(232, 121, 183, 0.14);
+
+
+  --accent-green: #67c5e8;
+  --accent-red: #e879b7;
+
+
+  --danger-text: #f59acb;
+  --danger-icon: #e879b7;
+  --danger-hover-text: #ffc0df;
+
+
+  /* Graph / Raw Notes accessibility colours */
+
+  /* Selected = cyan-blue, link source = amber.
+     This avoids using red/green as the state distinction. */
+  --graph-selected-border: #4db8ff;
+  --graph-selected-glow: rgba(77, 184, 255, 0.30);
+  --graph-selected-edge: #4db8ff;
+
+  --graph-link-source: #f0a202;
+  --graph-link-source-glow: rgba(240, 162, 2, 0.30);
+
+  --graph-edge: #66758c;
+  --graph-edge-arrow: #8da6ff;
+
+  --graph-link-1: #67c5e8;
+  --graph-link-2: #f4bd61;
+  --graph-link-3: #e879b7;
+  --graph-link-4: #a78bfa;
+}
+
+
+/* LIGHT */
+
+html[data-theme="light"][data-color-vision="protanopia"] {
+
+  --status-info: #6554b8;
+  --status-success: #16779b;
+  --status-warning: #926000;
+  --status-error: #a8447c;
+  --status-error-bright: #8f3468;
+
+  --status-error-bg:
+    rgba(168, 68, 124, 0.10);
+
+
+  --accent-green: #16779b;
+  --accent-red: #a8447c;
+
+
+  --danger-text: #8f3468;
+  --danger-icon: #a8447c;
+  --danger-hover-text: #752753;
+
+
+  /* Graph / Raw Notes accessibility colours */
+
+  /* Selected = cyan-blue, link source = amber. */
+  --graph-selected-border: #16779b;
+  --graph-selected-glow: rgba(22, 119, 155, 0.22);
+  --graph-selected-edge: #16779b;
+
+  --graph-link-source: #9b6400;
+  --graph-link-source-glow: rgba(155, 100, 0, 0.20);
+
+  --graph-edge: #6b7788;
+  --graph-edge-arrow: #526fc7;
+
+  --graph-link-1: #16779b;
+  --graph-link-2: #926000;
+  --graph-link-3: #a8447c;
+  --graph-link-4: #6554b8;
+}
+
+
+
+/* =========================================================
+   TRITANOPIA
+   Reduced blue sensitivity
+
+   Avoid relying on blue vs yellow distinctions.
+   Red, green and magenta become the primary
+   semantic differentiators.
+   ========================================================= */
+
+
+/* DARK */
+
+html[data-theme="dark"][data-color-vision="tritanopia"] {
+
+  --status-info: #d58bd2;
+  --status-success: #63d19e;
+  --status-warning: #ef9d67;
+  --status-error: #ef7474;
+  --status-error-bright: #ff9696;
+
+  --status-error-bg:
+    rgba(239, 116, 116, 0.14);
+
+
+  --accent-green: #63d19e;
+  --accent-red: #ef7474;
+
+
+  --danger-text: #ff9696;
+  --danger-icon: #ef7474;
+  --danger-hover-text: #ffb5b5;
+
+
+  /* Graph / Raw Notes accessibility colours */
+
+  /* Tritanopia should not depend on blue/yellow contrast.
+     Selected = green-teal, link source = warm coral. */
+  --graph-selected-border: #00c896;
+  --graph-selected-glow: rgba(0, 200, 150, 0.30);
+  --graph-selected-edge: #00c896;
+
+  --graph-link-source: #ff7a7a;
+  --graph-link-source-glow: rgba(255, 122, 122, 0.30);
+
+  --graph-edge: #66758c;
+  --graph-edge-arrow: #d58bd2;
+
+  --graph-link-1: #63d19e;
+  --graph-link-2: #ef9d67;
+  --graph-link-3: #d58bd2;
+  --graph-link-4: #ef7474;
+}
+
+
+/* LIGHT */
+
+html[data-theme="light"][data-color-vision="tritanopia"] {
+
+  --status-info: #965891;
+  --status-success: #18754f;
+  --status-warning: #a34f20;
+  --status-error: #b63d48;
+  --status-error-bright: #982f39;
+
+  --status-error-bg:
+    rgba(182, 61, 72, 0.10);
+
+
+  --accent-green: #18754f;
+  --accent-red: #b63d48;
+
+
+  --danger-text: #982f39;
+  --danger-icon: #b63d48;
+  --danger-hover-text: #7d2630;
+
+
+  /* Graph / Raw Notes accessibility colours */
+
+  /* Selected = green, link source = red/coral. */
+  --graph-selected-border: #18754f;
+  --graph-selected-glow: rgba(24, 117, 79, 0.22);
+  --graph-selected-edge: #18754f;
+
+  --graph-link-source: #b63d48;
+  --graph-link-source-glow: rgba(182, 61, 72, 0.20);
+
+  --graph-edge: #6b7788;
+  --graph-edge-arrow: #965891;
+
+  --graph-link-1: #18754f;
+  --graph-link-2: #a34f20;
+  --graph-link-3: #965891;
+  --graph-link-4: #b63d48;
+}

@@ -22,6 +22,82 @@ import {
 import cytoscape from "cytoscape";
 import { semanticSearchGraph,} from "../api/graphApi";
 
+/* =========================================================
+   GRAPH THEME HELPERS
+   ========================================================= */
+
+/*
+  Cytoscape does not automatically resolve CSS variables
+  in the same way normal DOM CSS does.
+
+  Read the active TreeNotes theme values from <html>
+  and give Cytoscape the resolved colour.
+*/
+function getThemeColour(
+  variableName,
+  fallback
+) {
+  const value =
+    getComputedStyle(
+      document.documentElement
+    )
+      .getPropertyValue(variableName)
+      .trim();
+
+  return value || fallback;
+}
+
+
+function getGraphThemeColours() {
+  return {
+    nodeBackground:
+      getThemeColour(
+        "--graph-node-bg",
+        "#6366F1"
+      ),
+
+    nodeBorder:
+      getThemeColour(
+        "--graph-node-border",
+        "#818CF8"
+      ),
+
+    nodeText:
+      getThemeColour(
+        "--graph-node-text",
+        "#ffffff"
+      ),
+
+    selectedBorder:
+      getThemeColour(
+        "--graph-selected-border",
+        "#41d19f"
+      ),
+
+    selectedGlow:
+      getThemeColour(
+        "--graph-selected-glow",
+        "rgba(65, 209, 159, 0.28)"
+      ),
+
+    edge:
+      getThemeColour(
+        "--graph-edge",
+        "#475569"
+      ),
+
+    /*
+      Use graph-link palette colour 2 for
+      "first node selected while linking".
+    */
+    linkSource:
+      getThemeColour(
+        "--graph-link-2",
+        "#f2c94c"
+      ),
+  };
+}
+
 const NODE_SHAPES = [
   {
     value: "ellipse",
@@ -49,6 +125,85 @@ const NODE_SHAPES = [
     Icon: Triangle,
   },
 ];
+
+function getThemeToken(
+  tokenName,
+  fallback
+) {
+  const value =
+    getComputedStyle(
+      document.documentElement
+    )
+      .getPropertyValue(tokenName)
+      .trim();
+
+  return value || fallback;
+}
+
+
+function getGraphThemeTokens() {
+  return {
+    nodeBg:
+      getThemeToken(
+        "--graph-node-bg",
+        "#6366f1"
+      ),
+
+    nodeBorder:
+      getThemeToken(
+        "--graph-node-border",
+        "#7772ff"
+      ),
+
+    nodeText:
+      getThemeToken(
+        "--graph-node-text",
+        "#ffffff"
+      ),
+
+    selectedBorder:
+      getThemeToken(
+        "--graph-selected-border",
+        "#4fd1a1"
+      ),
+
+    selectedGlow:
+      getThemeToken(
+        "--graph-selected-glow",
+        "rgba(79, 209, 161, 0.28)"
+      ),
+
+    selectedEdge:
+      getThemeToken(
+        "--graph-selected-edge",
+        "#4fd1a1"
+      ),
+
+    linkSource:
+      getThemeToken(
+        "--graph-link-source",
+        "#f2c94c"
+      ),
+
+    linkSourceGlow:
+      getThemeToken(
+        "--graph-link-source-glow",
+        "rgba(242, 201, 76, 0.28)"
+      ),
+
+    edge:
+      getThemeToken(
+        "--graph-edge",
+        "#465873"
+      ),
+
+    edgeArrow:
+      getThemeToken(
+        "--graph-edge-arrow",
+        "#7772ff"
+      ),
+  };
+}
 
 const GraphPanel = forwardRef(function GraphPanel(
   { rawNotes, selectedText, addNodeTrigger, noteId },
@@ -203,11 +358,230 @@ const GraphPanel = forwardRef(function GraphPanel(
     setGraphData(testGraphData);
   }
 
+  function applyActiveGraphTheme(cy) {
+
+    if (!cy) {
+      return;
+    }
+
+
+    const graphTheme =
+      getGraphThemeColours();
+
+
+    cy.style()
+
+      /* Normal nodes */
+
+      .selector("node")
+
+      .style({
+        "background-color":
+          graphTheme.nodeBackground,
+
+        "border-color":
+          graphTheme.nodeBorder,
+
+        color:
+          graphTheme.nodeText,
+      })
+
+
+      /* Selected node */
+
+      .selector("node:selected")
+
+      .style({
+        "border-color":
+          graphTheme.selectedBorder,
+
+        "underlay-color":
+          graphTheme.selectedBorder,
+      })
+
+
+      /* First node in link mode */
+
+      .selector("node.link-source")
+
+      .style({
+        "border-color":
+          graphTheme.linkSource,
+
+        "overlay-color":
+          graphTheme.linkSource,
+      })
+
+
+      /* Normal edges */
+
+      .selector("edge")
+
+      .style({
+        "line-color":
+          graphTheme.edge,
+
+        "target-arrow-color":
+          graphTheme.nodeBorder,
+      })
+
+
+      /* Selected edges */
+
+      .selector("edge:selected")
+
+      .style({
+        "line-color":
+          graphTheme.selectedBorder,
+
+        "target-arrow-color":
+          graphTheme.selectedBorder,
+      })
+
+
+      .update();
+  }
+
+  function applyGraphTheme(
+    cy = cyRef.current
+  ) {
+    if (!cy) {
+      return;
+    }
+
+
+    const graphTheme =
+      getGraphThemeTokens();
+
+
+    cy.style()
+
+      /*
+        Default nodes
+      */
+      .selector("node")
+      .style({
+        "background-color":
+          graphTheme.nodeBg,
+
+        "border-color":
+          graphTheme.nodeBorder,
+
+        color:
+          graphTheme.nodeText,
+      })
+
+
+      /*
+        Normal selected node.
+
+        Solid ring = selected.
+        Colour comes from the current
+        accessibility palette.
+      */
+      .selector("node:selected")
+      .style({
+        "border-width": 4,
+
+        "border-style":
+          "solid",
+
+        "border-color":
+          graphTheme.selectedBorder,
+
+        "underlay-color":
+          graphTheme.selectedBorder,
+
+        "underlay-opacity":
+          0.18,
+
+        "underlay-padding":
+          8,
+      })
+
+
+      /*
+        First node selected while
+        creating a graph link.
+
+        IMPORTANT:
+        Dashed ring distinguishes this
+        from normal selection even if the
+        colours appear similar.
+      */
+      .selector("node.link-source")
+      .style({
+        "border-width": 4,
+
+        "border-style":
+          "dashed",
+
+        "border-color":
+          graphTheme.linkSource,
+
+        "underlay-color":
+          graphTheme.linkSource,
+
+        "underlay-opacity":
+          0.22,
+
+        "underlay-padding":
+          8,
+      })
+
+
+      /*
+        Default edges
+      */
+      .selector("edge")
+      .style({
+        width: 2,
+
+        "line-color":
+          graphTheme.edge,
+
+        "target-arrow-color":
+          graphTheme.edgeArrow,
+
+        "line-style":
+          "solid",
+
+        opacity:
+          0.8,
+      })
+
+
+      /*
+        Selected edge.
+
+        Extra thickness means selection
+        does not depend on colour alone.
+      */
+      .selector("edge:selected")
+      .style({
+        width: 4,
+
+        "line-color":
+          graphTheme.selectedEdge,
+
+        "target-arrow-color":
+          graphTheme.selectedEdge,
+
+        opacity:
+          1,
+      })
+
+
+      .update();
+  }
+
   // << CYTOSCAPE FRONTEND >> //
   useEffect(() => {
     if (!graphData || !graphContainerRef.current) {
       return;
     }
+
+    const graphTheme = getGraphThemeTokens();
 
     const cy = cytoscape({
       container: graphContainerRef.current,
@@ -225,10 +599,14 @@ const GraphPanel = forwardRef(function GraphPanel(
       },
 
       style: [
+        /* =====================================================
+          NORMAL NODE
+          ===================================================== */
+
         {
           selector: "node",
           style: {
-            "background-color": "#6366F1",
+            "background-color": graphTheme.nodeBg,
 
             width: 110,
             height: 52,
@@ -237,7 +615,7 @@ const GraphPanel = forwardRef(function GraphPanel(
 
             label: "data(label)",
 
-            color: "#ffffff",
+            color: graphTheme.nodeText,
             "font-size": "16px",
             "font-weight": "500",
 
@@ -248,35 +626,60 @@ const GraphPanel = forwardRef(function GraphPanel(
             "text-max-width": "75px",
 
             "border-width": 1,
-            "border-color": "#818CF8",
+            "border-color": graphTheme.nodeBorder,
 
             "overlay-opacity": 0,
           },
         },
-        // highlight the selected node
+        
+        /*
+          =========================================================
+          SELECTED NODE
+          =========================================================
+
+          Solid outline.
+
+          This intentionally does NOT change
+          the node's actual background colour.
+        */
+
         {
           selector: "node:selected",
           style: {
             "border-width": 4,
-            "border-color": "#41d19f",
-            "background-color": "#4F46E5",
+            "border-style": "solid",
+            "border-color": graphTheme.selectedBorder,
+            "underlay-color": graphTheme.selectedBorder,
+            "underlay-opacity": 0.18,
+            "underlay-padding": 8,
           },
         },
 
-        // highlight the source node when linking
+        /*
+          =========================================================
+          LINK SOURCE NODE
+          =========================================================
+
+          Dashed outline gives us an additional
+          non-colour accessibility cue.
+        */
+
         {
           selector: "node.link-source",
           style: {
             "border-width": 4,
-            "border-color": "#f2c94c",
-
-            "overlay-color": "#f2c94c",
-            "overlay-opacity": 0.12,
-            "overlay-padding": "8px",
+            "border-style": "dashed",
+            "border-color": graphTheme.linkSource,
+            "overlay-color": graphTheme.linkSource,
+            "overlay-opacity": 0.22,
+            "overlay-padding": 8,
           },
         },
 
-        // If node has saved colour data, use it //
+        /* =====================================================
+          SAVED CUSTOM NODE COLOUR
+          ===================================================== */
+        
         {
           selector: "node[color]",
           style: {
@@ -284,7 +687,10 @@ const GraphPanel = forwardRef(function GraphPanel(
           },
         },
 
-        // If node has saved shape data, use it //
+        /* =====================================================
+          SAVED NODE SHAPE
+          ===================================================== */
+
         {
           selector: "node[shape]",
           style: {
@@ -292,13 +698,17 @@ const GraphPanel = forwardRef(function GraphPanel(
           },
         },
 
+        /* =====================================================
+          DEFAULT EDGE
+          ===================================================== */
+
         {
           selector: "edge",
           style: {
             width: 2,
 
-            "line-color": "#475569",
-            "target-arrow-color": "#6366F1",
+            "line-color": graphTheme.edge,
+            "target-arrow-color": graphTheme.nodeBorder,
             "target-arrow-shape": "triangle",
 
             "curve-style": "bezier",
@@ -308,7 +718,11 @@ const GraphPanel = forwardRef(function GraphPanel(
             "arrow-scale": 1.1,
           },
         },
-        // overlay for edge
+
+        /* =====================================================
+          ACTIVE NODE
+          ===================================================== */
+
         {
           selector: "node:active",
           style: {
@@ -316,12 +730,22 @@ const GraphPanel = forwardRef(function GraphPanel(
           },
         },
 
+        /*
+          =========================================================
+          SELECTED EDGE
+          =========================================================
+
+          Selected edges become both coloured
+          AND thicker.
+        */
+
         {
           selector: "edge:selected",
           style: {
-            width: 3,
-            "line-color": "#41d19f",
-            "target-arrow-color": "#818CF8",
+            width: 4,
+            "line-color": graphTheme.selectedEdge,
+            "target-arrow-color": graphTheme.selectedEdge,
+            opacity: 1,
           },
         },
 
@@ -329,6 +753,95 @@ const GraphPanel = forwardRef(function GraphPanel(
       ],
     });
     cyRef.current = cy;
+
+    /* =========================================================
+      WATCH TREE NOTES THEME / ACCESSIBILITY CHANGES
+      ========================================================= */
+
+    const themeObserver =
+      new MutationObserver(
+        (mutations) => {
+
+          const themeChanged =
+            mutations.some(
+              (mutation) =>
+                mutation.attributeName ===
+                  "data-theme" ||
+
+                mutation.attributeName ===
+                  "data-color-vision"
+            );
+
+
+          if (!themeChanged) {
+            return;
+          }
+
+
+          applyActiveGraphTheme(cy);
+
+
+          /*
+            Keep the Selected Node toolbar colour
+            consistent with the newly active theme
+            when the node does not have a custom colour.
+          */
+
+          setSelectedNode(
+            (current) => {
+
+              if (!current) {
+                return current;
+              }
+
+
+              const currentCyNode =
+                cy.getElementById(
+                  current.id
+                );
+
+
+              if (
+                !currentCyNode ||
+                currentCyNode.empty()
+              ) {
+                return current;
+              }
+
+
+              const savedColour =
+                currentCyNode.data(
+                  "color"
+                );
+
+
+              return {
+                ...current,
+
+                color:
+                  savedColour ||
+                  getThemeColour(
+                    "--graph-node-bg",
+                    "#6366F1"
+                  ),
+              };
+            }
+          );
+        }
+      );
+
+
+    themeObserver.observe(
+      document.documentElement,
+      {
+        attributes: true,
+
+        attributeFilter: [
+          "data-theme",
+          "data-color-vision",
+        ],
+      }
+    );
 
     // Detect selected node //
   cy.on("tap", "node", (event) => {
@@ -340,7 +853,10 @@ const GraphPanel = forwardRef(function GraphPanel(
 
     color:
       clickedNode.data("color") ||
-      "#6366F1",
+      getThemeColour(
+        "--graph-node-bg",
+        "#6366F1"
+      ),
 
     shape:
       clickedNode.data("shape") ||
@@ -509,11 +1025,65 @@ cy.one("layoutstop", () => {
 });
 
 return () => {
+  themeObserver.disconnect();
+
   cy.destroy();
   cyRef.current = null;
 };
 
 }, [graphData]);
+
+useEffect(() => {
+
+  const root =
+    document.documentElement;
+
+
+  const observer =
+    new MutationObserver(
+      (mutations) => {
+
+        const themeChanged =
+          mutations.some(
+            (mutation) =>
+              mutation.attributeName ===
+                "data-theme" ||
+              mutation.attributeName ===
+                "data-color-vision"
+          );
+
+
+        if (!themeChanged) {
+          return;
+        }
+
+
+        requestAnimationFrame(() => {
+          applyGraphTheme();
+        });
+
+      }
+    );
+
+
+  observer.observe(
+    root,
+    {
+      attributes: true,
+
+      attributeFilter: [
+        "data-theme",
+        "data-color-vision",
+      ],
+    }
+  );
+
+
+  return () => {
+    observer.disconnect();
+  };
+
+}, []);
 
 function addSelectedTextNode() {
   if (!cyRef.current || !selectedText) {
@@ -1367,7 +1937,10 @@ useImperativeHandle(ref, () => ({
                   style={{
                     backgroundColor:
                       selectedNode?.color ||
-                      "#6366F1",
+                      getThemeColour(
+                        "--graph-node-bg",
+                        "#6366F1"
+                      ),
                   }}
                 />
 
