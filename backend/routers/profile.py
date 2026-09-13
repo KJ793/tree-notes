@@ -12,10 +12,9 @@ from backend.schemas import (
     ProfileUpdate,
     ProfileUpdateResponse,
 )
-from backend.security import pwd_context
-
-# Mirrors the client-side rule in ProfileContent.jsx so the two agree.
-MIN_PASSWORD_LENGTH = 8
+from backend.security import (
+    MAX_PASSWORD_BYTES, MIN_PASSWORD_LENGTH, normalise_email, password_too_long, pwd_context,
+)
 
 router = APIRouter()
 
@@ -58,7 +57,9 @@ def update_profile(
 ):
     changes = payload.model_dump(exclude_unset=True)
 
-    new_email = changes.get("email")
+    # Lowercased like register and login, or a profile edit could store a
+    # mixed-case address that login would then never match.
+    new_email = normalise_email(changes["email"]) if changes.get("email") else None
     if new_email and new_email != current_user.email:
         taken = (
             db.query(User)
@@ -112,6 +113,17 @@ def change_password(
                 "message": (
                     f"Your new password must be at least "
                     f"{MIN_PASSWORD_LENGTH} characters long."
+                )
+            },
+        )
+
+    if password_too_long(payload.newPassword):
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "message": (
+                    f"Your new password must be at most "
+                    f"{MAX_PASSWORD_BYTES} bytes long."
                 )
             },
         )
