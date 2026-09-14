@@ -71,16 +71,154 @@ const [activeAlignment, setActiveAlignment] = useState("left");
 const selectedRangeRef = useRef(null);
 const graphLinkColourIndexRef = useRef(0);
 
-const GRAPH_LINK_COLORS = [
-  "#f2c94c",
-  "#56ccf2",
-  "#9b7df5",
-  "#4fd1a1",
-  "#f58b8b",
-  "#f2994a",
-  "#bb6bd9",
-  "#60a5fa",
+/*
+  =========================================================
+  ACCESSIBLE GRAPH LINK COLOURS
+  =========================================================
+
+  The actual colours live in themes.css.
+
+  This means the default colours used for Raw Notes
+  graph links automatically follow:
+
+  - Standard
+  - Deuteranopia
+  - Protanopia
+  - Tritanopia
+
+  as well as light/dark mode.
+*/
+
+const GRAPH_LINK_COLOR_TOKENS = [
+  "--graph-link-1",
+  "--graph-link-2",
+  "--graph-link-3",
+  "--graph-link-4",
 ];
+
+
+/*
+  Known colours from our current automatic palettes.
+
+  This allows links created before we added palette-slot
+  metadata to be adopted into the new system where possible.
+
+  Unknown colours are assumed to have been manually chosen
+  and are preserved.
+*/
+const KNOWN_GRAPH_LINK_COLOURS_BY_SLOT = [
+  [
+    "#55cddd",
+    "#1677a6",
+    "#56b4e9",
+    "#0072b2",
+    "#67c5e8",
+    "#16779b",
+    "#63d19e",
+    "#18754f",
+
+    // older automatic colours
+    "#56ccf2",
+    "#f58b8b",
+  ],
+
+  [
+    "#f2c94c",
+    "#9a6500",
+    "#f0b84b",
+    "#f4bd61",
+    "#926000",
+    "#ef9d67",
+    "#a34f20",
+
+    // older automatic colour
+    "#f2994a",
+  ],
+
+  [
+    "#ca6be6",
+    "#8a4fa3",
+    "#cc79a7",
+    "#8c4f7c",
+    "#e879b7",
+    "#a8447c",
+    "#d58bd2",
+    "#965891",
+
+    // older automatic colours
+    "#9b7df5",
+    "#bb6bd9",
+  ],
+
+  [
+    "#ef7d7d",
+    "#c53c3c",
+    "#e8e8e8",
+    "#4f5968",
+    "#a78bfa",
+    "#6554b8",
+    "#ef7474",
+    "#b63d48",
+
+    // older automatic colours
+    "#4fd1a1",
+    "#60a5fa",
+  ],
+];
+
+
+function getGraphLinkPalette() {
+
+  const styles =
+    getComputedStyle(
+      document.documentElement
+    );
+
+
+  return GRAPH_LINK_COLOR_TOKENS.map(
+    (token) =>
+      styles
+        .getPropertyValue(token)
+        .trim()
+  );
+}
+
+
+function inferGraphLinkPaletteSlot(
+  colour
+) {
+
+  if (!colour) {
+    return null;
+  }
+
+
+  const normalisedColour =
+    colour
+      .trim()
+      .toLowerCase();
+
+
+  for (
+    let slot = 0;
+    slot <
+      KNOWN_GRAPH_LINK_COLOURS_BY_SLOT.length;
+    slot += 1
+  ) {
+
+    if (
+      KNOWN_GRAPH_LINK_COLOURS_BY_SLOT[
+        slot
+      ].includes(normalisedColour)
+    ) {
+      return slot;
+    }
+
+  }
+
+
+  return null;
+}
 
 // << RAW NOTES SEARCH >> //
 
@@ -1044,9 +1182,10 @@ const GRAPH_LINK_COLORS = [
       If this node has never been linked from Raw Notes
       before, give it the next available link colour.
     */
-    const linkColor =
-      node.linkColor ||
-      getNextGraphLinkColor();
+    const {
+      color: linkColor,
+      paletteSlot,
+    } = getNextGraphLinkStyle();
 
 
     /*
@@ -1070,8 +1209,9 @@ const GRAPH_LINK_COLORS = [
     */
     createGraphLinkedText(
       range,
-      node.id,
-      linkColor
+      nodeId,
+      linkColor,
+      paletteSlot
     );
 
 
@@ -1219,16 +1359,242 @@ const GRAPH_LINK_COLORS = [
     );
   }
 
-  function getNextGraphLinkColor() {
+  function getNextGraphLinkStyle() {
+
+    const palette =
+      getGraphLinkPalette();
+
+
+    const paletteSlot =
+      graphLinkColourIndexRef.current %
+      palette.length;
+
+
     const color =
-      GRAPH_LINK_COLORS[
-        graphLinkColourIndexRef.current %
-        GRAPH_LINK_COLORS.length
-      ];
+      palette[paletteSlot];
+
 
     graphLinkColourIndexRef.current += 1;
 
-    return color;
+
+    return {
+      color,
+      paletteSlot,
+    };
+  }
+
+  function refreshAutomaticGraphLinkColors() {
+
+    if (!editorRef.current) {
+      return;
+    }
+
+
+    const palette =
+      getGraphLinkPalette();
+
+
+    if (
+      !palette.length ||
+      palette.some(
+        (colour) => !colour
+      )
+    ) {
+      return;
+    }
+
+
+    const linkedSpans =
+      Array.from(
+        editorRef.current
+          .querySelectorAll(
+            ".graph-linked-text"
+          )
+      );
+
+
+    linkedSpans.forEach(
+      (span) => {
+
+        /*
+          -------------------------------------------------------
+          MIGRATE OLDER GRAPH LINKS
+          -------------------------------------------------------
+
+          Older links do not yet have:
+
+          data-graph-link-palette-slot
+          data-graph-link-custom
+
+          Try to recognise colours that came from our automatic
+          palettes. Unknown colours are treated as custom so we
+          never unexpectedly overwrite something the user chose.
+        */
+
+        if (
+          span.dataset.graphLinkCustom ===
+            undefined ||
+          span.dataset
+            .graphLinkPaletteSlot ===
+            undefined
+        ) {
+
+          const inferredSlot =
+            inferGraphLinkPaletteSlot(
+              span.dataset
+                .graphLinkColor
+            );
+
+
+          if (
+            inferredSlot === null
+          ) {
+
+            span.dataset.graphLinkCustom =
+              "true";
+
+            return;
+          }
+
+
+          span.dataset
+            .graphLinkPaletteSlot =
+              String(
+                inferredSlot
+              );
+
+
+          span.dataset.graphLinkCustom =
+            "false";
+        }
+
+
+        /*
+          Manual colours are intentionally
+          excluded from automatic remapping.
+        */
+
+        if (
+          span.dataset.graphLinkCustom ===
+          "true"
+        ) {
+          return;
+        }
+
+
+        const paletteSlot =
+          Number.parseInt(
+            span.dataset
+              .graphLinkPaletteSlot,
+            10
+          );
+
+
+        if (
+          !Number.isInteger(
+            paletteSlot
+          ) ||
+          paletteSlot < 0 ||
+          paletteSlot >=
+            palette.length
+        ) {
+          return;
+        }
+
+
+        const newColor =
+          palette[
+            paletteSlot
+          ];
+
+
+        /*
+          Update metadata used by context menus,
+          graph hover behaviour and saving.
+        */
+
+        span.dataset.graphLinkColor =
+          newColor;
+
+
+        /*
+          Update the visible Raw Notes highlight.
+        */
+
+        span.style.setProperty(
+          "--graph-link-color",
+          newColor
+        );
+
+
+        /*
+          Your current graph-link colour handler also
+          keeps this concrete fallback background,
+          so update that at the same time.
+        */
+
+        span.style.backgroundColor =
+          hexToRgba(
+            newColor,
+            0.38
+          );
+
+      }
+    );
+
+
+    /*
+      If the Graph Link context menu is currently open,
+      update its little colour indicator as well.
+    */
+
+    setContextMenu(
+      (current) => {
+
+        if (
+          !current ||
+          current.type !==
+            "linked" ||
+          !current.linkId
+        ) {
+          return current;
+        }
+
+
+        const currentSpan =
+          linkedSpans.find(
+            (span) =>
+              span.dataset
+                .graphLinkId ===
+              String(
+                current.linkId
+              )
+          );
+
+
+        if (!currentSpan) {
+          return current;
+        }
+
+
+        return {
+          ...current,
+
+          color:
+            currentSpan.dataset
+              .graphLinkColor ||
+            current.color,
+        };
+      }
+    );
+
+
+    /*
+      Preserve the new palette metadata and colours
+      in rawNotesHtml for saving.
+    */
+
+    updateRawNotes();
   }
 
   function getGraphLinksInSelection() {
@@ -1323,7 +1689,8 @@ const GRAPH_LINK_COLORS = [
   function createGraphLinkedText(
     range,
     nodeId,
-    color
+    color,
+    paletteSlot = null
   ) {
     if (!range) {
       return;
@@ -1352,7 +1719,38 @@ const GRAPH_LINK_COLORS = [
 
     span.dataset.graphLinkColor =
       color;
+      
+    /*
+    Automatic graph links remember their palette position.
 
+    Example:
+
+    slot 0
+      Standard      → cyan
+      Deuteranopia  → blue
+      Protanopia    → cyan
+      Tritanopia    → green
+
+    The slot stays the same while the actual colour changes.
+    */
+    if (
+      Number.isInteger(
+        paletteSlot
+      )
+    ) {
+
+      span.dataset.graphLinkPaletteSlot =
+        String(paletteSlot);
+
+      span.dataset.graphLinkCustom =
+        "false";
+
+    } else {
+
+      span.dataset.graphLinkCustom =
+        "true";
+
+    }
 
     span.style.setProperty(
       "--graph-link-color",
@@ -1539,8 +1937,10 @@ const GRAPH_LINK_COLORS = [
     }
 
 
-    const linkColor =
-      getNextGraphLinkColor();
+    const {
+      color: linkColor,
+      paletteSlot,
+    } = getNextGraphLinkStyle();
 
 
     /*
@@ -1579,7 +1979,8 @@ const GRAPH_LINK_COLORS = [
     createGraphLinkedText(
       range,
       nodeId,
-      linkColor
+      linkColor,
+      paletteSlot
     );
 
 
@@ -1638,6 +2039,15 @@ const GRAPH_LINK_COLORS = [
       return;
     }
 
+    /*
+      The user has manually chosen a link colour.
+
+      Mark this graph link as custom so future
+      light/dark or colour-accessibility changes
+      do NOT automatically replace it.
+    */
+    linkedSpan.dataset.graphLinkCustom =
+      "true";
 
     linkedSpan.dataset.graphLinkColor =
       color;
@@ -1702,7 +2112,79 @@ const GRAPH_LINK_COLORS = [
       note.content ||
       "";
 
+    /*
+      The DOM content has just been restored.
+
+      On the next frame, migrate older links and apply
+      the user's currently active accessibility palette.
+    */
+
+    requestAnimationFrame(() => {
+      refreshAutomaticGraphLinkColors();
+    });
+
   }, [note.id]);
+
+  // =========================================================
+  // Keeps accessibility colours updated
+  // =========================================================
+
+  useEffect(() => {
+
+  const root =
+    document.documentElement;
+
+
+  const observer =
+    new MutationObserver(
+      (mutations) => {
+
+        const colourModeChanged =
+          mutations.some(
+            (mutation) =>
+              mutation.attributeName ===
+                "data-theme" ||
+              mutation.attributeName ===
+                "data-color-vision"
+          );
+
+
+        if (!colourModeChanged) {
+          return;
+        }
+
+
+        /*
+          Wait one frame so the new CSS variables
+          have taken effect before reading them.
+        */
+
+        requestAnimationFrame(() => {
+          refreshAutomaticGraphLinkColors();
+        });
+
+      }
+    );
+
+
+  observer.observe(
+    root,
+    {
+      attributes: true,
+
+      attributeFilter: [
+        "data-theme",
+        "data-color-vision",
+      ],
+    }
+  );
+
+
+  return () => {
+    observer.disconnect();
+  };
+
+}, []);
 
   // =========================================================
   // Paragraph formatting popover
@@ -2453,7 +2935,7 @@ const GRAPH_LINK_COLORS = [
 
                     color:
                       linkedText.dataset.graphLinkColor ||
-                      "#f2c94c",
+                      getDefaultGraphLinkColor(),
                   });
 
 
@@ -2881,7 +3363,7 @@ const GRAPH_LINK_COLORS = [
                               style={{
                                 backgroundColor:
                                   contextMenu.color ||
-                                  "#f2c94c",
+                                  getDefaultGraphLinkColor(),
                               }}
                             />
 
@@ -2903,7 +3385,7 @@ const GRAPH_LINK_COLORS = [
 
                           value={
                             contextMenu.color ||
-                            "#f2c94c"
+                            getDefaultGraphLinkColor()
                           }
 
                           onChange={(event) => {
