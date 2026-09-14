@@ -149,8 +149,8 @@ function Dashboard() {
         Add the new note to the sidebar list.
       */
       setNotes((currentNotes) => [
-        ...currentNotes,
         newNote,
+        ...currentNotes,
       ]);
 
 
@@ -296,10 +296,10 @@ function Dashboard() {
     <main className="dashboard-page">
 
       <Navbar
-        onSave={() => {
+        onSave={() =>
           noteWorkspaceRef.current
-            ?.saveEverything();
-        }}
+            ?.saveEverything()
+        }
       />
 
 

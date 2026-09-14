@@ -7,6 +7,7 @@ import {
 } from "react";
 import GraphPanel from "./GraphPanel";
 import SummaryPanel from "./SummaryPanel";
+import { updateNote } from "../api/notesApi";
 import {
   Bold,
   Italic,
@@ -32,7 +33,7 @@ import {
 import "./NoteWorkspace.css";
 
 const NoteWorkspace = forwardRef(function NoteWorkspace(
-  { note },
+  { note, onNoteSaved },
   ref
 ) {
 // text editor refrence for saving
@@ -83,15 +84,32 @@ const GRAPH_LINK_COLORS = [
 
 // << frontend dev >> //
   // Stores the current note title //
-  const [title, setTitle] = useState(note.title);
+  const [title, setTitle] =
+    useState(note.title ?? "Untitled Note");
 
   // Stores the current raw note text //
   // This rawNotes value will be shared with HANS AI //
-  const [rawNotes, setRawNotes] = useState(note.content);
+  const [rawNotes, setRawNotes] =
+    useState(
+      note.notes_section ??
+      note.content ??
+      ""
+    );
 
   // Stores the current raw note text in HTML format //
   const [rawNotesHtml, setRawNotesHtml] =
-  useState("");
+    useState(
+      note.notes_section_html ??
+      ""
+    );
+
+  // Stored user/AI summary for this note.
+  const [summary, setSummary] =
+    useState(
+      note.summary_section ??
+      note.summary ??
+      ""
+    );
 
   // Selected text for manually adding to graph //
   const [selectedText, setSelectedText] = useState("");
@@ -1367,37 +1385,45 @@ const GRAPH_LINK_COLORS = [
   }, []);
 
   useImperativeHandle(ref, () => ({
-  async saveEverything() {
-    if (!note?.id) {
-      console.log("No note ID available");
-      return;
-    }
+    async saveEverything() {
+      if (!note?.id) {
+        throw new Error(
+          "No note is selected."
+        );
+      }
 
-    const graphData = graphPanelRef.current?.getGraphData();
+      const graph =
+        graphPanelRef.current
+          ?.getGraphData();
 
-    const response = await fetch(`/api/notes/${note.id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify({
-        title: title,
-        notes_section: rawNotes,
-      }),
-    });
+      const saved =
+        await updateNote(
+          note.id,
+          {
+            title,
+            notes_section:
+              rawNotes,
+            notes_section_html:
+              rawNotesHtml,
+            summary_section:
+              summary,
 
-    if (!response.ok) {
-      throw new Error("Failed to save note");
-    }
+            // Omitting graph_json leaves an existing saved
+            // graph untouched. Sending null would clear it.
+            ...(graph
+              ? {
+                  graph_json:
+                    graph,
+                }
+              : {}),
+          }
+        );
 
-    const savedNote = await response.json();
+      onNoteSaved?.(saved);
 
-    console.log("Note saved:", savedNote);
-    console.log("Graph ready to save:", graphData);
-  },
-
-}));
+      return saved;
+    },
+  }));
 
   return (
     <div 
@@ -2443,6 +2469,7 @@ const GRAPH_LINK_COLORS = [
         selectedText={selectedText}
         addNodeTrigger={addNodeTrigger}
         noteId={note.id}
+        initialGraph={note.graph_json}
         ref={graphPanelRef}
 
 
@@ -2453,7 +2480,11 @@ const GRAPH_LINK_COLORS = [
       {/* Provides current note text to SummaryPanel */}
       {/* SummaryPanel sends rawNotes to backend / AI */}
 
-      <SummaryPanel rawNotes={rawNotes} />
+      <SummaryPanel
+        rawNotes={rawNotes}
+        summary={summary}
+        onSummaryChange={setSummary}
+      />
     </div>
   );
 });

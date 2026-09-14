@@ -21,68 +21,90 @@ function LoginCard({ onCreateAccount }) {
 
     setLoading(true);
     setError("");
-    let LoginSuccess = false;
+
     try {
+      const response =
+        await fetch(
+          "/api/login",
+          {
+            method: "POST",
 
-      /* =========================================
-         BACKEND
-         Function for logging in the user
-         ========================================= */
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
 
-      /*
-        Frontend provides:
+            credentials:
+              "include",
 
-        {
-          email: string,
-          password: string
-        }
-      */
+            body:
+              JSON.stringify(
+                loginData
+              ),
+          }
+        );
 
-      const response = await fetch("/api/login", {
-        method: "POST",
+      let data = {};
 
-        headers: {
-          "Content-Type": "application/json",
-        },
-
-        credentials: "include",
-
-        body: JSON.stringify(loginData),
-      });
-
-
-      if (!response.ok) {
-        throw new Error("Login failed.");
+      try {
+        data =
+          await response.json();
+      } catch {
+        // Use the fallback message below.
       }
 
+      if (!response.ok) {
+        let message =
+          "Unable to login.";
 
-      /*
-        Expected backend response:
-
-        {
-          user: {
-            id: number/string,
-            email: string,
-            name: string
-          }
+        if (
+          typeof data?.detail ===
+          "string"
+        ) {
+          message = data.detail;
+        } else if (
+          Array.isArray(
+            data?.detail
+          )
+        ) {
+          message =
+            data.detail
+              .map((item) =>
+                String(item.msg)
+                  .replace(
+                    /^Value error, /,
+                    ""
+                  )
+              )
+              .join(" ");
         }
-      */
 
-      const data = await response.json();
-      LoginSuccess = true;
-      console.log("Logged in user:", data);
+        throw new Error(message);
+      }
+
+      console.log(
+        "Logged in user:",
+        data
+      );
+
+      navigate(
+        "/dashboard",
+        { replace: true }
+      );
+
     } catch (error) {
-      console.error("Login error:", error);
+      console.error(
+        "Login error:",
+        error
+      );
 
       setError(
-        "Unable to login. Please check your email and password."
+        error.message ||
+        "Unable to login."
       );
 
     } finally {
       setLoading(false);
-      if (LoginSuccess) {
-        navigate("/dashboard", { replace: true });
-      }
     }
   }
 

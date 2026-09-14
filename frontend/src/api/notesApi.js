@@ -31,7 +31,7 @@
    ========================================================= */
 
 
-const USE_MOCK_NOTES = true;
+const USE_MOCK_NOTES = false;
 
 
 /*
@@ -159,8 +159,22 @@ function normaliseNote(note) {
       "",
 
     summary:
+      note.summary_section ??
       note.summary ??
       "",
+
+    summary_section:
+      note.summary_section ??
+      note.summary ??
+      "",
+
+    graph_json:
+      note.graph_json ??
+      null,
+
+    group_id:
+      note.group_id ??
+      null,
 
     created_at:
       note.created_at ??
@@ -192,14 +206,12 @@ function normaliseNoteUpdates(
     ...updates,
   };
 
-
   if (
     updates.notes_section !== undefined
   ) {
     normalised.content =
       updates.notes_section;
   }
-
 
   if (
     updates.content !== undefined &&
@@ -209,10 +221,30 @@ function normaliseNoteUpdates(
       updates.content;
   }
 
+  // The backend stores the user's summary as summary_section.
+  // Accept the older frontend "summary" name, but never send it
+  // as an unknown key.
+  if (
+    updates.summary !== undefined &&
+    updates.summary_section === undefined
+  ) {
+    normalised.summary_section =
+      updates.summary;
+  }
+
+  delete normalised.summary;
+
+  // PATCH semantics: omit title to leave it unchanged.
+  // An explicit null is rejected by the backend.
+  if (
+    updates.title === null ||
+    updates.title === undefined
+  ) {
+    delete normalised.title;
+  }
 
   return normalised;
 }
-
 
 
 /* =========================================================
@@ -300,6 +332,28 @@ function writeMockNotes(notes) {
 
 
 
+function errorMessage(data, fallback) {
+  if (typeof data?.detail === "string") {
+    return data.detail;
+  }
+
+  if (Array.isArray(data?.detail)) {
+    return data.detail
+      .map((error) =>
+        String(error.msg)
+          .replace(/^Value error, /, "")
+      )
+      .join(" ");
+  }
+
+  return (
+    data?.message ??
+    data?.error ??
+    fallback
+  );
+}
+
+
 /* =========================================================
    BACKEND RESPONSE HELPER
    ========================================================= */
@@ -309,6 +363,10 @@ async function handleApiResponse(
   fallbackMessage
 ) {
   if (!response.ok) {
+    if (response.status === 401) {
+      window.location.replace("/");
+    }
+
     let message =
       fallbackMessage;
 
@@ -319,9 +377,10 @@ async function handleApiResponse(
 
 
       message =
-        data.message ??
-        data.error ??
-        message;
+        errorMessage(
+          data,
+          message
+        );
 
     } catch {
       /*
@@ -487,9 +546,18 @@ export async function createNote(
         noteData.notes_section_html ??
         "",
 
-      summary:
+      summary_section:
+        noteData.summary_section ??
         noteData.summary ??
         "",
+
+      graph_json:
+        noteData.graph_json ??
+        null,
+
+      group_id:
+        noteData.group_id ??
+        null,
 
       created_at:
         now,
@@ -560,8 +628,18 @@ export async function createNote(
             notes_section_html:
               requestedNote.notes_section_html,
 
-            summary:
-              requestedNote.summary,
+            summary_section:
+              requestedNote.summary_section,
+
+            group_id:
+              requestedNote.group_id,
+
+            ...(noteData.graph_json !== undefined
+              ? {
+                  graph_json:
+                    requestedNote.graph_json,
+                }
+              : {}),
           }),
       }
     );
