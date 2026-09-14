@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, } from "react";
 import "./ProfileContent.css";
+import usePageTitle from "../hooks/usePageTitle";
 import { 
   X,
   ChevronDown,
@@ -123,6 +124,8 @@ function getInitials(name) {
 }
 
 function ProfileContent() {
+  usePageTitle("Profile");
+
   const [profile, setProfile] = useState(initialProfile);
   const [saved, setSaved] = useState(false);
   const {

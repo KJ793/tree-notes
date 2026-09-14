@@ -2,6 +2,7 @@ import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
 import DashboardContent from "./components/DashboardContent";
 import NoteWorkspace from "./components/NoteWorkspace";
+import usePageTitle from "./hooks/usePageTitle";
 
 import {
   useEffect,
@@ -18,6 +19,7 @@ import {
 
 function Dashboard() {
 
+  usePageTitle("Dashboard");
   // =========================================================
   // SIDEBAR STATE
   // =========================================================

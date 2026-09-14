@@ -1,5 +1,6 @@
 import "./App.css";
 import { useState } from "react";
+import usePageTitle from "./hooks/usePageTitle";
 
 import treeGraph from "./assets/graph.png";
 
@@ -8,6 +9,7 @@ import RegisterCard from "./components/RegisterCard";
 
 
 function Login() {
+  usePageTitle("Login or Sign Up");
 
   // Controls whether the user sees Login or Registration.
   const [authView, setAuthView] = useState("login");

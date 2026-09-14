@@ -5,6 +5,7 @@ import {
   useRef,
   useState, 
 } from "react";
+import usePageTitle from "../hooks/usePageTitle";
 import GraphPanel from "./GraphPanel";
 import SummaryPanel from "./SummaryPanel";
 import {
@@ -225,6 +226,16 @@ function inferGraphLinkPaletteSlot(
 // << frontend dev >> //
   // Stores the current note title //
   const [title, setTitle] = useState(note.title);
+
+  /*
+    Keep the browser tab title synced
+    with the currently open note.
+  */
+  usePageTitle(
+    title?.trim()
+      ? title
+      : "Untitled Note"
+  );
 
   // Stores the current raw note text //
   // This rawNotes value will be shared with HANS AI //
@@ -1182,6 +1193,9 @@ function inferGraphLinkPaletteSlot(
       If this node has never been linked from Raw Notes
       before, give it the next available link colour.
     */
+
+    const nodeId = String(node.id);
+
     const {
       color: linkColor,
       paletteSlot,
