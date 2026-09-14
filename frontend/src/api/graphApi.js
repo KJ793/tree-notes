@@ -34,7 +34,7 @@
        PUT /api/notes/:noteId/graph
    ========================================================= */
 
-const USE_MOCK_GRAPH_API = true;
+const USE_MOCK_GRAPH_API = false;
 
 /*
   Optional backend URL.
@@ -135,6 +135,28 @@ function prepareGraphForSearch(graphData) {
   return { nodes, edges };
 }
 
+function errorMessage(data, fallback) {
+  if (typeof data?.detail === "string") {
+    return data.detail;
+  }
+
+  if (Array.isArray(data?.detail)) {
+    return data.detail
+      .map((error) =>
+        String(error.msg)
+          .replace(/^Value error, /, "")
+      )
+      .join(" ");
+  }
+
+  return (
+    data?.message ??
+    data?.error ??
+    fallback
+  );
+}
+
+
 /* =========================================================
    BACKEND RESPONSE HELPER
    ========================================================= */
@@ -142,11 +164,15 @@ function prepareGraphForSearch(graphData) {
 async function handleApiResponse(response, fallbackMessage) {
 
   if (!response.ok) {
+    if (response.status === 401) {
+      window.location.replace("/");
+    }
+
     let message = fallbackMessage;
 
     try {
       const data = await response.json();
-      message = data.message ?? data.error ?? message;
+      message = errorMessage(data, message);
     }
     catch
     {
@@ -194,14 +220,34 @@ async function handleApiResponse(response, fallbackMessage) {
 function normaliseSearchResult(data) {
   const match = data?.match ?? null;
 
-  if (!match) { return { match: null }; }
+  if (!match) {
+    return { match: null };
+  }
 
-  return { match: {
-        ...match,
-        node_id: String(match.node_id),
-        label: match.label ?? "",
-        score: match.score ?? null
-  }};
+  const nodeId =
+    String(match.node_id);
+
+  const score =
+    match.score ?? null;
+
+  if (
+    nodeId === "-1" ||
+    (
+      typeof score === "number" &&
+      score < 0
+    )
+  ) {
+    return { match: null };
+  }
+
+  return {
+    match: {
+      ...match,
+      node_id: nodeId,
+      label: match.label ?? "",
+      score,
+    },
+  };
 }
 
 /* =========================================================
@@ -392,10 +438,8 @@ export async function semanticSearchGraph(noteId, query, graphData) {
 
 export async function getGraph(noteId) {
   if (USE_MOCK_GRAPH_API) {
-    // Current mock graph data still lives inside GraphPanel.jsx.
-    // Returning null here makes it explicit that graph persistence has not been connected yet.
     console.log("Mock graph load skipped:", { noteId });
-    return null;
+    return { nodes: [], edges: [] };
   }
 
 

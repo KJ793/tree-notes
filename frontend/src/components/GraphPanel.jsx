@@ -50,12 +50,23 @@ const NODE_SHAPES = [
 ];
 
 const GraphPanel = forwardRef(function GraphPanel(
-  { rawNotes, selectedText, addNodeTrigger, noteId },
+  {
+    rawNotes,
+    selectedText,
+    addNodeTrigger,
+    noteId,
+    initialGraph,
+  },
   ref
 ) {
   // << frontend dev >> //
-  // Stores graph JSON returned from AI/backend //
-  const [graphData, setGraphData] = useState(null);
+  // Stores graph JSON returned from AI/backend/database.
+  const [graphData, setGraphData] =
+    useState(
+      initialGraph?.nodes?.length
+        ? initialGraph
+        : null
+    );
 
   // Handles graph loading state //
   const [loading, setLoading] = useState(false);
@@ -116,6 +127,18 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   const semanticSearchRef = useRef(null);
 
+  // Load the graph already returned with the selected note.
+  // An unsaved graph is represented by an empty nodes/edges object.
+  useEffect(() => {
+    if (
+      initialGraph?.nodes?.length
+    ) {
+      setGraphData(initialGraph);
+    } else {
+      setGraphData(null);
+    }
+  }, [noteId, initialGraph]);
+
   async function generateGraph() {
     if (!rawNotes || rawNotes.trim() === "") {
       setError("Please write some notes before generating a graph.");
@@ -132,6 +155,7 @@ const GraphPanel = forwardRef(function GraphPanel(
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({
           rawNotes: rawNotes,
         }),
@@ -158,9 +182,24 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   // << CYTOSCAPE FRONTEND >> //
   useEffect(() => {
-    if (!graphData || !graphContainerRef.current) {
+    if (
+      !graphData?.nodes?.length ||
+      !graphContainerRef.current
+    ) {
       return;
     }
+
+    const hasPositions =
+      graphData.nodes.some(
+        (node) =>
+          node.position &&
+          Number.isFinite(
+            node.position.x
+          ) &&
+          Number.isFinite(
+            node.position.y
+          )
+      );
 
     const cy = cytoscape({
       container: graphContainerRef.current,
@@ -170,12 +209,18 @@ const GraphPanel = forwardRef(function GraphPanel(
         ...graphData.edges,
       ],
 
-      layout: {
-        name: "cose",
-        animate: true,
-        fit: true,
-        padding: 50,
-      },
+      layout: hasPositions
+        ? {
+            name: "preset",
+            fit: true,
+            padding: 50,
+          }
+        : {
+            name: "cose",
+            animate: true,
+            fit: true,
+            padding: 50,
+          },
 
       style: [
         {
@@ -471,7 +516,11 @@ function addSelectedTextNode() {
     return;
   }
 
-  const newNodeId = `manual-${Date.now()}`;
+  const newNodeId =
+    `manual-${
+      crypto.randomUUID?.() ??
+      `${Date.now()}-${Math.random()}`
+    }`;
 
   const extent = cy.extent();
 
@@ -526,42 +575,6 @@ function getEditedGraphData() {
     edges,
   };
 }
-// saving graph backend point
-async function saveGraph() {
-  if (!noteId) {
-    console.log("No note ID available");
-    return;
-  }
-
-  const editedGraph = getEditedGraphData();
-
-  if (!editedGraph) {
-    console.log("No graph available to save");
-    return;
-  }
-
-  try {
-    const response = await fetch(
-      `/api/notes/${noteId}/graph`,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(editedGraph),
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error("Failed to save graph");
-    }
-
-    console.log("Graph saved successfully");
-  } catch (error) {
-    console.error("Graph save error:", error);
-  }
-}
-
 function startLinkMode() {
   /*
     Clicking the active Link button
@@ -923,7 +936,8 @@ async function handleSemanticSearch() {
       await semanticSearchGraph(
         noteId,
         query,
-        graphData
+        getEditedGraphData() ??
+          graphData
       );
 
     if (!result?.match) {

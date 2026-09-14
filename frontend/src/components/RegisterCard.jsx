@@ -11,7 +11,6 @@ function RegisterCard({ onLogin }) {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   // Use the useNavigate to navigate to the dashboard after successful login.
   const navigate = useNavigate();
@@ -32,6 +31,14 @@ function RegisterCard({ onLogin }) {
       return "Your password must be at least 8 characters long.";
     }
 
+    if (
+      new TextEncoder()
+        .encode(password)
+        .length > 72
+    ) {
+      return "Your password must be at most 72 bytes long.";
+    }
+
 
     if (password !== confirmPassword) {
       return "The password and confirmation do not match.";
@@ -46,7 +53,6 @@ function RegisterCard({ onLogin }) {
     event.preventDefault();
 
     setError("");
-    setSuccess("");
 
 
     const validationError =
@@ -69,74 +75,75 @@ function RegisterCard({ onLogin }) {
 
 
     try {
+      const response =
+        await fetch(
+          "/api/register",
+          {
+            method: "POST",
 
-      /* =========================================
-         BACKEND
-         Function for registering a new user
-         ========================================= */
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
 
-      /*
-        Frontend provides:
+            credentials:
+              "include",
 
-        {
-          fullName: string,   // optional
-          email: string,      // required
-          password: string    // required
+            body:
+              JSON.stringify(
+                registrationData
+              ),
+          }
+        );
+
+      let data = {};
+
+      try {
+        data =
+          await response.json();
+      } catch {
+        // Keep fallback message below when the backend
+        // returns no JSON body.
+      }
+
+      if (!response.ok) {
+        let message =
+          "Unable to create account.";
+
+        if (
+          typeof data?.detail ===
+          "string"
+        ) {
+          message = data.detail;
+        } else if (
+          Array.isArray(
+            data?.detail
+          )
+        ) {
+          message =
+            data.detail
+              .map((item) =>
+                String(item.msg)
+                  .replace(
+                    /^Value error, /,
+                    ""
+                  )
+              )
+              .join(" ");
         }
 
+        throw new Error(message);
+      }
 
-        IMPORTANT:
-
-        confirmPassword is NOT sent to the backend.
-
-        Its only purpose is frontend validation.
-      */
-
-
-      /*
-        BACKEND TODO:
-
-        Uncomment/adjust once registration endpoint
-        has been implemented.
-
-
-        const response = await fetch("/api/register", {
-          method: "POST",
-
-          headers: {
-            "Content-Type": "application/json",
-          },
-
-          body: JSON.stringify(registrationData),
-        });
-
-
-        const data = await response.json();
-
-
-        if (!response.ok) {
-          throw new Error(
-            data.message ||
-            "Unable to create account."
-          );
-        }
-      */
-
-      navigate("/dashboard", { replace: true });
-      
       console.log(
-        "Registration data:",
-        {
-          fullName: registrationData.fullName,
-          email: registrationData.email,
-        }
+        "Registered user:",
+        data
       );
 
-
-      setSuccess(
-        "Registration details are valid. Backend registration is ready to be connected."
+      navigate(
+        "/dashboard",
+        { replace: true }
       );
-
 
     } catch (error) {
       console.error(
@@ -250,13 +257,6 @@ function RegisterCard({ onLogin }) {
         {error && (
           <p className="login-error">
             {error}
-          </p>
-        )}
-
-
-        {success && (
-          <p className="registration-success">
-            {success}
           </p>
         )}
 

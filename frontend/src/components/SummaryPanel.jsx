@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 
 
-function SummaryPanel({ rawNotes }) {
+function SummaryPanel({ rawNotes, summary, onSummaryChange }) {
 
   // =========================================================
   // FRONTEND VIEW STATE
@@ -35,18 +35,19 @@ function SummaryPanel({ rawNotes }) {
   // USER SUMMARY STATE
   // =========================================================
 
-  // Stores user's own summary
-  const [mySummary, setMySummary] = useState("");
+  // The saved summary state lives in NoteWorkspace so the Navbar
+  // Save action can persist it with the rest of the note.
+  const mySummary = summary ?? "";
+
+  function setMySummary(value) {
+    onSummaryChange?.(value);
+  }
 
   // Handles loading while AI reviews the user's summary
   const [reviewLoading, setReviewLoading] = useState(false);
 
   // Handles errors while reviewing user's summary
   const [reviewError, setReviewError] = useState("");
-
-  // Flag to use mock summary review data for testing
-  const USE_MOCK_SUMMARY_REVIEW = true;
-
 
   // =========================================================
   // AI USER-SUMMARY REVIEW STATE
@@ -100,142 +101,6 @@ function SummaryPanel({ rawNotes }) {
   // GENERATE AI SUMMARY
   // =========================================================
 
-  async function generateSummary() { // uses deprecated logic
-
-    // << FRONTEND DEV >> //
-    // rawNotes is provided from NoteWorkspace
-    // rawNotes is sent to backend for AI summary generation
-
-    if (!rawNotes || rawNotes.trim() === "") {
-      setSummaryError(
-        "Please write some notes before generating a summary."
-      );
-
-      return;
-    }
-
-
-    setSummaryLoading(true);
-    setSummaryError("");
-
-
-    try {
-
-      // =====================================================
-      // << BACKEND CONNECTION >>
-      // =====================================================
-
-      // Frontend provides:
-      //
-      // rawNotes: string
-
-      const response = await fetch("/api/summary", {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-        },
-
-        body: JSON.stringify({
-          rawNotes: rawNotes,
-        }),
-      });
-
-
-      // << DAMON / KYLE BACKEND STUFF >> //
-
-      if (!response.ok) {
-        throw new Error(
-          "Summary generation failed. Please try again."
-        );
-      }
-
-
-      // =====================================================
-      // << HANS AI RESPONSE >>
-      // =====================================================
-
-      // Hans receives rawNotes from backend
-      //
-      // Hans currently returns:
-      //
-      // {
-      //   aiSummary: "AI generated summary text"
-      // }
-
-      const aiResponse = await fetch(
-        "http://localhost:8000/ai/summarise",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type": "application/json",
-          },
-
-          body: JSON.stringify({
-            rawNotes: rawNotes,
-
-            /*
-              AI Summary generation should primarily
-              depend on Raw Notes.
-
-              Keep userSummary empty here so the user's
-              answer does not influence the generated
-              reference summary.
-            */
-            userSummary: "",
-          }),
-        }
-      );
-
-
-      if (!aiResponse.ok) {
-        throw new Error(
-          "AI summary generation failed."
-        );
-      }
-
-
-      const data = await aiResponse.json();
-
-
-      // << FRONTEND DEV >> //
-      // Hans advises using data.aiSummary rather than
-      // data.summary to distinguish summary types
-
-      const generatedSummary =
-        data.aiSummary || "";
-
-      setAiSummary(generatedSummary);
-      setMySummary(generatedSummary);
-
-      // A newly generated summary has not been reviewed yet
-      setSummaryScore(null);
-      setSummaryFeedback("");
-      setImprovedSummary("");
-      setReviewError("");
-
-
-    } catch (error) {
-
-      console.error(
-        "Summary generation error:",
-        error
-      );
-
-
-      setSummaryError(
-        "Unable to generate summary. Please try again."
-      );
-
-
-    } finally {
-
-      setSummaryLoading(false);
-
-    }
-  }
-
   async function generateOrReviewSummary() {
     if (!rawNotes || rawNotes.trim() == "") {
       setSummaryError("Please write some notes before generating a summary.");
@@ -246,9 +111,10 @@ function SummaryPanel({ rawNotes }) {
     setSummaryError("");
 
     try {
-      const response = await fetch("api/summary", {
+      const response = await fetch("/api/summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           rawNotes,
 //           graphJson: graphData ? JSON.stringify(graphData) : "",
@@ -276,152 +142,6 @@ function SummaryPanel({ rawNotes }) {
       setSummaryError("Unable to generate summary. Please try again.");
     } finally {
       setSummaryLoading(false);
-    }
-  }
-
-  // =========================================================
-  // REVIEW USER SUMMARY
-  // =========================================================
-
-  async function reviewMySummary() {
-
-    if (!rawNotes || rawNotes.trim() === "") {
-        setReviewError(
-        "Please write some notes before reviewing your summary."
-        );
-
-        return;
-    }
-
-
-    if (!mySummary || mySummary.trim() === "") {
-        setReviewError(
-        "Write your own summary before asking AI to review it."
-        );
-
-        return;
-    }
-
-
-    setReviewLoading(true);
-    setReviewError("");
-
-    setSummaryScore(null);
-    setSummaryFeedback("");
-    setImprovedSummary("");
-
-
-    try {
-
-        // =====================================================
-        // TEMPORARY FRONTEND MOCK
-        // =====================================================
-
-        if (USE_MOCK_SUMMARY_REVIEW) {
-
-        /*
-            Small delay so the "Reviewing..." state
-            is visible during the demonstration.
-        */
-
-        await new Promise((resolve) =>
-            setTimeout(resolve, 900)
-        );
-
-
-        setSummaryScore(82);
-
-
-        setSummaryFeedback(
-            "Your summary is clear and covers the main ideas well. " +
-            "You could improve it by including a little more detail " +
-            "about the key concepts discussed in the original notes."
-        );
-
-
-        setImprovedSummary(
-            "TreeNotes is an open-source note-taking application " +
-            "designed to help users organise and connect their ideas. " +
-            "It combines structured notes with graph-based knowledge " +
-            "mapping and AI-assisted features to make information " +
-            "easier to understand and review."
-        );
-
-
-        return;
-        }
-
-
-        // =====================================================
-        // HANS AI USER SUMMARY REVIEW
-        // =====================================================
-
-        const aiResponse = await fetch(
-        "http://localhost:8000/ai/summarise",
-        {
-            method: "POST",
-
-            headers: {
-            "Content-Type": "application/json",
-            },
-
-            body: JSON.stringify({
-            rawNotes: rawNotes,
-            userSummary: mySummary,
-            }),
-        }
-        );
-
-
-        if (!aiResponse.ok) {
-        throw new Error(
-            "User summary review failed."
-        );
-        }
-
-
-        const data =
-        await aiResponse.json();
-
-
-        setSummaryScore(
-        data.userScore ??
-        data.score ??
-        null
-        );
-
-
-        setSummaryFeedback(
-        data.userReview ??
-        data.feedback ??
-        ""
-        );
-
-
-        setImprovedSummary(
-        data.improvedSummary ??
-        data.suggestedSummary ??
-        ""
-        );
-
-
-    } catch (error) {
-
-        console.error(
-        "User summary review error:",
-        error
-        );
-
-
-        setReviewError(
-        "Unable to review your summary. Please try again."
-        );
-
-
-    } finally {
-
-        setReviewLoading(false);
-
     }
   }
 
