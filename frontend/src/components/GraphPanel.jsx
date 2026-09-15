@@ -206,12 +206,35 @@ function getGraphThemeTokens() {
 }
 
 const GraphPanel = forwardRef(function GraphPanel(
-  { rawNotes, selectedText, addNodeTrigger, noteId },
+  {
+    rawNotes,
+    selectedText,
+    addNodeTrigger,
+    noteId,
+    initialGraph,
+  },
   ref
 ) {
   // << frontend dev >> //
-  // Stores graph JSON returned from AI/backend //
-  const [graphData, setGraphData] = useState(null);
+  // Stores graph JSON returned from AI/backend/database //
+
+  /*
+    Always initialise GraphPanel with a valid graph object.
+
+    If this note already has a graph_json value from the
+    database, use it immediately. Otherwise keep a real empty
+    graph so users can manually create nodes before pressing
+    Generate Graph.
+  */
+  const [graphData, setGraphData] =
+    useState(() => ({
+      nodes: Array.isArray(initialGraph?.nodes)
+        ? initialGraph.nodes
+        : [],
+      edges: Array.isArray(initialGraph?.edges)
+        ? initialGraph.edges
+        : [],
+    }));
 
   // Handles graph loading state //
   const [loading, setLoading] = useState(false);
@@ -274,6 +297,36 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   const semanticSearchRef = useRef(null);
 
+  /*
+    Keep GraphPanel synced with the graph_json belonging to the
+    currently selected note.
+
+    Important: an unsaved/empty graph remains { nodes: [], edges: [] }
+    rather than null. That keeps Cytoscape alive so manual graph
+    creation still works before Generate Graph is used.
+  */
+  useEffect(() => {
+    setGraphData({
+      nodes: Array.isArray(initialGraph?.nodes)
+        ? initialGraph.nodes
+        : [],
+      edges: Array.isArray(initialGraph?.edges)
+        ? initialGraph.edges
+        : [],
+    });
+
+    // Clear UI state that belonged to the previously open note.
+    setSelectedNode(null);
+    setSelectedEdge(null);
+    setShapeMenuOpen(false);
+    setGraphFeedback(null);
+
+    linkModeRef.current = false;
+    firstNodeToLinkRef.current = null;
+    setLinkMode(false);
+    setFirstNodeToLink(null);
+  }, [noteId, initialGraph]);
+
   async function generateGraph() {
     if (!rawNotes || rawNotes.trim() === "") {
       setError("Please write some notes before generating a graph.");
@@ -290,72 +343,66 @@ const GraphPanel = forwardRef(function GraphPanel(
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({
           rawNotes: rawNotes,
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("Graph generation failed. Please try again.");
+      let data = {};
+
+      try {
+        data = await response.json();
+      } catch {
+        // Keep the fallback error message below when there is no JSON body.
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        let message =
+          "Graph generation failed. Please try again.";
 
-      // Store returned graph JSON //
-      setGraphData(data);
+        if (typeof data?.detail === "string") {
+          message = data.detail;
+        } else if (Array.isArray(data?.detail)) {
+          message = data.detail
+            .map((item) =>
+              String(item.msg)
+                .replace(/^Value error, /, "")
+            )
+            .join(" ");
+        }
+
+        throw new Error(message);
+      }
+
+      /*
+        The generated graph becomes the current live graph.
+        It will be persisted with the rest of the note when
+        NoteWorkspace.saveEverything() performs its single PATCH.
+      */
+      setGraphData({
+        nodes: Array.isArray(data?.nodes)
+          ? data.nodes
+          : [],
+        edges: Array.isArray(data?.edges)
+          ? data.edges
+          : [],
+      });
 
     } catch (error) {
-      console.error("Graph generation error:", error);
+      console.error(
+        "Graph generation error:",
+        error
+      );
 
-      setError("Unable to generate graph. Please try again.");
+      setError(
+        error.message ||
+        "Unable to generate graph. Please try again."
+      );
 
     } finally {
       setLoading(false);
     }
-
-    // TEMPORARY TEST GRAPH DATA //
-    // Keep this while Docker / AI is not running //
-    const testGraphData = {
-      nodes: [
-        {
-          data: {
-            id: "1",
-            label: "React",
-          },
-        },
-        {
-          data: {
-            id: "2",
-            label: "JavaScript",
-          },
-        },
-        {
-          data: {
-            id: "3",
-            label: "Components",
-          },
-        },
-      ],
-
-      edges: [
-        {
-          data: {
-            id: "e1",
-            source: "1",
-            target: "2",
-          },
-        },
-        {
-          data: {
-            id: "e2",
-            source: "1",
-            target: "3",
-          },
-        },
-      ],
-    };
-
-    setGraphData(testGraphData);
   }
 
   function applyActiveGraphTheme(cy) {
@@ -577,26 +624,66 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   // << CYTOSCAPE FRONTEND >> //
   useEffect(() => {
-    if (!graphData || !graphContainerRef.current) {
+
+    if (!graphContainerRef.current) {
       return;
     }
 
-    const graphTheme = getGraphThemeTokens();
+    /*
+      Treat missing graph data as an empty graph.
+
+      Cytoscape should exist even before the AI
+      has generated anything.
+    */
+    const nodes =
+      Array.isArray(graphData?.nodes)
+        ? graphData.nodes
+        : [];
+
+    const edges =
+      Array.isArray(graphData?.edges)
+        ? graphData.edges
+        : [];
+
+    /*
+      A graph reopened from the database contains the positions
+      captured by getEditedGraphData(). Use Cytoscape's preset
+      layout so those coordinates survive the round trip.
+
+      Fresh AI graphs normally have no positions, so they still
+      receive the normal cose layout.
+    */
+    const hasSavedPositions =
+      nodes.length > 0 &&
+      nodes.every(
+        (node) =>
+          Number.isFinite(node?.position?.x) &&
+          Number.isFinite(node?.position?.y)
+      );
+
+    const graphTheme =
+      getGraphThemeTokens();
 
     const cy = cytoscape({
       container: graphContainerRef.current,
 
       elements: [
-        ...graphData.nodes,
-        ...graphData.edges,
+        ...nodes,
+        ...edges,
       ],
 
-      layout: {
-        name: "cose",
-        animate: true,
-        fit: true,
-        padding: 50,
-      },
+      layout: hasSavedPositions
+        ? {
+            name: "preset",
+            fit: true,
+            padding: 50,
+          }
+        : {
+            name: "cose",
+            animate: true,
+            fit: true,
+            padding: 50,
+          },
 
       style: [
         /* =====================================================
@@ -708,7 +795,7 @@ const GraphPanel = forwardRef(function GraphPanel(
             width: 2,
 
             "line-color": graphTheme.edge,
-            "target-arrow-color": graphTheme.nodeBorder,
+            "target-arrow-color": graphTheme.edgeArrow,
             "target-arrow-shape": "triangle",
 
             "curve-style": "bezier",
@@ -778,7 +865,7 @@ const GraphPanel = forwardRef(function GraphPanel(
           }
 
 
-          applyActiveGraphTheme(cy);
+          applyGraphTheme(cy);
 
 
           /*
@@ -1104,7 +1191,10 @@ function addSelectedTextNode() {
     return;
   }
 
-  const newNodeId = `manual-${Date.now()}`;
+  const newNodeId =
+    typeof crypto.randomUUID === "function"
+      ? `manual-${crypto.randomUUID()}`
+      : `manual-${Date.now()}-${Math.random()}`;
 
   const extent = cy.extent();
 
@@ -1161,41 +1251,11 @@ function getEditedGraphData() {
     edges,
   };
 }
-// saving graph backend point
-async function saveGraph() {
-  if (!noteId) {
-    console.log("No note ID available");
-    return;
-  }
-
-  const editedGraph = getEditedGraphData();
-
-  if (!editedGraph) {
-    console.log("No graph available to save");
-    return;
-  }
-
-  try {
-    const response = await fetch(
-      `/api/notes/${noteId}/graph`,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(editedGraph),
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error("Failed to save graph");
-    }
-
-    console.log("Graph saved successfully");
-  } catch (error) {
-    console.error("Graph save error:", error);
-  }
-}
+/*
+  Graph persistence is handled by NoteWorkspace.saveEverything().
+  That keeps title, Raw Notes, rich HTML, summary and graph_json
+  inside one atomic PATCH request.
+*/
 
 function startLinkMode() {
   /*
@@ -1621,7 +1681,8 @@ async function handleSemanticSearch() {
       await semanticSearchGraph(
         noteId,
         query,
-        graphData
+        getEditedGraphData() ??
+          graphData
       );
 
     if (!result?.match) {

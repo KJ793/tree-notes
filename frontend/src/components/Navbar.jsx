@@ -12,6 +12,9 @@ import {
 import treeNotesLogo from "../assets/logo.png";
 import { useTheme } from "../context/ThemeContext";
 
+import {
+  USE_MOCK_API,
+} from "../config/apiConfig";
 
 const initialNavbarUser = {
   displayName: "devuser",
@@ -71,95 +74,11 @@ async function getLoggedInUserProfileImage() {
   return null;
 }
 
-// Backend
-// Function for saving the currently open note
-async function saveCurrentNote() {
-  /*
-    BACKEND TODO:
-
-    This function should send the currently open note
-    to the backend so it can be saved to the database.
-
-    The backend will eventually need information such as:
-
-    {
-      noteId,
-      title,
-      rawNotes,
-      userSummary
-    }
-
-    Example:
-
-    const response = await fetch("/api/notes/save", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify({
-        noteId,
-        title,
-        rawNotes,
-        userSummary,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Unable to save note.");
-    }
-
-    return await response.json();
-  */
-
-  // Frontend placeholder
-  return {
-    backendConnected: false,
-    success: true,
-  };
-}
-
-// Backend
-// Function for exporting the currently open note
-async function exportCurrentNote() {
-  /*
-    BACKEND TODO:
-
-    Depending on how export is implemented, this could:
-
-      1. Ask the backend to generate a PDF / DOCX / text file
-      2. Return a downloadable file
-      3. Export the note locally from the frontend
-
-    Example:
-
-    const response = await fetch("/api/notes/export", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify({
-        noteId,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Unable to export note.");
-    }
-
-    return response;
-  */
-
-  // Frontend placeholder
-  return {
-    backendConnected: false,
-    success: true,
-  };
-}
-
 function Navbar({onSave}) {
-  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] =
+    useState("idle");
+  const [saveError, setSaveError] =
+    useState("");
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
@@ -175,6 +94,33 @@ function Navbar({onSave}) {
     let cancelled = false;
 
     async function loadNavbarUser() {
+
+      /*
+        =========================================================
+        FRONTEND-ONLY MOCK MODE
+        =========================================================
+      */
+
+      if (USE_MOCK_API) {
+
+        if (!cancelled) {
+          setNavbarUser({
+            displayName: "devuser",
+            initials: "DEV",
+            profileImage: null,
+          });
+        }
+
+        return;
+      }
+
+
+      /*
+        =========================================================
+        REAL BACKEND MODE
+        =========================================================
+      */
+
       try {
         const userDetails =
           await getLoggedInUserNavbarDetails();
@@ -182,6 +128,7 @@ function Navbar({onSave}) {
         if (!cancelled && userDetails) {
           setNavbarUser(userDetails);
         }
+
       } catch (error) {
         console.error(
           "Unable to load navbar user details:",
@@ -190,11 +137,14 @@ function Navbar({onSave}) {
       }
     }
 
+
     loadNavbarUser();
+
 
     return () => {
       cancelled = true;
     };
+
   }, []);
 
   function toggleProfileMenu() {
@@ -206,48 +156,73 @@ function Navbar({onSave}) {
   }
 
   async function handleLogout() {
-    try {
-      const result = await logoutLoggedInUser();
 
-      /*
-        Until the backend is connected, the mock function
-        still allows us to demonstrate logout navigation.
-      */
+    /*
+      Frontend-only mode has no real session.
+    */
+    if (USE_MOCK_API) {
+      setProfileMenuOpen(false);
+
+      navigate("/", {
+        replace: true,
+      });
+
+      return;
+    }
+
+
+    /*
+      Real backend logout.
+    */
+    try {
+      const result =
+        await logoutLoggedInUser();
+
       if (result?.success) {
         setProfileMenuOpen(false);
 
-        navigate("/");
+        navigate("/", {
+          replace: true,
+        });
       }
+
     } catch (error) {
-      console.error("Unable to log out:", error);
+      console.error(
+        "Unable to log out:",
+        error
+      );
     }
   }
 
   async function handleSave() {
-    try {
-      setSaving(true);
-      if (onSave) {
-      await onSave();
+    if (!onSave) {
+      return;
     }
+
+    setSaveStatus("saving");
+    setSaveError("");
+
+    try {
+      await onSave();
+
+      setSaveStatus("saved");
 
       window.setTimeout(() => {
-        setSaving(false);
+        setSaveStatus("idle");
       }, 1200);
-    } catch (error) {
-      console.error("Unable to save note:", error);
-      setSaving(false);
-    }
-  }
 
-  async function handleExport() {
-    try {
-      const result = await exportCurrentNote();
-
-      if (result?.success) {
-        console.log("Export request successful.");
-      }
     } catch (error) {
-      console.error("Unable to export note:", error);
+      console.error(
+        "Unable to save note:",
+        error
+      );
+
+      setSaveError(
+        error.message ||
+        "Unable to save note."
+      );
+
+      setSaveStatus("error");
     }
   }
 
@@ -302,6 +277,10 @@ function Navbar({onSave}) {
           className="navbar-action-button"
           type="button"
           onClick={handleSave}
+          title={
+            saveError ||
+            "Save current note"
+          }
         >
           <Save
             size={24}
@@ -309,14 +288,21 @@ function Navbar({onSave}) {
           />
 
           <span>
-            {saving ? "Saved" : "Save"}
+            {saveStatus === "saving"
+              ? "Saving..."
+              : saveStatus === "saved"
+                ? "Saved"
+                : saveStatus === "error"
+                  ? "Save failed"
+                  : "Save"}
           </span>
         </button>
 
         <button
           className="navbar-action-button"
           type="button"
-          onClick={handleExport}
+          disabled
+          title="Export is not connected yet"
         >
           <FileOutput
             size={24}

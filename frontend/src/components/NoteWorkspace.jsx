@@ -6,6 +6,7 @@ import {
   useState, 
 } from "react";
 import usePageTitle from "../hooks/usePageTitle";
+import { updateNote } from "../api/notesApi";
 import GraphPanel from "./GraphPanel";
 import SummaryPanel from "./SummaryPanel";
 import {
@@ -15,7 +16,6 @@ import {
   List,
   ListOrdered,
   Link,
-  Link2,
   Info,
   CirclePlus,
   Palette,
@@ -36,7 +36,7 @@ import {
 import "./NoteWorkspace.css";
 
 const NoteWorkspace = forwardRef(function NoteWorkspace(
-  { note },
+  { note, onNoteSaved },
   ref
 ) {
 // text editor refrence for saving
@@ -239,11 +239,27 @@ function inferGraphLinkPaletteSlot(
 
   // Stores the current raw note text //
   // This rawNotes value will be shared with HANS AI //
-  const [rawNotes, setRawNotes] = useState(note.content);
+  const [rawNotes, setRawNotes] =
+    useState(
+      note.notes_section ??
+      note.content ??
+      ""
+    );
 
   // Stores the current raw note text in HTML format //
   const [rawNotesHtml, setRawNotesHtml] =
-  useState("");
+    useState(
+      note.notes_section_html ??
+      ""
+    );
+
+  // Stored user/AI summary for this note.
+  const [summary, setSummary] =
+  useState(
+    note.summary_section ??
+    note.summary ??
+    ""
+  );
 
   // Selected text for manually adding to graph //
   const [selectedText, setSelectedText] = useState("");
@@ -2256,35 +2272,54 @@ function inferGraphLinkPaletteSlot(
 
   }, []);
 
-  useImperativeHandle(ref, () => ({
+ useImperativeHandle(ref, () => ({
+
   async saveEverything() {
+
     if (!note?.id) {
-      console.log("No note ID available");
-      return;
+      throw new Error(
+        "No note is selected."
+      );
     }
 
-    const graphData = graphPanelRef.current?.getGraphData();
 
-    const response = await fetch(`/api/notes/${note.id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify({
-        title: title,
-        notes_section: rawNotes,
-      }),
-    });
+    const graph =
+      graphPanelRef.current
+        ?.getGraphData();
 
-    if (!response.ok) {
-      throw new Error("Failed to save note");
-    }
 
-    const savedNote = await response.json();
+    const saved =
+      await updateNote(
+        note.id,
+        {
+          title,
 
-    console.log("Note saved:", savedNote);
-    console.log("Graph ready to save:", graphData);
+          notes_section:
+            rawNotes,
+
+          notes_section_html:
+            rawNotesHtml,
+
+          summary_section:
+            summary,
+
+          /*
+            Only include graph_json if
+            GraphPanel returned graph data.
+          */
+          ...(graph
+            ? {
+                graph_json:
+                  graph,
+              }
+            : {}),
+        }
+      );
+
+
+    onNoteSaved?.(saved);
+
+    return saved;
   },
 
 }));
@@ -3618,9 +3653,8 @@ function inferGraphLinkPaletteSlot(
         selectedText={selectedText}
         addNodeTrigger={addNodeTrigger}
         noteId={note.id}
+        initialGraph={note.graph_json}
         ref={graphPanelRef}
-
-
         />
       </div>
 
@@ -3628,7 +3662,11 @@ function inferGraphLinkPaletteSlot(
       {/* Provides current note text to SummaryPanel */}
       {/* SummaryPanel sends rawNotes to backend / AI */}
 
-      <SummaryPanel rawNotes={rawNotes} />
+      <SummaryPanel
+        rawNotes={rawNotes}
+        summary={summary}
+        onSummaryChange={setSummary}
+      />
     </div>
   );
 });

@@ -8,6 +8,10 @@ import {
 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext.jsx";
 
+import {
+  USE_MOCK_API,
+} from "../config/apiConfig";
+
 // Initial state for the profile data. This is used to reset the form when the component is first loaded or when the user logs out.
 const initialProfile = {
   fullName: "",
@@ -15,6 +19,14 @@ const initialProfile = {
   email: "",
   bio: "",
   memberSince: "",
+};
+
+const mockProfile = {
+  fullName: "Development User",
+  displayName: "devuser",
+  email: "dev@treenotes.local",
+  bio: "Building connected notes and turning scattered ideas into useful knowledge.",
+  memberSince: "2026",
 };
 
 // Stores the initial state of the password change form. This is used to reset the form when the modal is closed.
@@ -26,63 +38,163 @@ const emptyPasswordForm = {
 
 // Backend
 // Function for retrieving user details
+// Backend / mock
+// Function for retrieving user details
 async function getLoggedInUserDetails() {
-  const response = await fetch("/api/profile", {
-    method: "GET",
-    credentials: "include",
-  });
+
+  /*
+    Frontend-only development mode.
+  */
+  if (USE_MOCK_API) {
+    return {
+      ...mockProfile,
+    };
+  }
+
+
+  /*
+    Real backend mode.
+  */
+  const response =
+    await fetch(
+      "/api/profile",
+      {
+        method: "GET",
+        credentials: "include",
+      }
+    );
+
 
   if (!response.ok) {
-    throw new Error("Unable to retrieve user profile.");
+    throw new Error(
+      "Unable to retrieve user profile."
+    );
   }
+
 
   return await response.json();
 }
 
-// Backend
+// Backend / mock
 // Function for saving updated user details
-async function saveLoggedInUserDetails(profileData) {
-  const response = await fetch("/api/profile", {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify(profileData),
-  });
+async function saveLoggedInUserDetails(
+  profileData
+) {
 
-  const result = await response.json();
+  /*
+    Frontend-only development mode.
+  */
+  if (USE_MOCK_API) {
+    return {
+      success: true,
+      profile: {
+        ...profileData,
+      },
+    };
+  }
+
+
+  /*
+    Real backend mode.
+  */
+  const response =
+    await fetch(
+      "/api/profile",
+      {
+        method: "PUT",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+
+        credentials:
+          "include",
+
+        body:
+          JSON.stringify(
+            profileData
+          ),
+      }
+    );
+
+
+  const result =
+    await response.json();
+
 
   if (!response.ok) {
     throw new Error(
-      result.message || "Unable to save user profile."
+      result.detail ||
+      result.message ||
+      "Unable to save user profile."
     );
   }
+
 
   return result;
 }
 
-// Backend
+// Backend / mock
 // Function for changing the logged-in user's password
-async function changeLoggedInUserPassword(oldPassword, newPassword) {
-  const response = await fetch("/api/profile/password", {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify({
-      oldPassword,
-      newPassword,
-    }),
-  });
+async function changeLoggedInUserPassword(
+  oldPassword,
+  newPassword
+) {
 
-  const result = await response.json();
+  /*
+    Frontend-only development mode.
+
+    We still let the UI exercise its validation
+    and success states, but no password actually
+    exists to update.
+  */
+  if (USE_MOCK_API) {
+    return {
+      backendConnected: false,
+      success: false,
+      message:
+        "Password change simulated in frontend development mode.",
+    };
+  }
+
+
+  /*
+    Real backend mode.
+  */
+  const response =
+    await fetch(
+      "/api/profile/password",
+      {
+        method: "PUT",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+
+        credentials:
+          "include",
+
+        body:
+          JSON.stringify({
+            oldPassword,
+            newPassword,
+          }),
+      }
+    );
+
+
+  const result =
+    await response.json();
+
 
   return {
     backendConnected: true,
     success: response.ok,
-    message: result.message,
+    message:
+      result.message ||
+      result.detail,
   };
 }
 
