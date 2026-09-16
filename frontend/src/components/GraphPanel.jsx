@@ -953,181 +953,265 @@ const GraphPanel = forwardRef(function GraphPanel(
       }
     );
 
-    // Detect selected node //
-  cy.on("tap", "node", (event) => {
-  const clickedNode =
-    event.target;
+    // =========================================================
+    // NODE SELECTION
+    // =========================================================
 
-  const clickedNodeData = {
-    ...clickedNode.data(),
+    cy.on("tap", "node", (event) => {
 
-    color:
-      clickedNode.data("color") ||
-      getThemeColour(
-        "--graph-node-bg",
-        "#6366F1"
-      ),
+      const clickedNode =
+        event.target;
 
-    shape:
-      clickedNode.data("shape") ||
-      "round-rectangle",
-  };
-  cy.on("tap", "edge", (event) => {
-    const clickedEdge = event.target;
-  
-    setSelectedEdge({
-      ...clickedEdge.data(),
+
+      const clickedNodeData = {
+        ...clickedNode.data(),
+
+        color:
+          clickedNode.data("color") ||
+          getThemeColour(
+            "--graph-node-bg",
+            "#6366F1"
+          ),
+
+        shape:
+          clickedNode.data("shape") ||
+          "round-rectangle",
+      };
+
+
+      /*
+        Keep Cytoscape and React selection
+        state synchronised.
+      */
+
+      cy.elements().unselect();
+
+      clickedNode.select();
+
+
+      setSelectedNode(
+        clickedNodeData
+      );
+
+      setSelectedEdge(null);
+
+      setShapeMenuOpen(false);
+
+
+      // =====================================================
+      // NORMAL NODE SELECTION
+      // =====================================================
+
+      if (!linkModeRef.current) {
+
+        console.log(
+          "Selected node:",
+          clickedNode.data()
+        );
+
+        return;
+      }
+
+
+      // =====================================================
+      // LINK MODE: SELECT FIRST NODE
+      // =====================================================
+
+      if (!firstNodeToLinkRef.current) {
+
+        firstNodeToLinkRef.current =
+          clickedNode.id();
+
+
+        setFirstNodeToLink(
+          clickedNode.id()
+        );
+
+
+        clickedNode.addClass(
+          "link-source"
+        );
+
+
+        console.log(
+          "First node selected for link:",
+          clickedNode.data("label")
+        );
+
+
+        return;
+      }
+
+
+      // =====================================================
+      // PREVENT SELF LINK
+      // =====================================================
+
+      if (
+        firstNodeToLinkRef.current ===
+        clickedNode.id()
+      ) {
+        return;
+      }
+
+
+      // =====================================================
+      // CREATE LINK
+      // =====================================================
+
+      const sourceId =
+        firstNodeToLinkRef.current;
+
+      const targetId =
+        clickedNode.id();
+
+
+      const sourceNode =
+        cy.getElementById(
+          sourceId
+        );
+
+
+      const sourceLabel =
+        sourceNode.data("label") ||
+        sourceId;
+
+      const targetLabel =
+        clickedNode.data("label") ||
+        targetId;
+
+
+      const edgeId =
+        `manual-edge-${Date.now()}`;
+
+
+      cy.add({
+        group: "edges",
+
+        data: {
+          id: edgeId,
+
+          source:
+            sourceId,
+
+          target:
+            targetId,
+        },
+      });
+
+
+      sourceNode.removeClass(
+        "link-source"
+      );
+
+
+      linkModeRef.current =
+        false;
+
+      firstNodeToLinkRef.current =
+        null;
+
+
+      setLinkMode(false);
+
+      setFirstNodeToLink(null);
+
+
+      showGraphFeedback(
+        `Link created: ${sourceLabel} → ${targetLabel}`,
+        "success"
+      );
+
     });
-  
-    setSelectedNode(null);
-  
-    console.log(
-      "Selected edge:",
-      clickedEdge.data()
-    );
-  });
 
 
-  // Always update normal node selection
-  setSelectedNode(
-    clickedNodeData
-  );
+    // =========================================================
+    // EDGE SELECTION
+    // =========================================================
+
+    cy.on("tap", "edge", (event) => {
+
+      const clickedEdge =
+        event.target;
 
 
-  // =====================================================
-  // NORMAL NODE SELECTION
-  // =====================================================
+      const sourceNode =
+        clickedEdge.source();
 
-  if (!linkModeRef.current) {
-    console.log(
-      "Selected node:",
-      clickedNode.data()
-    );
-
-    return;
-  }
+      const targetNode =
+        clickedEdge.target();
 
 
-  // =====================================================
-  // LINK MODE: SELECT FIRST NODE
-  // =====================================================
+      /*
+        Explicitly select only this edge.
+      */
 
-  if (!firstNodeToLinkRef.current) {
+      cy.elements().unselect();
 
-    firstNodeToLinkRef.current =
-      clickedNode.id();
-
-    setFirstNodeToLink(
-      clickedNode.id()
-    );
-
-    /*
-      Make first selected link node
-      visually obvious.
-    */
-    clickedNode.addClass(
-      "link-source"
-    );
-
-    console.log(
-      "First node selected for link:",
-      clickedNode.data("label")
-    );
-
-    return;
-  }
+      clickedEdge.select();
 
 
-  // =====================================================
-  // PREVENT SELF LINK
-  // =====================================================
+      setSelectedEdge({
+        ...clickedEdge.data(),
 
-  if (
-    firstNodeToLinkRef.current ===
-    clickedNode.id()
-  ) {
-    return;
-  }
+        sourceLabel:
+          sourceNode.data("label") ||
+          sourceNode.id(),
 
-
-  // =====================================================
-  // CREATE LINK
-  // =====================================================
-
-  const sourceId =
-    firstNodeToLinkRef.current;
-
-  const targetId =
-    clickedNode.id();
+        targetLabel:
+          targetNode.data("label") ||
+          targetNode.id(),
+      });
 
 
-  const sourceNode =
-    cy.getElementById(
-      sourceId
-    );
+      setSelectedNode(null);
+
+      setShapeMenuOpen(false);
 
 
-  const sourceLabel =
-    sourceNode.data("label") ||
-    sourceId;
+      console.log(
+        "Selected edge:",
+        clickedEdge.data()
+      );
 
-  const targetLabel =
-    clickedNode.data("label") ||
-    targetId;
-
-
-  const edgeId =
-    `manual-edge-${Date.now()}`;
+    });
 
 
-  cy.add({
-    group: "edges",
+    // =========================================================
+    // BACKGROUND CLICK = DESELECT EVERYTHING
+    // =========================================================
 
-    data: {
-      id: edgeId,
+    cy.on("tap", (event) => {
 
-      source:
-        sourceId,
+      /*
+        Cytoscape core itself is the event target
+        when the empty graph background is clicked.
 
-      target:
-        targetId,
-    },
-  });
+        Node and edge taps also bubble through here,
+        so only clear selection when target === cy.
+      */
 
-
-  // Remove first-node highlight
-  sourceNode.removeClass(
-    "link-source"
-  );
+      if (event.target !== cy) {
+        return;
+      }
 
 
-  // Exit link mode
-  linkModeRef.current = false;
-
-  firstNodeToLinkRef.current =
-    null;
-
-  setLinkMode(false);
-
-  setFirstNodeToLink(null);
+      cy.elements().unselect();
 
 
-  // =====================================================
-  // USER FEEDBACK
-  // =====================================================
+      setSelectedNode(null);
 
-  showGraphFeedback(
-    `Link created: ${sourceLabel} → ${targetLabel}`,
-    "success"
-  );
+      setSelectedEdge(null);
 
-  console.log(
-    "Nodes linked:",
-    sourceId,
-    "→",
-    targetId
-  );
-});
+      setShapeMenuOpen(false);
+
+
+      console.log(
+        "Graph selection cleared"
+      );
+
+    });
+
 
 cy.one("layoutstop", () => {
   cy.resize();
@@ -1439,6 +1523,10 @@ function focusNode(nodeId) {
   setSelectedNode({
     ...node.data(),
   });
+
+  setSelectedEdge(null);
+
+  setShapeMenuOpen(false);
 
 
   cy.animate(
@@ -2230,17 +2318,21 @@ useImperativeHandle(ref, () => ({
           />
 
 
-          {/* SELECTED NODE */}
+          {/* CURRENT GRAPH SELECTION */}
 
-          {selectedNode && (
+          {(selectedNode || selectedEdge) && (
             <div className="graph-selected-node-overlay">
 
               <span>
-                Selected node
+                {selectedNode
+                  ? "Selected node"
+                  : "Selected edge"}
               </span>
 
               <strong>
-                {selectedNode.label}
+                {selectedNode
+                  ? selectedNode.label
+                  : `${selectedEdge.sourceLabel} → ${selectedEdge.targetLabel}`}
               </strong>
 
             </div>
