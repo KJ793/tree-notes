@@ -12,6 +12,9 @@ import {
 import treeNotesLogo from "../assets/logo.png";
 import { useTheme } from "../context/ThemeContext";
 
+import {
+  USE_MOCK_API,
+} from "../config/apiConfig";
 
 const initialNavbarUser = {
   displayName: "devuser",
@@ -91,6 +94,33 @@ function Navbar({onSave}) {
     let cancelled = false;
 
     async function loadNavbarUser() {
+
+      /*
+        =========================================================
+        FRONTEND-ONLY MOCK MODE
+        =========================================================
+      */
+
+      if (USE_MOCK_API) {
+
+        if (!cancelled) {
+          setNavbarUser({
+            displayName: "devuser",
+            initials: "DEV",
+            profileImage: null,
+          });
+        }
+
+        return;
+      }
+
+
+      /*
+        =========================================================
+        REAL BACKEND MODE
+        =========================================================
+      */
+
       try {
         const userDetails =
           await getLoggedInUserNavbarDetails();
@@ -98,6 +128,7 @@ function Navbar({onSave}) {
         if (!cancelled && userDetails) {
           setNavbarUser(userDetails);
         }
+
       } catch (error) {
         console.error(
           "Unable to load navbar user details:",
@@ -106,11 +137,14 @@ function Navbar({onSave}) {
       }
     }
 
+
     loadNavbarUser();
+
 
     return () => {
       cancelled = true;
     };
+
   }, []);
 
   function toggleProfileMenu() {
@@ -122,20 +156,41 @@ function Navbar({onSave}) {
   }
 
   async function handleLogout() {
-    try {
-      const result = await logoutLoggedInUser();
 
-      /*
-        Until the backend is connected, the mock function
-        still allows us to demonstrate logout navigation.
-      */
+    /*
+      Frontend-only mode has no real session.
+    */
+    if (USE_MOCK_API) {
+      setProfileMenuOpen(false);
+
+      navigate("/", {
+        replace: true,
+      });
+
+      return;
+    }
+
+
+    /*
+      Real backend logout.
+    */
+    try {
+      const result =
+        await logoutLoggedInUser();
+
       if (result?.success) {
         setProfileMenuOpen(false);
 
-        navigate("/");
+        navigate("/", {
+          replace: true,
+        });
       }
+
     } catch (error) {
-      console.error("Unable to log out:", error);
+      console.error(
+        "Unable to log out:",
+        error
+      );
     }
   }
 

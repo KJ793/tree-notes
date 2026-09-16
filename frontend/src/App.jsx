@@ -14,12 +14,24 @@ import Login from "./Login";
 import Dashboard from "./Dashboard";
 import Profile from "./Profile";
 
+import {
+  USE_MOCK_API,
+} from "./config/apiConfig";
 
 function RequireAuth({ children }) {
   const [authState, setAuthState] =
-    useState("checking");
+    useState(
+      USE_MOCK_API
+        ? "allowed"
+        : "checking"
+    );
 
   useEffect(() => {
+
+    if (USE_MOCK_API) {
+      return;
+    }
+    
     let cancelled = false;
 
     async function checkSession() {

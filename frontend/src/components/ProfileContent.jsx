@@ -1,7 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, } from "react";
 import "./ProfileContent.css";
-import { X } from "lucide-react";
+import usePageTitle from "../hooks/usePageTitle";
+import { 
+  X,
+  ChevronDown,
+  Check,
+} from "lucide-react";
 import { useTheme } from "../context/ThemeContext.jsx";
+
+import {
+  USE_MOCK_API,
+} from "../config/apiConfig";
 
 // Initial state for the profile data. This is used to reset the form when the component is first loaded or when the user logs out.
 const initialProfile = {
@@ -10,6 +19,14 @@ const initialProfile = {
   email: "",
   bio: "",
   memberSince: "",
+};
+
+const mockProfile = {
+  fullName: "Development User",
+  displayName: "devuser",
+  email: "dev@treenotes.local",
+  bio: "Building connected notes and turning scattered ideas into useful knowledge.",
+  memberSince: "2026",
 };
 
 // Stores the initial state of the password change form. This is used to reset the form when the modal is closed.
@@ -21,63 +38,163 @@ const emptyPasswordForm = {
 
 // Backend
 // Function for retrieving user details
+// Backend / mock
+// Function for retrieving user details
 async function getLoggedInUserDetails() {
-  const response = await fetch("/api/profile", {
-    method: "GET",
-    credentials: "include",
-  });
+
+  /*
+    Frontend-only development mode.
+  */
+  if (USE_MOCK_API) {
+    return {
+      ...mockProfile,
+    };
+  }
+
+
+  /*
+    Real backend mode.
+  */
+  const response =
+    await fetch(
+      "/api/profile",
+      {
+        method: "GET",
+        credentials: "include",
+      }
+    );
+
 
   if (!response.ok) {
-    throw new Error("Unable to retrieve user profile.");
+    throw new Error(
+      "Unable to retrieve user profile."
+    );
   }
+
 
   return await response.json();
 }
 
-// Backend
+// Backend / mock
 // Function for saving updated user details
-async function saveLoggedInUserDetails(profileData) {
-  const response = await fetch("/api/profile", {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify(profileData),
-  });
+async function saveLoggedInUserDetails(
+  profileData
+) {
 
-  const result = await response.json();
+  /*
+    Frontend-only development mode.
+  */
+  if (USE_MOCK_API) {
+    return {
+      success: true,
+      profile: {
+        ...profileData,
+      },
+    };
+  }
+
+
+  /*
+    Real backend mode.
+  */
+  const response =
+    await fetch(
+      "/api/profile",
+      {
+        method: "PUT",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+
+        credentials:
+          "include",
+
+        body:
+          JSON.stringify(
+            profileData
+          ),
+      }
+    );
+
+
+  const result =
+    await response.json();
+
 
   if (!response.ok) {
     throw new Error(
-      result.message || "Unable to save user profile."
+      result.detail ||
+      result.message ||
+      "Unable to save user profile."
     );
   }
+
 
   return result;
 }
 
-// Backend
+// Backend / mock
 // Function for changing the logged-in user's password
-async function changeLoggedInUserPassword(oldPassword, newPassword) {
-  const response = await fetch("/api/profile/password", {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify({
-      oldPassword,
-      newPassword,
-    }),
-  });
+async function changeLoggedInUserPassword(
+  oldPassword,
+  newPassword
+) {
 
-  const result = await response.json();
+  /*
+    Frontend-only development mode.
+
+    We still let the UI exercise its validation
+    and success states, but no password actually
+    exists to update.
+  */
+  if (USE_MOCK_API) {
+    return {
+      backendConnected: false,
+      success: false,
+      message:
+        "Password change simulated in frontend development mode.",
+    };
+  }
+
+
+  /*
+    Real backend mode.
+  */
+  const response =
+    await fetch(
+      "/api/profile/password",
+      {
+        method: "PUT",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+
+        credentials:
+          "include",
+
+        body:
+          JSON.stringify({
+            oldPassword,
+            newPassword,
+          }),
+      }
+    );
+
+
+  const result =
+    await response.json();
+
 
   return {
     backendConnected: true,
     success: response.ok,
-    message: result.message,
+    message:
+      result.message ||
+      result.detail,
   };
 }
 
@@ -119,9 +236,16 @@ function getInitials(name) {
 }
 
 function ProfileContent() {
+  usePageTitle("Profile");
+
   const [profile, setProfile] = useState(initialProfile);
   const [saved, setSaved] = useState(false);
-  const {theme, setTheme } = useTheme();
+  const {
+  theme,
+  setTheme,
+  colorVision,
+  setColorVision,
+} = useTheme();
 
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordForm, setPasswordForm] = useState(emptyPasswordForm);
@@ -130,6 +254,14 @@ function ProfileContent() {
   passwordForm.oldPassword.trim().length > 0 &&
   passwordForm.newPassword.trim().length > 0 &&
   passwordForm.confirmPassword.trim().length > 0;
+
+  const [
+    colorVisionOpen,
+    setColorVisionOpen,
+  ] = useState(false);
+
+  const colorVisionDropdownRef =
+    useRef(null);
 
   // Load the currently logged-in user's profile when this page opens.
   useEffect(() => {
@@ -153,6 +285,84 @@ function ProfileContent() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+
+    function handlePointerDown(event) {
+
+      if (
+        colorVisionDropdownRef.current &&
+        !colorVisionDropdownRef.current.contains(
+          event.target
+        )
+      ) {
+        setColorVisionOpen(false);
+      }
+
+    }
+
+
+    function handleKeyDown(event) {
+
+      if (event.key === "Escape") {
+        setColorVisionOpen(false);
+      }
+
+    }
+
+
+    document.addEventListener(
+      "pointerdown",
+      handlePointerDown
+    );
+
+    document.addEventListener(
+      "keydown",
+      handleKeyDown
+    );
+
+
+    return () => {
+
+      document.removeEventListener(
+        "pointerdown",
+        handlePointerDown
+      );
+
+      document.removeEventListener(
+        "keydown",
+        handleKeyDown
+      );
+
+    };
+
+  }, []);
+
+  const colorVisionOptions = [
+    {
+      value: "standard",
+      label: "Standard",
+    },
+    {
+      value: "deuteranopia",
+      label: "Deuteranopia",
+    },
+    {
+      value: "protanopia",
+      label: "Protanopia",
+    },
+    {
+      value: "tritanopia",
+      label: "Tritanopia",
+    },
+  ];
+
+
+  const selectedColorVisionLabel =
+    colorVisionOptions.find(
+      (option) =>
+        option.value === colorVision
+    )?.label ?? "Standard";
 
   // Close the password modal when the user presses Escape.
   useEffect(() => {
@@ -423,6 +633,124 @@ function ProfileContent() {
                 }
               />
             </label>
+
+            <div className="profile-select-row profile-colour-vision-row">
+              <div className="profile-select-copy">
+                <label htmlFor="colour-vision">
+                  Colour accessibility
+                </label>
+
+                <small>
+                  Adjust interface colours for improved visual distinction.
+                </small>
+              </div>
+
+              <div
+                className="profile-colour-vision-dropdown"
+                ref={colorVisionDropdownRef}
+              >
+
+                <button
+                  type="button"
+                  className={`profile-colour-vision-trigger ${
+                    colorVisionOpen
+                      ? "profile-colour-vision-trigger-open"
+                      : ""
+                  }`}
+                  aria-haspopup="listbox"
+                  aria-expanded={colorVisionOpen}
+                  onClick={() =>
+                    setColorVisionOpen(
+                      (current) => !current
+                    )
+                  }
+                >
+
+                  <span>
+                    {selectedColorVisionLabel}
+                  </span>
+
+                  <ChevronDown
+                    size={15}
+                    strokeWidth={1.8}
+                    className={`profile-colour-vision-chevron ${
+                      colorVisionOpen
+                        ? "profile-colour-vision-chevron-open"
+                        : ""
+                    }`}
+                  />
+
+                </button>
+
+
+                {colorVisionOpen && (
+
+                  <div
+                    className="profile-colour-vision-menu"
+                    role="listbox"
+                    aria-label="Colour vision mode"
+                  >
+
+                    {colorVisionOptions.map(
+                      (option) => {
+
+                        const isSelected =
+                          colorVision ===
+                          option.value;
+
+
+                        return (
+
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="option"
+                            aria-selected={
+                              isSelected
+                            }
+                            className={`profile-colour-vision-option ${
+                              isSelected
+                                ? "profile-colour-vision-option-selected"
+                                : ""
+                            }`}
+                            onClick={() => {
+
+                              setColorVision(
+                                option.value
+                              );
+
+                              setColorVisionOpen(
+                                false
+                              );
+
+                            }}
+                          >
+
+                            <span>
+                              {option.label}
+                            </span>
+
+                            {isSelected && (
+                              <Check
+                                size={14}
+                                strokeWidth={2}
+                              />
+                            )}
+
+                          </button>
+
+                        );
+
+                      }
+                    )}
+
+                  </div>
+
+                )}
+
+              </div>
+            </div>
+
           </section>
 
           <section className="profile-card">

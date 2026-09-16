@@ -30,8 +30,11 @@
        DELETE /api/notes/:noteId
    ========================================================= */
 
+import {
+  USE_MOCK_API,
+} from "../config/apiConfig";
 
-const USE_MOCK_NOTES = false;
+const USE_MOCK_NOTES = USE_MOCK_API;
 
 
 /*

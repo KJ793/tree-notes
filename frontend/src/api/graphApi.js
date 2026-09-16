@@ -34,7 +34,11 @@
        PUT /api/notes/:noteId/graph
    ========================================================= */
 
-const USE_MOCK_GRAPH_API = false;
+import {
+  USE_MOCK_API,
+} from "../config/apiConfig";
+
+const USE_MOCK_GRAPH_API = USE_MOCK_API;
 
 /*
   Optional backend URL.
@@ -354,40 +358,67 @@ export async function semanticSearchGraph(noteId, query, graphData) {
      TEMPORARY MOCK IMPLEMENTATION
      ======================================================= */
 
-  // No longer required
-    {
-      // if (USE_MOCK_GRAPH_API) {
-      //   console.log("Mock semantic graph search:", { noteId, query, graph: searchGraph });
-      //
-      //   // Simulates a short AI/backend delay so the loading feedback can be demonstrated.
-      //   await new Promise((resolve) => setTimeout(resolve, 500));
-      //
-      //   // Empty query should never normally arrive here because GraphPanel already prevents it, but this keeps the mock API defensive.
-      //   if (!normalizedQuery) { return { match: null }; }
-      //
-      //   const hasMockMatch = MOCK_SEMANTIC_MATCHES.some((keyword) => normalizedQuery.includes(keyword));
-      //
-      //   if (hasMockMatch) {
-      //
-      //     // Prefer the JavaScript node found in the current graph rather than relying on a hard-coded ID.
-      //     const javascriptNode = searchGraph.nodes.find((node) => node.label?.trim().toLowerCase() === "javascript");
-      //
-      //     if (javascriptNode) {
-      //       return { match: {
-      //           node_id: javascriptNode.id,
-      //           label: javascriptNode.label,
-      //           score: 0.95
-      //       }};
-      //     }
-      //
-      //     // Temporary fallback.
-      //     // This keeps your original mock working even if GraphPanel has not supplied graphData yet.
-      //     // Once GraphPanel definitely passes graphData, this fallback could eventually be removed.
-      //     return { match: { ...MOCK_JAVASCRIPT_NODE } };
-      //   }
-      //
-      //   return { match: null };
-      //
+    if (USE_MOCK_GRAPH_API) {
+      console.log(
+        "Mock semantic graph search:",
+        {
+          noteId,
+          query,
+          graph: searchGraph,
+        }
+      );
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, 500)
+      );
+
+      if (!normalizedQuery) {
+        return {
+          match: null,
+        };
+      }
+
+      const hasMockMatch =
+        MOCK_SEMANTIC_MATCHES.some(
+          (keyword) =>
+            normalizedQuery.includes(keyword)
+        );
+
+      if (hasMockMatch) {
+        const javascriptNode =
+          searchGraph.nodes.find(
+            (node) =>
+              node.label
+                ?.trim()
+                .toLowerCase() ===
+              "javascript"
+          );
+
+        if (javascriptNode) {
+          return {
+            match: {
+              node_id:
+                javascriptNode.id,
+
+              label:
+                javascriptNode.label,
+
+              score:
+                0.95,
+            },
+          };
+        }
+
+        return {
+          match: {
+            ...MOCK_JAVASCRIPT_NODE,
+          },
+        };
+      }
+
+      return {
+        match: null,
+      };
     }
 
   /* =======================================================
