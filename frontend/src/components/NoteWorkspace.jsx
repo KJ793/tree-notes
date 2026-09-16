@@ -225,7 +225,8 @@ function inferGraphLinkPaletteSlot(
 
 // << frontend dev >> //
   // Stores the current note title //
-  const [title, setTitle] = useState(note.title);
+  const [title, setTitle] =
+    useState(note.title ?? "Untitled Note");
 
   /*
     Keep the browser tab title synced
@@ -255,11 +256,11 @@ function inferGraphLinkPaletteSlot(
 
   // Stored user/AI summary for this note.
   const [summary, setSummary] =
-  useState(
-    note.summary_section ??
-    note.summary ??
-    ""
-  );
+    useState(
+      note.summary_section ??
+      note.summary ??
+      ""
+    );
 
   // Selected text for manually adding to graph //
   const [selectedText, setSelectedText] = useState("");
@@ -2272,57 +2273,46 @@ function inferGraphLinkPaletteSlot(
 
   }, []);
 
- useImperativeHandle(ref, () => ({
+  useImperativeHandle(ref, () => ({
+    async saveEverything() {
+      if (!note?.id) {
+        throw new Error(
+          "No note is selected."
+        );
+      }
 
-  async saveEverything() {
+      const graph =
+        graphPanelRef.current
+          ?.getGraphData();
 
-    if (!note?.id) {
-      throw new Error(
-        "No note is selected."
-      );
-    }
+      const saved =
+        await updateNote(
+          note.id,
+          {
+            title,
+            notes_section:
+              rawNotes,
+            notes_section_html:
+              rawNotesHtml,
+            summary_section:
+              summary,
 
+            // Omitting graph_json leaves an existing saved
+            // graph untouched. Sending null would clear it.
+            ...(graph
+              ? {
+                  graph_json:
+                    graph,
+                }
+              : {}),
+          }
+        );
 
-    const graph =
-      graphPanelRef.current
-        ?.getGraphData();
+      onNoteSaved?.(saved);
 
-
-    const saved =
-      await updateNote(
-        note.id,
-        {
-          title,
-
-          notes_section:
-            rawNotes,
-
-          notes_section_html:
-            rawNotesHtml,
-
-          summary_section:
-            summary,
-
-          /*
-            Only include graph_json if
-            GraphPanel returned graph data.
-          */
-          ...(graph
-            ? {
-                graph_json:
-                  graph,
-              }
-            : {}),
-        }
-      );
-
-
-    onNoteSaved?.(saved);
-
-    return saved;
-  },
-
-}));
+      return saved;
+    },
+  }));
 
   return (
     <div 

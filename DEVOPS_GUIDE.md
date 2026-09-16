@@ -13,7 +13,8 @@ commit), see **GIT_WORKFLOW.md** - this guide does not repeat that material.
 
 TreeNotes runs as a set of Docker containers orchestrated by `docker-compose.yml`:
 
-- **frontend** - React/Vite app served by nginx.
+- **frontend** - React/Vite app served by nginx (AI requests may take up to 300s;
+  see `proxy_read_timeout` in `nginx.conf`).
 - **backend** - FastAPI (Python).
 - **db** - PostgreSQL.
 - **ollama** - local LLM runtime for the AI features.
@@ -88,31 +89,37 @@ desired (see section 2).
 
 ## 4. Running the stack locally
 
-Requirements: Docker Desktop.
+Requirements: Docker Desktop. The full walkthrough (URLs, credentials, pgAdmin, GPU
+options) is in the **Running the Stack Locally** section of `README.md`; the short
+version is:
 
 ```
 cp .env.example .env
-docker compose up --build
+docker compose up -d ollama
+docker exec -it ollama ollama pull qwen2.5-coder:latest
+docker compose up -d --build
+docker compose run --rm backend alembic -c backend/alembic.ini upgrade head
 ```
+
+The model pull mirrors what `smoke-test.yml` does (with a smaller model). Without it
+the stack starts, but the AI panels return `502`.
 
 Once running:
 
 - Frontend: http://localhost:8080
 - Backend API docs: http://localhost:8000/docs
-- Backend health check: http://localhost:8000/health
+- Backend health check: http://localhost:8000/health (through nginx: http://localhost:8080/api/health)
 - pgAdmin: http://localhost:5050 (localhost only)
+- Ollama: http://localhost:11434
 
-Database migrations are run manually:
-
-```
-docker compose run backend alembic upgrade head
-```
-
-Verify with:
+Database migrations are run manually, as above. Verify with:
 
 ```
-docker compose run backend alembic current
+docker compose run --rm backend alembic -c backend/alembic.ini current
 ```
+
+`-c backend/alembic.ini` is required: `docker compose run` starts in `/app`, but
+`alembic.ini` lives in `/app/backend`.
 
 ### Troubleshooting: port 5432 already in use
 

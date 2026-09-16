@@ -3,6 +3,7 @@ from sqlalchemy import (
     Float, ForeignKey, TIMESTAMP, CheckConstraint,
     UniqueConstraint
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import TIMESTAMP as PG_TIMESTAMP
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.sql import func
@@ -36,9 +37,15 @@ class Group(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    name = Column(String(255), nullable=False, unique=True)
+    name = Column(String(255), nullable=False)
     parent_id = Column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=True)
     created_at = Column(PG_TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+    # Unique per user, not globally: two users can each have a "biology" group.
+    # Matches the duplicate check in routers/groups.py.
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_groups_user_id_name"),
+    )
 
 
 class Note(Base):
@@ -52,7 +59,18 @@ class Note(Base):
     title = Column(String(255), nullable=False)
     cue_section = Column(Text, nullable=True)
     notes_section = Column(Text, nullable=True)
+    # The rich-text version of notes_section. Raw Notes wraps graph-linked text
+    # in spans carrying the Cytoscape node id, so without the markup those links
+    # are lost even when graph_json survives.
+    notes_section_html = Column(Text, nullable=True)
     summary_section = Column(Text, nullable=True)
+    # The note's Cytoscape graph, stored whole as
+    # {"nodes": [{"data": {...}, "position": {...}}], "edges": [{"data": {...}}]}
+    # exactly as GraphPanel.getEditedGraphData() emits it. JSONB rather than
+    # node/edge tables because each element carries open-ended keys the panel
+    # round-trips (color, shape, linkColor, importance, weight) that a fixed
+    # column set would silently drop. Null until the note's graph is first saved.
+    graph_json = Column(JSONB, nullable=True)
     is_node = Column(Boolean, nullable=False, default=False)
     created_at = Column(PG_TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(PG_TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
@@ -82,8 +100,10 @@ class AISuggestion(Base):
     __tablename__ = "ai_suggestions"
 
     id = Column(Integer, primary_key=True)
-    note_id = Column(Integer, ForeignKey("notes.id"), nullable=False)
-    suggested_note_id = Column(Integer, ForeignKey("notes.id"), nullable=False)
+    # CASCADE for the same reason as NoteLink: a suggestion is meaningless once
+    # either note is gone, and without it deleting the note fails.
+    note_id = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), nullable=False)
+    suggested_note_id = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), nullable=False)
     reasoning = Column(Text, nullable=True)
     confidence_score = Column(Float, nullable=True)
     status = Column(String(20), nullable=False, default="pending")

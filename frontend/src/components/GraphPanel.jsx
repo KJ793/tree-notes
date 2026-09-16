@@ -1214,13 +1214,11 @@ function addSelectedTextNode() {
   });
 }   
 
-
 useEffect(() => 
     { if (addNodeTrigger === 0) 
         { return; }
          addSelectedTextNode(); }, 
          [addNodeTrigger]);
-
 
 // getting latest graph with all the chnages
 function getEditedGraphData() {
@@ -1287,7 +1285,6 @@ function startLinkMode() {
 
   setGraphFeedback(null);
 }
-
 
 function cancelLinkMode() {
   cyRef.current
@@ -1513,7 +1510,6 @@ function getSelectedCyNode() {
   return node;
 }
 
-
 function changeSelectedNodeColor(newColor) {
   const node = getSelectedCyNode();
 
@@ -1539,7 +1535,6 @@ function changeSelectedNodeColor(newColor) {
     color: newColor,
   }));
 }
-
 
 function changeSelectedNodeShape(newShape) {
   const node = getSelectedCyNode();

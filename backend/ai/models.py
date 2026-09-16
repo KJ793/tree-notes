@@ -1,19 +1,10 @@
 from typing import TypedDict
 from pydantic import BaseModel
 
-class GenerateGraph(BaseModel):
-    rawNotes: str
-
-
-class SearchGraph(BaseModel):
-    search_input: str
-    graphJson: str
-
-
-class GenerateSummary(BaseModel):
-    rawNotes: str
-    graphJson: str
-    userSummary: str
+class SearchGraphResult(TypedDict):
+    node_id: int
+    label: str
+    score: float
 
 
 class SummaryResponse(TypedDict):
