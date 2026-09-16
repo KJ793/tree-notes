@@ -3175,8 +3175,10 @@ function inferGraphLinkPaletteSlot(
               onFocus={updateFormattingState}
             >
 
+            </div>
 
-              {contextMenu && (
+            {/* UI OVERLAYS MUST LIVE OUTSIDE THE SAVED EDITOR */}
+            {contextMenu && (
                 <div
                   className="notes-context-menu"
 
@@ -3628,7 +3630,6 @@ function inferGraphLinkPaletteSlot(
 
                 </div>
               )}
-            </div>
 
           </div>
 

@@ -250,6 +250,8 @@ const GraphPanel = forwardRef(function GraphPanel(
   const [graphEditorActive, setGraphEditorActive] =
     useState(false);
 
+  const loadedGraphNoteIdRef = useRef(null);
+
   // Stores the Cytoscape instance so other functions can access it //
   const cyRef = useRef(null);
 // STORES SELECTED EDGES STATE
@@ -306,6 +308,24 @@ const GraphPanel = forwardRef(function GraphPanel(
     creation still works before Generate Graph is used.
   */
   useEffect(() => {
+
+    /*
+      A successful Save replaces the note object and therefore
+      gives us a new initialGraph reference.
+
+      Do NOT reload Cytoscape just because the same note was
+      saved. The live Cytoscape graph is already authoritative.
+    */
+    if (
+      loadedGraphNoteIdRef.current ===
+      noteId
+    ) {
+      return;
+    }
+
+    loadedGraphNoteIdRef.current =
+      noteId;
+    
     setGraphData({
       nodes: Array.isArray(initialGraph?.nodes)
         ? initialGraph.nodes
@@ -671,6 +691,9 @@ const GraphPanel = forwardRef(function GraphPanel(
         ...nodes,
         ...edges,
       ],
+
+      minZoom: 0.25,
+      maxZoom: 1.5,
 
       layout: hasSavedPositions
         ? {
@@ -1108,7 +1131,32 @@ const GraphPanel = forwardRef(function GraphPanel(
 
 cy.one("layoutstop", () => {
   cy.resize();
-  cy.fit(cy.elements(), 50);
+  const elements = cy.elements();
+
+  if (elements.empty()) {
+    return;
+  }
+
+  /*
+    Fit the graph, but never allow a tiny graph
+    such as one node to consume the whole canvas.
+  */
+  cy.fit(
+    elements,
+    50
+  );
+
+  if (cy.zoom() > 1.35) {
+
+    cy.zoom(
+      1.35
+    );
+
+    cy.center(
+      elements
+    );
+
+  }
 });
 
 return () => {
