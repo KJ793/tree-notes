@@ -3,6 +3,7 @@ import Sidebar from "./components/Sidebar";
 import DashboardContent from "./components/DashboardContent";
 import NoteWorkspace from "./components/NoteWorkspace";
 import usePageTitle from "./hooks/usePageTitle";
+import MasterGraph from "./components/MasterGraph";
 
 import {
   useEffect,
@@ -29,6 +30,9 @@ function Dashboard() {
 
   const [sidebarCollapsed, setSidebarCollapsed] =
     useState(false);
+
+  const [activeView, setActiveView] =
+  useState("dashboard");
 
 
   // =========================================================
@@ -309,6 +313,11 @@ function Dashboard() {
 
         <Sidebar
 
+          onNotesPageClick={() => {
+          setSelectedNoteId(null);
+          setActiveView("notes");
+        }}
+
           // Notes dropdown
           notesExpanded={notesExpanded}
 
@@ -351,6 +360,13 @@ function Dashboard() {
                 !current
             )
           }
+          activeView={activeView}
+
+          onDashboardClick={() => {
+            setSelectedNoteId(null);
+            setActiveView("dashboard");
+          }}
+        
 
         />
 
@@ -359,39 +375,34 @@ function Dashboard() {
 
           {notesLoading ? (
 
-            <div className="dashboard-loading">
-              Loading notes...
-            </div>
+          <div className="dashboard-loading">
+            Loading notes...
+          </div>
 
-          ) : selectedNote ? (
+        ) : selectedNote ? (
 
-            <NoteWorkspace
+          <NoteWorkspace
+            key={selectedNote.id}
+            note={selectedNote}
+            ref={noteWorkspaceRef}
+            onNoteSaved={handleNoteSaved}
+          />
 
-              /*
-                Force React to initialise a fresh
-                workspace when switching notes.
-              */
-              key={selectedNote.id}
+        ) : activeView === "notes" ? (
 
-              note={
-                selectedNote
-              }
+          <MasterGraph
+            notes={notes}
+            onOpenNote={(noteId) => {
+              setSelectedNoteId(noteId);
+              setActiveView("dashboard");
+            }}
+          />
 
-              ref={
-                noteWorkspaceRef
-              }
+        ) : (
 
-              onNoteSaved={
-                handleNoteSaved
-              }
+          <DashboardContent />
 
-            />
-
-          ) : (
-
-            <DashboardContent />
-
-          )}
+        )}
 
         </section>
 

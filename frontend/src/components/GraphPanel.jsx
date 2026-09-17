@@ -17,7 +17,10 @@ import {
   CircleAlert,
   LoaderCircle,
   Search,
+  Plus,
+  Pencil,
   ArrowUp,
+  Type,
 } from "lucide-react";
 import cytoscape from "cytoscape";
 import { semanticSearchGraph,} from "../api/graphApi";
@@ -277,6 +280,9 @@ const GraphPanel = forwardRef(function GraphPanel(
   // Hidden native colour picker
   const nodeColorInputRef = useRef(null);
 
+  // color picker for node text 
+  const nodeTextColorInputRef = useRef(null);
+
   // Shape selector popover
   const shapeMenuRef = useRef(null);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
@@ -298,6 +304,14 @@ const GraphPanel = forwardRef(function GraphPanel(
   const [semanticSearchLoading, setSemanticSearchLoading] = useState(false);
 
   const semanticSearchRef = useRef(null);
+
+  const [editingNodeId, setEditingNodeId] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  const [renamePosition, setRenamePosition] = useState({
+    x: 0,
+    y: 0,
+  });
 
   /*
     Keep GraphPanel synced with the graph_json belonging to the
@@ -793,7 +807,7 @@ const GraphPanel = forwardRef(function GraphPanel(
         {
           selector: "node[color]",
           style: {
-            "background-color": "data(color)",
+             color: "data(textColor)",
           },
         },
 
@@ -952,6 +966,44 @@ const GraphPanel = forwardRef(function GraphPanel(
         ],
       }
     );
+
+  cy.on("dbltap", "node", (event) => {
+  const node = event.target;
+
+  const position =
+    node.renderedPosition();
+
+  cy.elements().unselect();
+  node.select();
+
+  setSelectedNode({
+    ...node.data(),
+    color:
+      node.data("color") ||
+      getThemeColour(
+        "--graph-node-bg",
+        "#6366F1"
+      ),
+    shape:
+      node.data("shape") ||
+      "round-rectangle",
+  });
+
+  setSelectedEdge(null);
+
+  setRenameValue(
+    node.data("label") || ""
+  );
+
+  setRenamePosition({
+    x: position.x,
+    y: position.y,
+  });
+
+  setEditingNodeId(
+    node.id()
+  );
+});
 
     // =========================================================
     // NODE SELECTION
@@ -1752,6 +1804,7 @@ function deleteSelectedElement() {
     return;
   }
 
+
   // Delete selected edge
   if (selectedEdge?.id) {
     const edge =
@@ -1780,6 +1833,92 @@ function deleteSelectedElement() {
     }
   }
 }
+
+  function createManualNode() {
+  const cy = cyRef.current;
+
+  if (!cy) return;
+
+  const nodeId = `manual-node-${Date.now()}`;
+
+  const extent = cy.extent();
+
+  const newNode = cy.add({
+    group: "nodes",
+    data: {
+      id: nodeId,
+      label: "New Node",
+      color: "#6366F1",
+      shape: "round-rectangle",
+    },
+    position: {
+      x: (extent.x1 + extent.x2) / 2,
+      y: (extent.y1 + extent.y2) / 2,
+    },
+  });
+
+  cy.elements().unselect();
+  newNode.select();
+
+  setSelectedEdge(null);
+
+  setSelectedNode({
+    ...newNode.data(),
+  });
+
+  showGraphFeedback(
+    "New node created",
+    "success"
+  );
+}
+
+
+function saveNodeRename() {
+  const node = getSelectedCyNode();
+  const cleanLabel = renameValue.trim();
+
+  if (!node || !cleanLabel) {
+    return;
+  }
+
+  node.data("label", cleanLabel);
+
+  setSelectedNode((current) => ({
+    ...current,
+    label: cleanLabel,
+  }));
+
+  setRenameDialogOpen(false);
+
+  showGraphFeedback(
+    `Renamed node to: ${cleanLabel}`,
+    "success"
+  );
+}
+
+// text color for node label
+function changeSelectedNodeTextColor(newColor) {
+  const node = getSelectedCyNode();
+
+  if (!node) return;
+
+  node.style(
+    "color",
+    newColor
+  );
+
+  node.data(
+    "textColor",
+    newColor
+  );
+
+  setSelectedNode((current) => ({
+    ...current,
+    textColor: newColor,
+  }));
+}
+
+
     
 async function handleSemanticSearch() {
   const query =
@@ -2157,6 +2296,40 @@ useImperativeHandle(ref, () => ({
 
           </div>
 
+          <div className="graph-toolbar-popover-wrapper">
+          <button
+            type="button"
+            className="graph-toolbar-button"
+            disabled={!selectedNode}
+            onClick={() =>
+              nodeTextColorInputRef.current?.click()
+            }
+            data-tooltip={
+              selectedNode
+                ? "Text colour"
+                : "Select a node first"
+            }
+            aria-label="Text colour"
+          >
+            <Type size={19} strokeWidth={1.8} />
+          </button>
+
+          <input
+            ref={nodeTextColorInputRef}
+            className="graph-hidden-color-input"
+            type="color"
+            value={
+              selectedNode?.textColor ||
+              "#ffffff"
+            }
+            onChange={(event) =>
+              changeSelectedNodeTextColor(
+                event.target.value
+              )
+            }
+          />
+        </div>
+
 
           {/* NODE SHAPE */}
 
@@ -2273,6 +2446,20 @@ useImperativeHandle(ref, () => ({
             strokeWidth={1.8}
           />
         </button>
+        
+
+        
+        <button
+          type="button"
+          className="graph-toolbar-button"
+          onClick={createManualNode}
+          data-tooltip="Create node"
+          aria-label="Create node"
+        >
+          <Plus size={19} strokeWidth={1.8} />
+        </button>
+
+
 
 
           {/* LINK NODES */}
@@ -2316,6 +2503,62 @@ useImperativeHandle(ref, () => ({
             ref={graphContainerRef}
             className="graph-container"
           />
+
+          {editingNodeId && (
+          <input
+            className="graph-inline-rename"
+            type="text"
+            value={renameValue}
+            autoFocus
+            style={{
+              left: `${renamePosition.x}px`,
+              top: `${renamePosition.y}px`,
+            }}
+            onChange={(event) =>
+              setRenameValue(event.target.value)
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                const node =
+                  cyRef.current?.getElementById(
+                    editingNodeId
+                  );
+
+                const cleanLabel =
+                  renameValue.trim();
+
+                if (
+                  node &&
+                  !node.empty() &&
+                  cleanLabel
+                ) {
+                  node.data(
+                    "label",
+                    cleanLabel
+                  );
+
+                  setSelectedNode(
+                    (current) => ({
+                      ...current,
+                      label: cleanLabel,
+                    })
+                  );
+
+                  showGraphFeedback(
+                    `Renamed node to: ${cleanLabel}`,
+                    "success"
+                  );
+                }
+
+                setEditingNodeId(null);
+              }
+
+              if (event.key === "Escape") {
+                setEditingNodeId(null);
+              }
+            }}
+          />
+        )}
 
 
           {/* CURRENT GRAPH SELECTION */}
@@ -2523,6 +2766,8 @@ useImperativeHandle(ref, () => ({
                 />
 
               </button>
+
+              
 
             )}
 
