@@ -18,7 +18,7 @@ import {
   Link,
   Info,
   CirclePlus,
-  Palette,
+  Type,
   Highlighter,
   Unlink,
   Eraser,
@@ -2480,7 +2480,7 @@ function inferGraphLinkPaletteSlot(
                   data-tooltip="Text colour"
                   aria-label="Text colour"
                 >
-                  <Palette
+                  <Type
                     size={18}
                     strokeWidth={1.9}
                   />

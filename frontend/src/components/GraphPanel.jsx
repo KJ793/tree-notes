@@ -1,7 +1,6 @@
 import { useRef, useEffect, useState, forwardRef, useImperativeHandle,} from "react";
 import {
   ChartLine,
-  Palette,
   Shapes,
   Circle,
   RectangleHorizontal,
@@ -18,9 +17,9 @@ import {
   LoaderCircle,
   Search,
   Plus,
-  Pencil,
   ArrowUp,
   Type,
+  PaintBucket,
 } from "lucide-react";
 import cytoscape from "cytoscape";
 import { semanticSearchGraph,} from "../api/graphApi";
@@ -306,12 +305,16 @@ const GraphPanel = forwardRef(function GraphPanel(
   const semanticSearchRef = useRef(null);
 
   const [editingNodeId, setEditingNodeId] = useState(null);
+  const editingNodeIdRef = useRef(null);
   const [renameValue, setRenameValue] = useState("");
+  const renameOriginalValueRef = useRef("");
 
   const [renamePosition, setRenamePosition] = useState({
     x: 0,
     y: 0,
   });
+
+  const [renameZoom, setRenameZoom] = useState(1);
 
   /*
     Keep GraphPanel synced with the graph_json belonging to the
@@ -740,8 +743,9 @@ const GraphPanel = forwardRef(function GraphPanel(
             label: "data(label)",
 
             color: graphTheme.nodeText,
-            "font-size": "16px",
+            "font-size": "15px",
             "font-weight": "500",
+            "font-family": "Inter, system-ui, sans-serif",
 
             "text-valign": "center",
             "text-halign": "center",
@@ -807,7 +811,16 @@ const GraphPanel = forwardRef(function GraphPanel(
         {
           selector: "node[color]",
           style: {
-             color: "data(textColor)",
+            "background-color":
+              "data(color)",
+          },
+        },
+
+        {
+          selector: "node[textColor]",
+          style: {
+            color:
+              "data(textColor)",
           },
         },
 
@@ -967,43 +980,94 @@ const GraphPanel = forwardRef(function GraphPanel(
       }
     );
 
-  cy.on("dbltap", "node", (event) => {
-  const node = event.target;
+  cy.on(
+    "dbltap",
+    "node",
+    (event) => {
 
-  const position =
-    node.renderedPosition();
+      const node =
+        event.target;
 
-  cy.elements().unselect();
-  node.select();
 
-  setSelectedNode({
-    ...node.data(),
-    color:
-      node.data("color") ||
-      getThemeColour(
-        "--graph-node-bg",
-        "#6366F1"
-      ),
-    shape:
-      node.data("shape") ||
-      "round-rectangle",
-  });
+      const position =
+        node.renderedPosition();
 
-  setSelectedEdge(null);
+      const zoom = cy.zoom();
 
-  setRenameValue(
-    node.data("label") || ""
+      cy.elements().unselect();
+
+      node.select();
+
+
+      setSelectedNode({
+        ...node.data(),
+
+        color:
+          node.data("color") ||
+          getThemeColour(
+            "--graph-node-bg",
+            "#6366F1"
+          ),
+
+        textColor:
+          node.data("textColor") ||
+          getThemeColour(
+            "--graph-node-text",
+            "#ffffff"
+          ),
+
+        shape:
+          node.data("shape") ||
+          "round-rectangle",
+      });
+
+
+      setSelectedEdge(null);
+
+
+      const currentLabel =
+        node.data("label") ||
+        "";
+
+
+      renameOriginalValueRef.current =
+        currentLabel;
+
+
+      setRenameValue(
+        currentLabel
+      );
+
+
+      setRenamePosition({
+        x:
+          position.x,
+
+        y:
+          position.y,
+      });
+
+      setRenameZoom(
+        zoom
+      );
+
+      /*
+        Hide Cytoscape's painted text while
+        the HTML text field sits over it.
+      */
+      node.style(
+        "text-opacity",
+        0
+      );
+
+      editingNodeIdRef.current = node.id();
+
+      setEditingNodeId(
+        node.id()
+      );
+
+    }
   );
-
-  setRenamePosition({
-    x: position.x,
-    y: position.y,
-  });
-
-  setEditingNodeId(
-    node.id()
-  );
-});
 
     // =========================================================
     // NODE SELECTION
@@ -1264,6 +1328,73 @@ const GraphPanel = forwardRef(function GraphPanel(
 
     });
 
+/* =========================================================
+   KEEP INLINE NODE RENAME SYNCED WITH GRAPH
+   ========================================================= */
+
+function syncRenameOverlay() {
+
+  const nodeId =
+    editingNodeIdRef.current;
+
+  if (!nodeId) {
+    return;
+  }
+
+  const node =
+    cy.getElementById(
+      nodeId
+    );
+
+  if (
+    !node ||
+    node.empty()
+  ) {
+    return;
+  }
+
+  const position =
+    node.renderedPosition();
+
+  setRenamePosition({
+    x: position.x,
+    y: position.y,
+  });
+
+  setRenameZoom(
+    cy.zoom()
+  );
+}
+
+
+/*
+  Keep the HTML rename field aligned with the
+  Cytoscape node while zooming or panning.
+*/
+cy.on(
+  "zoom pan",
+  syncRenameOverlay
+);
+
+
+/*
+  Keep it aligned if the node itself is dragged
+  while it is being renamed.
+*/
+cy.on(
+  "drag",
+  "node",
+  (event) => {
+
+    if (
+      event.target.id() ===
+      editingNodeIdRef.current
+    ) {
+      syncRenameOverlay();
+    }
+
+  }
+);
 
 cy.one("layoutstop", () => {
   cy.resize();
@@ -1848,7 +1979,16 @@ function deleteSelectedElement() {
     data: {
       id: nodeId,
       label: "New Node",
-      color: "#6366F1",
+      color: 
+        getThemeColour(
+          "--graph-node-bg",
+          "#6366F1"
+        ),
+      textColor:
+      getThemeColour(
+        "--graph-node-text",
+        "#ffffff"
+      ),
       shape: "round-rectangle",
     },
     position: {
@@ -1873,27 +2013,96 @@ function deleteSelectedElement() {
 }
 
 
-function saveNodeRename() {
-  const node = getSelectedCyNode();
-  const cleanLabel = renameValue.trim();
+function finishNodeRename({
+  cancel = false,
+} = {}) {
 
-  if (!node || !cleanLabel) {
+  if (
+    !cyRef.current ||
+    !editingNodeId
+  ) {
     return;
   }
 
-  node.data("label", cleanLabel);
 
-  setSelectedNode((current) => ({
-    ...current,
-    label: cleanLabel,
-  }));
+  const node =
+    cyRef.current.getElementById(
+      editingNodeId
+    );
 
-  setRenameDialogOpen(false);
 
-  showGraphFeedback(
-    `Renamed node to: ${cleanLabel}`,
-    "success"
+  if (
+    !node ||
+    node.empty()
+  ) {
+
+    editingNodeIdRef.current = null;
+
+    setEditingNodeId(null);
+
+    return;
+  }
+
+
+  if (!cancel) {
+
+    const cleanLabel =
+      renameValue.trim();
+
+
+    if (cleanLabel) {
+
+      node.data(
+        "label",
+        cleanLabel
+      );
+
+
+      setSelectedNode(
+        (current) => {
+
+          if (
+            !current ||
+            current.id !==
+              editingNodeId
+          ) {
+            return current;
+          }
+
+
+          return {
+            ...current,
+            label:
+              cleanLabel,
+          };
+
+        }
+      );
+
+
+      showGraphFeedback(
+        `Renamed node to: ${cleanLabel}`,
+        "success"
+      );
+
+    }
+
+  }
+
+
+  /*
+    Restore Cytoscape's own label.
+  */
+  node.style(
+    "text-opacity",
+    1
   );
+
+
+  setEditingNodeId(
+    null
+  );
+
 }
 
 // text color for node label
@@ -2237,99 +2446,34 @@ useImperativeHandle(ref, () => ({
           role="toolbar"
           aria-label="Graph editing"
         >
+          {/* ================================================= */}
+          {/* NODE TOOLS                                        */}
+          {/* ================================================= */}
 
-          {/* NODE COLOUR */}
+          {/* CREATE NODE */}
 
-          <div className="graph-toolbar-popover-wrapper">
-
-            <button
-              type="button"
-              className="graph-toolbar-button tooltip-align-left"
-              disabled={!selectedNode}
-              onClick={() =>
-                nodeColorInputRef.current?.click()
-              }
-              data-tooltip={
-                selectedNode
-                  ? "Node colour"
-                  : "Select a node first"
-              }
-              aria-label="Node colour"
-            >
-              <span className="graph-toolbar-color-icon">
-
-                <Palette
-                  size={19}
-                  strokeWidth={1.8}
-                />
-
-                <span
-                  className="graph-toolbar-color-indicator"
-                  style={{
-                    backgroundColor:
-                      selectedNode?.color ||
-                      getThemeColour(
-                        "--graph-node-bg",
-                        "#6366F1"
-                      ),
-                  }}
-                />
-
-              </span>
-            </button>
-
-
-            <input
-              ref={nodeColorInputRef}
-              className="graph-hidden-color-input"
-              type="color"
-              value={
-                selectedNode?.color ||
-                "#6366F1"
-              }
-              onChange={(event) =>
-                changeSelectedNodeColor(
-                  event.target.value
-                )
-              }
-            />
-
-          </div>
-
-          <div className="graph-toolbar-popover-wrapper">
           <button
             type="button"
             className="graph-toolbar-button"
-            disabled={!selectedNode}
-            onClick={() =>
-              nodeTextColorInputRef.current?.click()
-            }
-            data-tooltip={
-              selectedNode
-                ? "Text colour"
-                : "Select a node first"
-            }
-            aria-label="Text colour"
+            onClick={createManualNode}
+            data-tooltip="Create node"
+            aria-label="Create node"
           >
-            <Type size={19} strokeWidth={1.8} />
+            <span className="graph-create-node-icon">
+
+              <Squircle
+                size={18}
+                strokeWidth={1.8}
+              />
+
+              <Plus
+                className="graph-create-node-plus"
+                size={9}
+                strokeWidth={2.5}
+              />
+
+            </span>
           </button>
-
-          <input
-            ref={nodeTextColorInputRef}
-            className="graph-hidden-color-input"
-            type="color"
-            value={
-              selectedNode?.textColor ||
-              "#ffffff"
-            }
-            onChange={(event) =>
-              changeSelectedNodeTextColor(
-                event.target.value
-              )
-            }
-          />
-        </div>
-
 
           {/* NODE SHAPE */}
 
@@ -2423,8 +2567,161 @@ useImperativeHandle(ref, () => ({
 
           </div>
 
+          {/* NODE FILL COLOUR */}
 
-          <span className="graph-toolbar-divider" />
+          <div className="graph-toolbar-popover-wrapper">
+
+            <button
+              type="button"
+              className="graph-toolbar-button tooltip-align-left"
+              disabled={!selectedNode}
+              onClick={() =>
+                nodeColorInputRef.current?.click()
+              }
+              data-tooltip={
+                selectedNode
+                  ? "Node colour"
+                  : "Select a node first"
+              }
+              aria-label="Node colour"
+            >
+              <span className="graph-toolbar-color-icon">
+
+                <PaintBucket
+                  size={19}
+                  strokeWidth={1.8}
+                />
+
+                <span
+                  className="graph-toolbar-color-indicator"
+                  style={{
+                    backgroundColor:
+                      selectedNode?.color ||
+                      getThemeColour(
+                        "--graph-node-bg",
+                        "#6366F1"
+                      ),
+                  }}
+                />
+
+              </span>
+            </button>
+
+
+            <input
+              ref={nodeColorInputRef}
+              className="graph-hidden-color-input"
+              type="color"
+              value={
+                selectedNode?.color ||
+                "#6366F1"
+              }
+              onChange={(event) =>
+                changeSelectedNodeColor(
+                  event.target.value
+                )
+              }
+            />
+
+          </div>
+
+          {/* NODE TEXT COLOUR */}
+
+          <div className="graph-toolbar-popover-wrapper">
+          <button
+            type="button"
+            className="graph-toolbar-button"
+            disabled={!selectedNode}
+            onClick={() =>
+              nodeTextColorInputRef.current?.click()
+            }
+            data-tooltip={
+              selectedNode
+                ? "Text colour"
+                : "Select a node first"
+            }
+            aria-label="Text colour"
+          >
+            <span className="graph-toolbar-color-icon">
+
+              <Type
+                size={19}
+                strokeWidth={1.8}
+              />
+
+              <span
+                className="graph-toolbar-color-indicator"
+                style={{
+                  backgroundColor:
+                    selectedNode?.textColor ||
+                    getThemeColour(
+                      "--graph-node-text",
+                      "#ffffff"
+                    ),
+                }}
+              />
+
+            </span>
+          </button>
+
+          <input
+            ref={nodeTextColorInputRef}
+            className="graph-hidden-color-input"
+            type="color"
+            value={
+              selectedNode?.textColor ||
+              getThemeColour(
+                "--graph-node-text",
+                "#ffffff"
+              )
+            }
+            onChange={(event) =>
+              changeSelectedNodeTextColor(
+                event.target.value
+              )
+            }
+          />
+        </div>
+
+        <span className="graph-toolbar-divider" />
+
+        {/* ================================================= */}
+        {/* EDGE / RELATIONSHIP TOOLS                         */}
+        {/* ================================================= */}
+
+        {/* LINK NODES */}
+
+        <button
+          type="button"
+
+          className={`graph-toolbar-button ${
+            linkMode
+              ? "graph-toolbar-button-active"
+              : ""
+          }`}
+
+          onClick={startLinkMode}
+
+          data-tooltip={
+            linkMode
+              ? "Cancel link mode"
+              : "Link nodes"
+          }
+
+          aria-label="Link nodes"
+          aria-pressed={linkMode}
+        >
+          <Link2
+            size={19}
+            strokeWidth={1.8}
+          />
+        </button>
+
+        <span className="graph-toolbar-divider" />
+
+        {/* ================================================= */}
+        {/* GENERAL TOOLS                                     */}
+        {/* ================================================= */}
 
         {/* DELETE ELEMENT */}
         <button
@@ -2446,51 +2743,8 @@ useImperativeHandle(ref, () => ({
             strokeWidth={1.8}
           />
         </button>
-        
 
-        
-        <button
-          type="button"
-          className="graph-toolbar-button"
-          onClick={createManualNode}
-          data-tooltip="Create node"
-          aria-label="Create node"
-        >
-          <Plus size={19} strokeWidth={1.8} />
-        </button>
-
-
-
-
-          {/* LINK NODES */}
-
-          <button
-            type="button"
-
-            className={`graph-toolbar-button ${
-              linkMode
-                ? "graph-toolbar-button-active"
-                : ""
-            }`}
-
-            onClick={startLinkMode}
-
-            data-tooltip={
-              linkMode
-                ? "Cancel link mode"
-                : "Link nodes"
-            }
-
-            aria-label="Link nodes"
-            aria-pressed={linkMode}
-          >
-            <Link2
-              size={19}
-              strokeWidth={1.8}
-            />
-          </button>
-
-        </div>
+      </div>
 
 
         {/* =============================================== */}
@@ -2513,48 +2767,36 @@ useImperativeHandle(ref, () => ({
             style={{
               left: `${renamePosition.x}px`,
               top: `${renamePosition.y}px`,
+              width: `${110 * renameZoom}px`,
+              height: `${52 * renameZoom}px`,
+              fontSize: `${15 * renameZoom}px`,
+              lineHeight: `${52 * renameZoom}px`,
+              color:
+                selectedNode?.textColor ||
+                getThemeColour(
+                  "--graph-node-text",
+                  "#ffffff"
+                ),
             }}
             onChange={(event) =>
               setRenameValue(event.target.value)
             }
+            onBlur={() =>
+              finishNodeRename()
+            }
             onKeyDown={(event) => {
               if (event.key === "Enter") {
-                const node =
-                  cyRef.current?.getElementById(
-                    editingNodeId
-                  );
+                event.preventDefault();
 
-                const cleanLabel =
-                  renameValue.trim();
-
-                if (
-                  node &&
-                  !node.empty() &&
-                  cleanLabel
-                ) {
-                  node.data(
-                    "label",
-                    cleanLabel
-                  );
-
-                  setSelectedNode(
-                    (current) => ({
-                      ...current,
-                      label: cleanLabel,
-                    })
-                  );
-
-                  showGraphFeedback(
-                    `Renamed node to: ${cleanLabel}`,
-                    "success"
-                  );
-                }
-
-                setEditingNodeId(null);
+                finishNodeRename();
               }
 
               if (event.key === "Escape") {
-                setEditingNodeId(null);
+                event.preventDefault();
+
+                finishNodeRename({
+                  cancel: true,
+                });
               }
             }}
           />
