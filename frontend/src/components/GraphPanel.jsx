@@ -4,6 +4,7 @@ import {
   Shapes,
   Circle,
   RectangleHorizontal,
+  Square,
   Squircle,
   Diamond,
   Triangle,
@@ -20,6 +21,11 @@ import {
   ArrowUp,
   Type,
   PaintBucket,
+  MoveUpRight,
+  Minus,
+  ArrowRight,
+  MousePointer2,
+  CircleX,
 } from "lucide-react";
 import cytoscape from "cytoscape";
 import { semanticSearchGraph,} from "../api/graphApi";
@@ -125,6 +131,61 @@ const NODE_SHAPES = [
     value: "triangle",
     label: "Triangle",
     Icon: Triangle,
+  },
+];
+
+const EDGE_STYLES = [
+  {
+    value: "solid",
+    label: "Solid",
+  },
+  {
+    value: "dashed",
+    label: "Dashed",
+  },
+  {
+    value: "dotted",
+    label: "Dotted",
+  },
+];
+
+
+const ARROW_SHAPES = [
+  {
+    value: "triangle",
+    label: "Triangle",
+    Icon: Triangle,
+  },
+  {
+    value: "vee",
+    label: "Vee",
+    Icon: MousePointer2,
+  },
+  {
+    value: "circle",
+    label: "Circle",
+    Icon: Circle,
+  },
+  {
+    value: "square",
+    label: "Square",
+    Icon: Square,
+  },
+  {
+    value: "diamond",
+    label: "Diamond",
+    Icon: Diamond,
+  },
+  {
+    value: "tee",
+    label: "Tee",
+    Icon: Minus,
+    rotate: true,
+  },
+  {
+    value: "none",
+    label: "No arrow",
+    Icon: CircleX,
   },
 ];
 
@@ -286,6 +347,18 @@ const GraphPanel = forwardRef(function GraphPanel(
   const shapeMenuRef = useRef(null);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
 
+  // Edge and Arrow colour picker
+  const edgeColorInputRef = useRef(null);
+  const arrowColorInputRef = useRef(null);
+
+  // Edge style selector popover
+  const edgeStyleMenuRef = useRef(null);
+  const [edgeStyleMenuOpen, setEdgeStyleMenuOpen] = useState(false);
+
+  // Arrow shape selector popover
+  const arrowShapeMenuRef = useRef(null);
+  const [arrowShapeMenuOpen, setArrowShapeMenuOpen] = useState(false);
+
   // Generic temporary feedback for graph actions
   const [graphFeedback, setGraphFeedback] = useState(null);
 
@@ -356,6 +429,8 @@ const GraphPanel = forwardRef(function GraphPanel(
     setSelectedNode(null);
     setSelectedEdge(null);
     setShapeMenuOpen(false);
+    setEdgeStyleMenuOpen(false);
+    setArrowShapeMenuOpen(false);
     setGraphFeedback(null);
 
     linkModeRef.current = false;
@@ -856,6 +931,70 @@ const GraphPanel = forwardRef(function GraphPanel(
           },
         },
 
+        /*
+          =========================================================
+          CUSTOM EDGE COLOUR
+          =========================================================
+        */
+
+        {
+          selector:
+            "edge[edgeColor]",
+
+          style: {
+            "line-color":
+              "data(edgeColor)",
+          },
+        },
+
+        /*
+          =========================================================
+          CUSTOM ARROW COLOUR
+          =========================================================
+        */
+
+        {
+          selector:
+            "edge[arrowColor]",
+
+          style: {
+            "target-arrow-color":
+              "data(arrowColor)",
+          },
+        },
+
+        /*
+          =========================================================
+          CUSTOM ARROW SHAPE
+          =========================================================
+        */
+
+        {
+          selector:
+            "edge[arrowShape]",
+
+          style: {
+            "target-arrow-shape":
+              "data(arrowShape)",
+          },
+        },
+
+        /*
+          =========================================================
+          CUSTOM EDGE STYLE
+          =========================================================
+        */
+
+        {
+          selector:
+            "edge[lineStyle]",
+
+          style: {
+            "line-style":
+              "data(lineStyle)",
+          },
+        },
+
         /* =====================================================
           ACTIVE NODE
           ===================================================== */
@@ -886,7 +1025,26 @@ const GraphPanel = forwardRef(function GraphPanel(
           },
         },
 
-        
+        {
+          selector:
+            "edge:selected[edgeColor]",
+
+          style: {
+            "line-color":
+              "data(edgeColor)",
+          },
+        },
+
+        {
+          selector:
+            "edge:selected[arrowColor]",
+
+          style: {
+            "target-arrow-color":
+              "data(arrowColor)",
+          },
+        },
+
       ],
     });
     cyRef.current = cy;
@@ -1113,6 +1271,10 @@ const GraphPanel = forwardRef(function GraphPanel(
 
       setShapeMenuOpen(false);
 
+      setEdgeStyleMenuOpen(false);
+
+      setArrowShapeMenuOpen(false);
+
 
       // =====================================================
       // NORMAL NODE SELECTION
@@ -1284,6 +1446,10 @@ const GraphPanel = forwardRef(function GraphPanel(
 
       setShapeMenuOpen(false);
 
+      setEdgeStyleMenuOpen(false);
+
+      setArrowShapeMenuOpen(false);
+
 
       console.log(
         "Selected edge:",
@@ -1320,6 +1486,10 @@ const GraphPanel = forwardRef(function GraphPanel(
       setSelectedEdge(null);
 
       setShapeMenuOpen(false);
+
+      setEdgeStyleMenuOpen(false);
+
+      setArrowShapeMenuOpen(false);
 
 
       console.log(
@@ -1711,6 +1881,10 @@ function focusNode(nodeId) {
 
   setShapeMenuOpen(false);
 
+  setEdgeStyleMenuOpen(false);
+
+  setArrowShapeMenuOpen(false);
+
 
   cy.animate(
     {
@@ -1881,6 +2055,183 @@ function changeSelectedNodeShape(newShape) {
   }));
 
   setShapeMenuOpen(false);
+
+  setEdgeStyleMenuOpen(false);
+
+  setArrowShapeMenuOpen(false);
+}
+
+function changeSelectedEdgeColor(
+  colour
+) {
+
+  if (
+    !cyRef.current ||
+    !selectedEdge?.id
+  ) {
+    return;
+  }
+
+
+  const edge =
+    cyRef.current.getElementById(
+      selectedEdge.id
+    );
+
+
+  if (
+    !edge ||
+    edge.empty()
+  ) {
+    return;
+  }
+
+
+  edge.data(
+    "edgeColor",
+    colour
+  );
+
+
+  setSelectedEdge(
+    current => ({
+      ...current,
+      edgeColor:
+        colour,
+    })
+  );
+}
+
+function changeSelectedArrowColor(
+  colour
+) {
+
+  if (
+    !cyRef.current ||
+    !selectedEdge?.id
+  ) {
+    return;
+  }
+
+
+  const edge =
+    cyRef.current.getElementById(
+      selectedEdge.id
+    );
+
+
+  if (
+    !edge ||
+    edge.empty()
+  ) {
+    return;
+  }
+
+
+  edge.data(
+    "arrowColor",
+    colour
+  );
+
+
+  setSelectedEdge(
+    current => ({
+      ...current,
+      arrowColor:
+        colour,
+    })
+  );
+}
+
+function changeSelectedArrowShape(
+  shape
+) {
+
+  if (
+    !cyRef.current ||
+    !selectedEdge?.id
+  ) {
+    return;
+  }
+
+
+  const edge =
+    cyRef.current.getElementById(
+      selectedEdge.id
+    );
+
+
+  if (
+    !edge ||
+    edge.empty()
+  ) {
+    return;
+  }
+
+
+  edge.data(
+    "arrowShape",
+    shape
+  );
+
+
+  setSelectedEdge(
+    current => ({
+      ...current,
+      arrowShape:
+        shape,
+    })
+  );
+
+
+  setArrowShapeMenuOpen(
+    false
+  );
+}
+
+function changeSelectedEdgeStyle(
+  lineStyle
+) {
+
+  if (
+    !cyRef.current ||
+    !selectedEdge?.id
+  ) {
+    return;
+  }
+
+
+  const edge =
+    cyRef.current.getElementById(
+      selectedEdge.id
+    );
+
+
+  if (
+    !edge ||
+    edge.empty()
+  ) {
+    return;
+  }
+
+
+  edge.data(
+    "lineStyle",
+    lineStyle
+  );
+
+
+  setSelectedEdge(
+    current => ({
+      ...current,
+      lineStyle,
+    })
+  );
+
+
+  setEdgeStyleMenuOpen(
+    false
+  );
 }
 
 function showGraphFeedback(
@@ -2262,34 +2613,81 @@ useEffect(() => {
 
 useEffect(() => {
 
-  function handleClickOutside(event) {
-    if (
-      shapeMenuRef.current &&
-      !shapeMenuRef.current.contains(
+  function handlePopoverPointerDown(
+    event
+  ) {
+
+    const clickedInsideShape =
+      shapeMenuRef.current?.contains(
         event.target
-      )
-    ) {
+      );
+
+
+    const clickedInsideEdgeStyle =
+      edgeStyleMenuRef.current?.contains(
+        event.target
+      );
+
+
+    const clickedInsideArrowShape =
+      arrowShapeMenuRef.current?.contains(
+        event.target
+      );
+
+
+    /*
+      Close each menu when the click occurs
+      outside its own wrapper.
+
+      Capture mode means this runs before
+      Cytoscape or another control can consume
+      the pointer event.
+    */
+
+    if (!clickedInsideShape) {
       setShapeMenuOpen(false);
     }
+
+
+    if (!clickedInsideEdgeStyle) {
+      setEdgeStyleMenuOpen(false);
+    }
+
+
+    if (!clickedInsideArrowShape) {
+      setArrowShapeMenuOpen(false);
+    }
+
   }
 
 
   function handleEscape(event) {
-    if (event.key === "Escape") {
 
-      setShapeMenuOpen(false);
-
-      if (linkModeRef.current) {
-        cancelLinkMode();
-      }
+    if (event.key !== "Escape") {
+      return;
     }
+
+
+    setShapeMenuOpen(false);
+
+    setEdgeStyleMenuOpen(false);
+
+    setArrowShapeMenuOpen(false);
+
+
+    if (linkModeRef.current) {
+      cancelLinkMode();
+    }
+
   }
 
 
   document.addEventListener(
-    "mousedown",
-    handleClickOutside
+    "pointerdown",
+    handlePopoverPointerDown,
+    true
   );
+
 
   document.addEventListener(
     "keydown",
@@ -2300,14 +2698,17 @@ useEffect(() => {
   return () => {
 
     document.removeEventListener(
-      "mousedown",
-      handleClickOutside
+      "pointerdown",
+      handlePopoverPointerDown,
+      true
     );
+
 
     document.removeEventListener(
       "keydown",
       handleEscape
     );
+
 
     if (
       graphFeedbackTimerRef.current
@@ -2316,6 +2717,7 @@ useEffect(() => {
         graphFeedbackTimerRef.current
       );
     }
+
   };
 
 }, []);
@@ -2459,7 +2861,7 @@ useImperativeHandle(ref, () => ({
             data-tooltip="Create node"
             aria-label="Create node"
           >
-            <span className="graph-create-node-icon">
+            <span className="graph-create-action-icon">
 
               <Squircle
                 size={18}
@@ -2467,7 +2869,7 @@ useImperativeHandle(ref, () => ({
               />
 
               <Plus
-                className="graph-create-node-plus"
+                className="graph-create-action-plus"
                 size={9}
                 strokeWidth={2.5}
               />
@@ -2493,11 +2895,17 @@ useImperativeHandle(ref, () => ({
 
               disabled={!selectedNode}
 
-              onClick={() =>
+              onClick={() => {
                 setShapeMenuOpen(
-                  (current) => !current
-                )
-              }
+                  current => !current
+                );
+                setEdgeStyleMenuOpen(
+                  false
+                );
+                setArrowShapeMenuOpen(
+                  false
+                );
+              }}
 
               data-tooltip={
                 selectedNode
@@ -2704,18 +3112,404 @@ useImperativeHandle(ref, () => ({
 
           data-tooltip={
             linkMode
-              ? "Cancel link mode"
-              : "Link nodes"
+              ? "Cancel linking"
+              : "Create link"
           }
 
-          aria-label="Link nodes"
+          aria-label={
+            linkMode
+              ? "Cancel linking"
+              : "Create link"
+          }
           aria-pressed={linkMode}
         >
-          <Link2
-            size={19}
-            strokeWidth={1.8}
-          />
+          <span className="graph-create-action-icon">
+
+            <MoveUpRight
+              size={18}
+              strokeWidth={1.8}
+            />
+
+            <Plus
+              className="graph-create-action-plus"
+              size={9}
+              strokeWidth={2.5}
+            />
+
+          </span>
         </button>
+
+        {/* EDGE STYLE */}
+
+        <div
+          className="graph-toolbar-popover-wrapper"
+          ref={edgeStyleMenuRef}
+        >
+
+          <button
+            type="button"
+
+            className="graph-toolbar-button"
+
+            disabled={
+              !selectedEdge
+            }
+
+            onClick={() => {
+              setEdgeStyleMenuOpen(
+                current => !current
+              );
+              setShapeMenuOpen(
+                false
+              );
+              setArrowShapeMenuOpen(
+                false
+              );
+            }}
+
+            data-tooltip={
+              selectedEdge
+                ? "Edge style"
+                : "Select an edge first"
+            }
+
+            aria-label="Edge style"
+          >
+
+            <span
+              className={`
+                graph-edge-style-preview
+                graph-edge-style-${
+                  selectedEdge?.lineStyle ||
+                  "solid"
+                }
+              `}
+            />
+
+            <ChevronDown
+              size={11}
+              strokeWidth={1.8}
+            />
+
+          </button>
+
+
+          {edgeStyleMenuOpen && (
+
+            <div className="graph-shape-popover">
+
+              {EDGE_STYLES.map(
+                ({ value, label }) => (
+
+                  <button
+                    key={value}
+                    type="button"
+
+                    className={`graph-shape-option ${
+                      (
+                        selectedEdge?.lineStyle ||
+                        "solid"
+                      ) === value
+                        ? "graph-shape-option-active"
+                        : ""
+                    }`}
+
+                    onClick={() =>
+                      changeSelectedEdgeStyle(
+                        value
+                      )
+                    }
+
+                    data-tooltip={label}
+                    aria-label={label}
+                  >
+
+                    <span
+                      className={`
+                        graph-edge-style-preview
+                        graph-edge-style-${value}
+                      `}
+                    />
+
+                  </button>
+
+                )
+              )}
+
+            </div>
+
+          )}
+
+        </div>
+
+        {/* EDGE COLOUR */}
+
+        <div className="graph-toolbar-popover-wrapper">
+
+          <button
+            type="button"
+
+            className="graph-toolbar-button"
+
+            disabled={
+              !selectedEdge
+            }
+
+            onClick={() =>
+              edgeColorInputRef
+                .current
+                ?.click()
+            }
+
+            data-tooltip={
+              selectedEdge
+                ? "Edge colour"
+                : "Select an edge first"
+            }
+
+            aria-label="Edge colour"
+          >
+
+            <span className="graph-toolbar-color-icon">
+
+              <Minus
+                size={20}
+                strokeWidth={2}
+              />
+
+              <span
+                className="graph-toolbar-color-indicator"
+
+                style={{
+                  backgroundColor:
+                    selectedEdge?.edgeColor ||
+                    getThemeColour(
+                      "--graph-edge",
+                      "#465873"
+                    ),
+                }}
+              />
+
+            </span>
+
+          </button>
+
+
+          <input
+            ref={
+              edgeColorInputRef
+            }
+
+            className="graph-hidden-color-input"
+
+            type="color"
+
+            value={
+              selectedEdge?.edgeColor ||
+              getThemeColour(
+                "--graph-edge",
+                "#465873"
+              )
+            }
+
+            onChange={
+              event =>
+                changeSelectedEdgeColor(
+                  event.target.value
+                )
+            }
+          />
+
+        </div>
+
+        {/* ARROW SHAPE */}
+
+        <div
+          className="graph-toolbar-popover-wrapper"
+          ref={arrowShapeMenuRef}
+        >
+
+          <button
+            type="button"
+
+            className="graph-toolbar-button"
+
+            disabled={
+              !selectedEdge
+            }
+
+            onClick={() => {
+              setArrowShapeMenuOpen(
+                current => !current
+              );
+              setShapeMenuOpen(
+                false
+              );
+              setEdgeStyleMenuOpen(
+                false
+              );
+            }}
+
+            data-tooltip={
+              selectedEdge
+                ? "Arrow shape"
+                : "Select an edge first"
+            }
+
+            aria-label="Arrow shape"
+          >
+
+            <ArrowRight
+              size={19}
+              strokeWidth={1.8}
+            />
+
+            <ChevronDown
+              size={11}
+              strokeWidth={1.8}
+            />
+
+          </button>
+
+          {arrowShapeMenuOpen && (
+
+            <div className="graph-shape-popover">
+
+              {ARROW_SHAPES.map(
+                ({
+                  value,
+                  label,
+                  Icon,
+                  rotate,
+                }) => (
+
+                  <button
+                    key={value}
+                    type="button"
+
+                    className={`graph-shape-option ${
+                      (
+                        selectedEdge?.arrowShape ||
+                        "triangle"
+                      ) === value
+                        ? "graph-shape-option-active"
+                        : ""
+                    }`}
+
+                    onClick={() =>
+                      changeSelectedArrowShape(
+                        value
+                      )
+                    }
+
+                    data-tooltip={label}
+                    aria-label={label}
+                  >
+
+                    <Icon
+                      size={18}
+                      strokeWidth={1.8}
+
+                      style={
+                        rotate
+                          ? {
+                              transform:
+                                "rotate(90deg)",
+                            }
+                          : undefined
+                      }
+                    />
+
+                  </button>
+
+                )
+              )}
+
+            </div>
+
+          )}
+
+        </div>
+
+        {/* ARROW COLOUR */}
+
+        <div className="graph-toolbar-popover-wrapper">
+
+          <button
+            type="button"
+
+            className="graph-toolbar-button"
+
+            disabled={
+              !selectedEdge
+            }
+
+            onClick={() =>
+              arrowColorInputRef
+                .current
+                ?.click()
+            }
+
+            data-tooltip={
+              selectedEdge
+                ? "Arrow colour"
+                : "Select an edge first"
+            }
+
+            aria-label="Arrow colour"
+          >
+
+            <span className="graph-toolbar-color-icon">
+
+              <ArrowRight
+                size={19}
+                strokeWidth={1.8}
+              />
+
+              <span
+                className="graph-toolbar-color-indicator"
+
+                style={{
+                  backgroundColor:
+                    selectedEdge?.arrowColor ||
+                    getThemeColour(
+                      "--graph-edge-arrow",
+                      "#7772ff"
+                    ),
+                }}
+              />
+
+            </span>
+
+          </button>
+
+
+          <input
+            ref={
+              arrowColorInputRef
+            }
+
+            className="graph-hidden-color-input"
+
+            type="color"
+
+            value={
+              selectedEdge?.arrowColor ||
+              getThemeColour(
+                "--graph-edge-arrow",
+                "#7772ff"
+              )
+            }
+
+            onChange={
+              event =>
+                changeSelectedArrowColor(
+                  event.target.value
+                )
+            }
+          />
+
+        </div>
 
         <span className="graph-toolbar-divider" />
 
@@ -2724,6 +3518,7 @@ useImperativeHandle(ref, () => ({
         {/* ================================================= */}
 
         {/* DELETE ELEMENT */}
+
         <button
           type="button"
           className="graph-toolbar-button"
