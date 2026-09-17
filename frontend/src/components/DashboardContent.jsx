@@ -1,4 +1,4 @@
-import treeNotesMark from "../assets/treenotes-logo.png";
+import treeNotesLogo from "../assets/logo.png";
 
 function DashboardContent() {
   return (
@@ -29,7 +29,7 @@ function DashboardContent() {
         </div>
 
         <div className="welcome-image" aria-hidden="true">
-          <img src={treeNotesMark} alt="" />
+          <img src={treeNotesLogo} alt="" />
         </div>
       </section>
     </div>
