@@ -377,6 +377,10 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   const semanticSearchRef = useRef(null);
 
+  // =========================================================
+  // Node Rename
+  // =========================================================
+
   const [editingNodeId, setEditingNodeId] = useState(null);
   const editingNodeIdRef = useRef(null);
   const [renameValue, setRenameValue] = useState("");
@@ -388,6 +392,22 @@ const GraphPanel = forwardRef(function GraphPanel(
   });
 
   const [renameZoom, setRenameZoom] = useState(1);
+
+  // =========================================================
+  // Edge Relationship Editing
+  // =========================================================
+
+  const [editingEdgeId, setEditingEdgeId] = useState(null);
+  const editingEdgeIdRef = useRef(null);
+  const [relationshipValue, setRelationshipValue] = useState("");
+  const relationshipOriginalValueRef = useRef("");
+
+  const [relationshipPosition, setRelationshipPosition] = useState({
+    x: 0,
+    y: 0,
+  });
+
+  const [relationshipZoom, setRelationshipZoom] = useState(1);
 
   /*
     Keep GraphPanel synced with the graph_json belonging to the
@@ -433,10 +453,18 @@ const GraphPanel = forwardRef(function GraphPanel(
     setArrowShapeMenuOpen(false);
     setGraphFeedback(null);
 
+    // Clear UI state and references belonging to linking mode.
     linkModeRef.current = false;
     firstNodeToLinkRef.current = null;
     setLinkMode(false);
     setFirstNodeToLink(null);
+
+    // Clear UI state belonging to previous editing node and edge.
+    editingNodeIdRef.current = null;
+    setEditingNodeId(null);
+    editingEdgeIdRef.current = null;
+    setEditingEdgeId(null);
+    setRelationshipValue("");
   }, [noteId, initialGraph]);
 
   async function generateGraph() {
@@ -928,6 +956,36 @@ const GraphPanel = forwardRef(function GraphPanel(
             opacity: 0.8,
 
             "arrow-scale": 1.1,
+
+            /*
+              Relationship label
+            */
+            label:
+              "data(relationship)",
+
+            color:
+              graphTheme.nodeText,
+
+            "font-size":
+              "12px",
+
+            "font-weight":
+              "500",
+
+            /*
+              Lift the label slightly above the edge
+              rather than drawing the line through it.
+            */
+            "text-margin-y":
+              -9,
+
+            /*
+              Allows clicking/double-clicking the
+              label itself to count as interacting
+              with the edge.
+            */
+            "text-events":
+              "yes",
           },
         },
 
@@ -1138,6 +1196,10 @@ const GraphPanel = forwardRef(function GraphPanel(
       }
     );
 
+  // =========================================================
+  // DOUBLE CLICK NODE = RENAME NODE
+  // =========================================================
+
   cy.on(
     "dbltap",
     "node",
@@ -1222,6 +1284,121 @@ const GraphPanel = forwardRef(function GraphPanel(
 
       setEditingNodeId(
         node.id()
+      );
+
+    }
+  );
+
+  // =========================================================
+  // DOUBLE CLICK EDGE = EDIT RELATIONSHIP
+  // =========================================================
+
+  cy.on(
+    "dbltap",
+    "edge",
+    (event) => {
+
+      /*
+        Don't start relationship editing while
+        the user is actively creating a link.
+      */
+      if (linkModeRef.current) {
+        return;
+      }
+
+
+      const edge =
+        event.target;
+
+
+      const sourceNode =
+        edge.source();
+
+      const targetNode =
+        edge.target();
+
+
+      const midpoint =
+        edge.renderedMidpoint();
+
+
+      const currentRelationship =
+        edge.data("relationship") ||
+        "";
+
+
+      /*
+        Keep normal graph selection synchronised.
+      */
+      cy.elements().unselect();
+
+      edge.select();
+
+
+      setSelectedEdge({
+        ...edge.data(),
+
+        sourceLabel:
+          sourceNode.data("label") ||
+          sourceNode.id(),
+
+        targetLabel:
+          targetNode.data("label") ||
+          targetNode.id(),
+      });
+
+
+      setSelectedNode(null);
+
+
+      setShapeMenuOpen(false);
+      setEdgeStyleMenuOpen(false);
+      setArrowShapeMenuOpen(false);
+
+
+      /*
+        Store existing value so Escape can
+        effectively leave it unchanged.
+      */
+      relationshipOriginalValueRef.current =
+        currentRelationship;
+
+
+      setRelationshipValue(
+        currentRelationship
+      );
+
+
+      setRelationshipPosition({
+        x:
+          midpoint.x,
+
+        y:
+          midpoint.y,
+      });
+
+
+      setRelationshipZoom(
+        cy.zoom()
+      );
+
+
+      /*
+        Hide Cytoscape's normal painted label
+        while our editable field is on top.
+      */
+      edge.style(
+        "text-opacity",
+        0
+      );
+
+
+      editingEdgeIdRef.current =
+        edge.id();
+
+
+      setEditingEdgeId(
+        edge.id()
       );
 
     }
@@ -1536,6 +1713,53 @@ function syncRenameOverlay() {
   );
 }
 
+/* =========================================================
+   KEEP EDGE RELATIONSHIP EDITOR SYNCED WITH GRAPH
+   ========================================================= */
+
+function syncRelationshipOverlay() {
+
+  const edgeId =
+    editingEdgeIdRef.current;
+
+
+  if (!edgeId) {
+    return;
+  }
+
+
+  const edge =
+    cy.getElementById(
+      edgeId
+    );
+
+
+  if (
+    !edge ||
+    edge.empty()
+  ) {
+    return;
+  }
+
+
+  const midpoint =
+    edge.renderedMidpoint();
+
+
+  setRelationshipPosition({
+    x:
+      midpoint.x,
+
+    y:
+      midpoint.y,
+  });
+
+
+  setRelationshipZoom(
+    cy.zoom()
+  );
+
+}
 
 /*
   Keep the HTML rename field aligned with the
@@ -1546,6 +1770,18 @@ cy.on(
   syncRenameOverlay
 );
 
+cy.on(
+  "zoom pan",
+  syncRelationshipOverlay
+);
+
+cy.on(
+  "drag position",
+  "node",
+  () => {
+    syncRelationshipOverlay();
+  }
+);
 
 /*
   Keep it aligned if the node itself is dragged
@@ -2453,6 +2689,170 @@ function finishNodeRename({
   setEditingNodeId(
     null
   );
+
+}
+
+function finishEdgeRelationship({
+  cancel = false,
+} = {}) {
+
+  if (!cyRef.current) {
+    return;
+  }
+
+
+  const edgeId =
+    editingEdgeIdRef.current;
+
+
+  if (!edgeId) {
+    return;
+  }
+
+
+  const edge =
+    cyRef.current.getElementById(
+      edgeId
+    );
+
+
+  if (
+    !edge ||
+    edge.empty()
+  ) {
+
+    editingEdgeIdRef.current =
+      null;
+
+    setEditingEdgeId(
+      null
+    );
+
+    return;
+  }
+
+
+  /*
+    ESCAPE:
+    Nothing has been written into Cytoscape yet,
+    so simply restore the old painted label.
+  */
+  if (cancel) {
+
+    setRelationshipValue(
+      relationshipOriginalValueRef.current
+    );
+
+
+    edge.style(
+      "text-opacity",
+      1
+    );
+
+
+    editingEdgeIdRef.current =
+      null;
+
+
+    setEditingEdgeId(
+      null
+    );
+
+
+    return;
+  }
+
+
+  const cleanRelationship =
+    relationshipValue.trim();
+
+
+  const oldRelationship =
+    relationshipOriginalValueRef.current
+      .trim();
+
+
+  /*
+    Empty value means remove the relationship.
+  */
+  if (cleanRelationship) {
+
+    edge.data(
+      "relationship",
+      cleanRelationship
+    );
+
+  } else {
+
+    edge.data(
+      "relationship",
+      ""
+    );
+
+    cyRef.current
+      .style()
+      .update();
+
+  }
+
+
+  /*
+    Keep React's Selected Edge card in sync.
+  */
+  setSelectedEdge(
+    current => {
+
+      if (
+        !current ||
+        current.id !== edgeId
+      ) {
+        return current;
+      }
+
+
+      return {
+        ...current,
+
+        relationship:
+          cleanRelationship,
+      };
+
+    }
+  );
+
+
+  edge.style(
+    "text-opacity",
+    1
+  );
+
+  relationshipOriginalValueRef.current = cleanRelationship;
+
+  editingEdgeIdRef.current =
+    null;
+
+
+  setEditingEdgeId(
+    null
+  );
+
+
+  /*
+    Avoid firing feedback if nothing actually changed.
+  */
+  if (
+    cleanRelationship !==
+    oldRelationship
+  ) {
+
+    showGraphFeedback(
+      cleanRelationship
+        ? `Relationship updated: ${cleanRelationship}`
+        : "Relationship removed",
+      "success"
+    );
+
+  }
 
 }
 
@@ -3554,53 +3954,153 @@ useImperativeHandle(ref, () => ({
           />
 
           {editingNodeId && (
-          <input
-            className="graph-inline-rename"
-            type="text"
-            value={renameValue}
-            autoFocus
-            style={{
-              left: `${renamePosition.x}px`,
-              top: `${renamePosition.y}px`,
-              width: `${110 * renameZoom}px`,
-              height: `${52 * renameZoom}px`,
-              fontSize: `${15 * renameZoom}px`,
-              lineHeight: `${52 * renameZoom}px`,
-              color:
-                selectedNode?.textColor ||
-                getThemeColour(
-                  "--graph-node-text",
-                  "#ffffff"
-                ),
-            }}
-            onChange={(event) =>
-              setRenameValue(event.target.value)
-            }
-            onBlur={() =>
-              finishNodeRename()
-            }
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
+            <input
+              className="graph-inline-rename"
+              type="text"
+              value={renameValue}
+              autoFocus
+              style={{
+                left: `${renamePosition.x}px`,
+                top: `${renamePosition.y}px`,
+                width: `${110 * renameZoom}px`,
+                height: `${52 * renameZoom}px`,
+                fontSize: `${15 * renameZoom}px`,
+                lineHeight: `${52 * renameZoom}px`,
+                color:
+                  selectedNode?.textColor ||
+                  getThemeColour(
+                    "--graph-node-text",
+                    "#ffffff"
+                  ),
+              }}
+              onChange={(event) =>
+                setRenameValue(event.target.value)
+              }
+              onBlur={() =>
+                finishNodeRename()
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
 
-                finishNodeRename();
+                  finishNodeRename();
+                }
+
+                if (event.key === "Escape") {
+                  event.preventDefault();
+
+                  finishNodeRename({
+                    cancel: true,
+                  });
+                }
+              }}
+            />
+          )}
+
+          {editingEdgeId && (
+            <input
+              className="graph-inline-edge-relationship"
+
+              type="text"
+
+              value={
+                relationshipValue
               }
 
-              if (event.key === "Escape") {
-                event.preventDefault();
+              autoFocus
 
-                finishNodeRename({
-                  cancel: true,
-                });
+              spellCheck={false}
+
+              placeholder="Relationship"
+
+              style={{
+                left:
+                  `${relationshipPosition.x}px`,
+
+                top:
+                  `${relationshipPosition.y}px`,
+
+                width:
+                  `${
+                    Math.max(
+                      90,
+                      Math.min(
+                        220,
+                        relationshipValue.length * 7 +
+                          36
+                      )
+                    ) *
+                    relationshipZoom
+                  }px`,
+
+                height:
+                  `${
+                    28 *
+                    relationshipZoom
+                  }px`,
+
+                fontSize:
+                  `${
+                    12 *
+                    relationshipZoom
+                  }px`,
+
+                lineHeight:
+                  `${
+                    26 *
+                    relationshipZoom
+                  }px`,
+              }}
+
+              onChange={
+                event =>
+                  setRelationshipValue(
+                    event.target.value
+                  )
               }
-            }}
-          />
-        )}
 
+              onBlur={() =>
+                finishEdgeRelationship()
+              }
+
+              onKeyDown={
+                event => {
+
+                  if (
+                    event.key ===
+                    "Enter"
+                  ) {
+
+                    event.preventDefault();
+
+                    finishEdgeRelationship();
+
+                  }
+
+
+                  if (
+                    event.key ===
+                    "Escape"
+                  ) {
+
+                    event.preventDefault();
+
+                    finishEdgeRelationship({
+                      cancel: true,
+                    });
+
+                  }
+
+                }
+              }
+            />
+
+          )}
 
           {/* CURRENT GRAPH SELECTION */}
 
           {(selectedNode || selectedEdge) && (
+
             <div className="graph-selected-node-overlay">
 
               <span>
@@ -3609,13 +4109,28 @@ useImperativeHandle(ref, () => ({
                   : "Selected edge"}
               </span>
 
+
               <strong>
                 {selectedNode
                   ? selectedNode.label
                   : `${selectedEdge.sourceLabel} → ${selectedEdge.targetLabel}`}
               </strong>
 
+
+              {selectedEdge && (
+
+                <div className="graph-selected-edge-relationship">
+
+                  {selectedEdge.relationship?.trim()
+                    ? selectedEdge.relationship
+                    : "Double-click edge to add relationship"}
+
+                </div>
+
+              )}
+
             </div>
+
           )}
 
 
