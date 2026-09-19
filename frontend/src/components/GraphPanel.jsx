@@ -6,6 +6,7 @@ import {
   RectangleHorizontal,
   Square,
   Squircle,
+  SquareDashed,
   Diamond,
   Triangle,
   Trash2,
@@ -27,6 +28,8 @@ import {
   MousePointer2,
   CircleX,
 } from "lucide-react";
+import SquareDottedIcon from "./icons/SquareDottedIcon";
+import VeeIcon from "./icons/VeeIcon";
 import cytoscape from "cytoscape";
 import { semanticSearchGraph,} from "../api/graphApi";
 
@@ -134,6 +137,24 @@ const NODE_SHAPES = [
   },
 ];
 
+const NODE_BORDER_STYLES = [
+  {
+    value: "solid",
+    label: "Solid border",
+    Icon: Square,
+  },
+  {
+    value: "dashed",
+    label: "Dashed border",
+    Icon: SquareDashed,
+  },
+  {
+    value: "dotted",
+    label: "Dotted border",
+    Icon: SquareDottedIcon,
+  },
+];
+
 const EDGE_STYLES = [
   {
     value: "solid",
@@ -159,7 +180,7 @@ const ARROW_SHAPES = [
   {
     value: "vee",
     label: "Vee",
-    Icon: MousePointer2,
+    Icon: VeeIcon,
   },
   {
     value: "circle",
@@ -343,6 +364,13 @@ const GraphPanel = forwardRef(function GraphPanel(
   // color picker for node text 
   const nodeTextColorInputRef = useRef(null);
 
+  // Node border colour picker
+  const nodeBorderColorInputRef = useRef(null);
+
+  // Node border style popover
+  const nodeBorderStyleMenuRef = useRef(null);
+  const [nodeBorderStyleMenuOpen, setNodeBorderStyleMenuOpen] = useState(false);
+
   // Shape selector popover
   const shapeMenuRef = useRef(null);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
@@ -449,6 +477,7 @@ const GraphPanel = forwardRef(function GraphPanel(
     setSelectedNode(null);
     setSelectedEdge(null);
     setShapeMenuOpen(false);
+    setNodeBorderStyleMenuOpen(false);
     setEdgeStyleMenuOpen(false);
     setArrowShapeMenuOpen(false);
     setGraphFeedback(null);
@@ -658,6 +687,17 @@ const GraphPanel = forwardRef(function GraphPanel(
           graphTheme.nodeText,
       })
 
+      .selector("node[borderColor]")
+      .style({
+        "border-color":
+          "data(borderColor)",
+      })
+
+      .selector("node[borderStyle]")
+      .style({
+        "border-style":
+          "data(borderStyle)",
+      })
 
       /*
         Normal selected node.
@@ -685,7 +725,6 @@ const GraphPanel = forwardRef(function GraphPanel(
         "underlay-padding":
           8,
       })
-
 
       /*
         First node selected while
@@ -856,10 +895,34 @@ const GraphPanel = forwardRef(function GraphPanel(
             "text-wrap": "wrap",
             "text-max-width": "75px",
 
-            "border-width": 1,
+            "border-width": 2,
             "border-color": graphTheme.nodeBorder,
 
             "overlay-opacity": 0,
+          },
+        },
+
+        /* =====================================================
+          SAVED NODE BORDER COLOUR
+          ===================================================== */
+
+        {
+          selector: "node[borderColor]",
+          style: {
+            "border-color":
+              "data(borderColor)",
+          },
+        },
+
+        /* =====================================================
+          SAVED NODE BORDER STYLE
+          ===================================================== */
+
+        {
+          selector: "node[borderStyle]",
+          style: {
+            "border-style":
+              "data(borderStyle)",
           },
         },
         
@@ -1089,7 +1152,7 @@ const GraphPanel = forwardRef(function GraphPanel(
 
           style: {
             "line-color":
-              "data(edgeColor)",
+              graphTheme.selectedEdge,
           },
         },
 
@@ -1099,7 +1162,7 @@ const GraphPanel = forwardRef(function GraphPanel(
 
           style: {
             "target-arrow-color":
-              "data(arrowColor)",
+              graphTheme.selectedEdge,
           },
         },
 
@@ -1352,6 +1415,7 @@ const GraphPanel = forwardRef(function GraphPanel(
 
 
       setShapeMenuOpen(false);
+      setNodeBorderStyleMenuOpen(false);
       setEdgeStyleMenuOpen(false);
       setArrowShapeMenuOpen(false);
 
@@ -1447,6 +1511,8 @@ const GraphPanel = forwardRef(function GraphPanel(
       setSelectedEdge(null);
 
       setShapeMenuOpen(false);
+
+      setNodeBorderStyleMenuOpen(false);
 
       setEdgeStyleMenuOpen(false);
 
@@ -1623,6 +1689,8 @@ const GraphPanel = forwardRef(function GraphPanel(
 
       setShapeMenuOpen(false);
 
+      setNodeBorderStyleMenuOpen(false);
+
       setEdgeStyleMenuOpen(false);
 
       setArrowShapeMenuOpen(false);
@@ -1663,6 +1731,8 @@ const GraphPanel = forwardRef(function GraphPanel(
       setSelectedEdge(null);
 
       setShapeMenuOpen(false);
+
+      setNodeBorderStyleMenuOpen(false);
 
       setEdgeStyleMenuOpen(false);
 
@@ -2117,6 +2187,8 @@ function focusNode(nodeId) {
 
   setShapeMenuOpen(false);
 
+  setNodeBorderStyleMenuOpen(false);
+
   setEdgeStyleMenuOpen(false);
 
   setArrowShapeMenuOpen(false);
@@ -2292,9 +2364,64 @@ function changeSelectedNodeShape(newShape) {
 
   setShapeMenuOpen(false);
 
+  setNodeBorderStyleMenuOpen(false);
+
   setEdgeStyleMenuOpen(false);
 
   setArrowShapeMenuOpen(false);
+}
+
+function changeSelectedNodeBorderColor(
+  newColor
+) {
+  const node =
+    getSelectedCyNode();
+
+  if (!node) {
+    return;
+  }
+
+  node.data(
+    "borderColor",
+    newColor
+  );
+
+  setSelectedNode(
+    current => ({
+      ...current,
+      borderColor:
+        newColor,
+    })
+  );
+}
+
+
+function changeSelectedNodeBorderStyle(
+  newStyle
+) {
+  const node =
+    getSelectedCyNode();
+
+  if (!node) {
+    return;
+  }
+
+  node.data(
+    "borderStyle",
+    newStyle
+  );
+
+  setSelectedNode(
+    current => ({
+      ...current,
+      borderStyle:
+        newStyle,
+    })
+  );
+
+  setNodeBorderStyleMenuOpen(
+    false
+  );
 }
 
 function changeSelectedEdgeColor(
@@ -2553,51 +2680,51 @@ function deleteSelectedElement() {
 }
 
   function createManualNode() {
-  const cy = cyRef.current;
+    const cy = cyRef.current;
 
-  if (!cy) return;
+    if (!cy) return;
 
-  const nodeId = `manual-node-${Date.now()}`;
+    const nodeId = `manual-node-${Date.now()}`;
 
-  const extent = cy.extent();
+    const extent = cy.extent();
 
-  const newNode = cy.add({
-    group: "nodes",
-    data: {
-      id: nodeId,
-      label: "New Node",
-      color: 
+    const newNode = cy.add({
+      group: "nodes",
+      data: {
+        id: nodeId,
+        label: "New Node",
+        color: 
+          getThemeColour(
+            "--graph-node-bg",
+            "#6366F1"
+          ),
+        textColor:
         getThemeColour(
-          "--graph-node-bg",
-          "#6366F1"
+          "--graph-node-text",
+          "#ffffff"
         ),
-      textColor:
-      getThemeColour(
-        "--graph-node-text",
-        "#ffffff"
-      ),
-      shape: "round-rectangle",
-    },
-    position: {
-      x: (extent.x1 + extent.x2) / 2,
-      y: (extent.y1 + extent.y2) / 2,
-    },
-  });
+        shape: "round-rectangle",
+      },
+      position: {
+        x: (extent.x1 + extent.x2) / 2,
+        y: (extent.y1 + extent.y2) / 2,
+      },
+    });
 
-  cy.elements().unselect();
-  newNode.select();
+    cy.elements().unselect();
+    newNode.select();
 
-  setSelectedEdge(null);
+    setSelectedEdge(null);
 
-  setSelectedNode({
-    ...newNode.data(),
-  });
+    setSelectedNode({
+      ...newNode.data(),
+    });
 
-  showGraphFeedback(
-    "New node created",
-    "success"
-  );
-}
+    showGraphFeedback(
+      "New node created",
+      "success"
+    );
+  }
 
 
 function finishNodeRename({
@@ -3021,6 +3148,12 @@ useEffect(() => {
       shapeMenuRef.current?.contains(
         event.target
       );
+    
+    const clickedInsideNodeBorderStyle =
+      nodeBorderStyleMenuRef.current &&
+      nodeBorderStyleMenuRef.current.contains(
+        event.target
+      );
 
 
     const clickedInsideEdgeStyle =
@@ -3048,6 +3181,10 @@ useEffect(() => {
       setShapeMenuOpen(false);
     }
 
+    if (!clickedInsideNodeBorderStyle) {
+      setNodeBorderStyleMenuOpen(false);
+    }
+
 
     if (!clickedInsideEdgeStyle) {
       setEdgeStyleMenuOpen(false);
@@ -3069,6 +3206,8 @@ useEffect(() => {
 
 
     setShapeMenuOpen(false);
+
+    setNodeBorderStyleMenuOpen(false);
 
     setEdgeStyleMenuOpen(false);
 
@@ -3169,6 +3308,76 @@ useImperativeHandle(ref, () => ({
   },
 
 }));
+
+
+/* =========================================================
+   CURRENT TOOLBAR ICONS
+   ========================================================= */
+
+const currentNodeShape =
+  selectedNode
+    ? NODE_SHAPES.find(
+        option =>
+          option.value ===
+          (
+            selectedNode.shape ||
+            "round-rectangle"
+          )
+      )
+    : null;
+
+const CurrentNodeShapeIcon =
+  selectedNode
+    ? (
+        currentNodeShape?.Icon ||
+        Squircle
+      )
+    : Shapes;
+
+
+const currentNodeBorderStyle =
+  NODE_BORDER_STYLES.find(
+    option =>
+      option.value ===
+      (
+        selectedNode?.borderStyle ||
+        "solid"
+      )
+  ) ||
+  NODE_BORDER_STYLES.find(
+    option =>
+      option.value ===
+      "solid"
+  );
+
+const CurrentNodeBorderStyleIcon =
+  currentNodeBorderStyle?.Icon ||
+  Square;
+
+
+const currentArrowShape =
+  ARROW_SHAPES.find(
+    option =>
+      option.value ===
+      (
+        selectedEdge?.arrowShape ||
+        "triangle"
+      )
+  ) ||
+  ARROW_SHAPES.find(
+    option =>
+      option.value ===
+      "triangle"
+  );
+
+const CurrentArrowShapeIcon =
+  currentArrowShape?.Icon ||
+  Triangle;
+
+
+/* =========================================================
+   RENDER
+   ========================================================= */
 
   return (
     <section className="graph-panel">
@@ -3317,7 +3526,7 @@ useImperativeHandle(ref, () => ({
               aria-haspopup="true"
               aria-expanded={shapeMenuOpen}
             >
-              <Shapes
+              <CurrentNodeShapeIcon
                 size={19}
                 strokeWidth={1.8}
               />
@@ -3491,6 +3700,178 @@ useImperativeHandle(ref, () => ({
           />
         </div>
 
+        {/* NODE BORDER STYLE */}
+
+        <div
+          className="graph-toolbar-popover-wrapper"
+          ref={nodeBorderStyleMenuRef}
+        >
+          <button
+            type="button"
+
+            className={`graph-toolbar-button ${
+              nodeBorderStyleMenuOpen
+                ? "graph-toolbar-button-active"
+                : ""
+            }`}
+
+            disabled={!selectedNode}
+
+            onClick={() => {
+              setNodeBorderStyleMenuOpen(
+                current => !current
+              );
+
+              setShapeMenuOpen(false);
+              setEdgeStyleMenuOpen(false);
+              setArrowShapeMenuOpen(false);
+            }}
+
+            data-tooltip={
+              selectedNode
+                ? "Node border style"
+                : "Select a node first"
+            }
+
+            aria-label="Node border style"
+            aria-haspopup="true"
+            aria-expanded={
+              nodeBorderStyleMenuOpen
+            }
+          >
+            <CurrentNodeBorderStyleIcon
+              size={19}
+              strokeWidth={1.8}
+            />
+
+            <ChevronDown
+              size={11}
+              strokeWidth={1.8}
+            />
+          </button>
+
+
+          {nodeBorderStyleMenuOpen && (
+            <div className="graph-shape-popover">
+
+              {NODE_BORDER_STYLES.map(
+                ({
+                  value,
+                  label,
+                  Icon,
+                }) => (
+
+                  <button
+                    key={value}
+                    type="button"
+
+                    className={`graph-shape-option ${
+                      (
+                        selectedNode
+                          ?.borderStyle ||
+                        "solid"
+                      ) === value
+                        ? "graph-shape-option-active"
+                        : ""
+                    }`}
+
+                    onClick={() =>
+                      changeSelectedNodeBorderStyle(
+                        value
+                      )
+                    }
+
+                    data-tooltip={label}
+                    aria-label={label}
+                  >
+                    <Icon
+                      size={18}
+                      strokeWidth={1.8}
+                    />
+                  </button>
+
+                )
+              )}
+
+            </div>
+          )}
+        </div>
+
+
+        {/* NODE BORDER COLOUR */}
+
+        <div className="graph-toolbar-popover-wrapper">
+
+          <button
+            type="button"
+
+            className="graph-toolbar-button"
+
+            disabled={!selectedNode}
+
+            onClick={() =>
+              nodeBorderColorInputRef
+                .current
+                ?.click()
+            }
+
+            data-tooltip={
+              selectedNode
+                ? "Node border colour"
+                : "Select a node first"
+            }
+
+            aria-label="Node border colour"
+          >
+            <span className="graph-toolbar-color-icon">
+
+              <SquareDashed
+                size={19}
+                strokeWidth={1.8}
+              />
+
+              <span
+                className="graph-toolbar-color-indicator"
+                style={{
+                  backgroundColor:
+                    selectedNode
+                      ?.borderColor ||
+                    getThemeColour(
+                      "--graph-node-border",
+                      "#818CF8"
+                    ),
+                }}
+              />
+
+            </span>
+          </button>
+
+
+          <input
+            ref={nodeBorderColorInputRef}
+
+            className="graph-hidden-color-input"
+
+            type="color"
+
+            value={
+              selectedNode
+                ?.borderColor ||
+              getThemeColour(
+                "--graph-node-border",
+                "#818CF8"
+              )
+            }
+
+            onChange={(event) =>
+              changeSelectedNodeBorderColor(
+                event.target.value
+              )
+            }
+          />
+
+        </div>
+
         <span className="graph-toolbar-divider" />
 
         {/* ================================================= */}
@@ -3549,7 +3930,11 @@ useImperativeHandle(ref, () => ({
           <button
             type="button"
 
-            className="graph-toolbar-button"
+            className={`graph-toolbar-button ${
+              edgeStyleMenuOpen
+                ? "graph-toolbar-button-active"
+                : ""
+            }`}
 
             disabled={
               !selectedEdge
@@ -3732,7 +4117,11 @@ useImperativeHandle(ref, () => ({
           <button
             type="button"
 
-            className="graph-toolbar-button"
+            className={`graph-toolbar-button ${
+              arrowShapeMenuOpen
+                ? "graph-toolbar-button-active"
+                : ""
+            }`}
 
             disabled={
               !selectedEdge
@@ -3759,9 +4148,18 @@ useImperativeHandle(ref, () => ({
             aria-label="Arrow shape"
           >
 
-            <ArrowRight
+            <CurrentArrowShapeIcon
               size={19}
               strokeWidth={1.8}
+
+              style={
+                currentArrowShape?.rotate
+                  ? {
+                      transform:
+                        "rotate(90deg)",
+                    }
+                  : undefined
+              }
             />
 
             <ChevronDown
