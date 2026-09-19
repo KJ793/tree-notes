@@ -237,6 +237,440 @@ const ARROW_SHAPES = [
   },
 ];
 
+/* =========================================================
+   NODE AUTO-SIZING
+   ========================================================= */
+
+const NODE_MIN_WIDTH = 110;
+const NODE_MIN_HEIGHT = 52;
+
+const NODE_FONT_SIZE = 15;
+const NODE_LINE_HEIGHT = 19;
+
+/*
+  Maximum width of the actual label text before
+  Cytoscape wraps it onto another line.
+*/
+const NODE_TEXT_WRAP_WIDTH = 150;
+
+
+/*
+  Shapes have very different amounts of usable
+  internal space.
+
+  Rectangles can use almost their entire body.
+  Diamond / triangle / vee need substantially more
+  outer size to contain the same text comfortably.
+*/
+const NODE_SHAPE_SIZE_FACTORS = {
+
+  rectangle: {
+    width: 1,
+    height: 1,
+  },
+
+  "round-rectangle": {
+    width: 1,
+    height: 1,
+  },
+
+  ellipse: {
+    width: 1.2,
+    height: 1.15,
+  },
+
+  diamond: {
+    width: 1.6,
+    height: 1.6,
+  },
+
+  triangle: {
+    width: 1.8,
+    height: 1.9,
+  },
+
+  vee: {
+    width: 1.9,
+    height: 1.9,
+  },
+
+  hexagon: {
+    width: 1.2,
+    height: 1.1,
+  },
+
+  octagon: {
+    width: 1.15,
+    height: 1.1,
+  },
+
+};
+
+function calculateNodeSize(
+  label,
+  shape = "round-rectangle"
+) {
+
+  const cleanLabel =
+    String(
+      label || "New Node"
+    ).trim();
+
+
+  /*
+    Canvas lets us measure approximately the same
+    text dimensions Cytoscape is rendering.
+  */
+  const canvas =
+    document.createElement(
+      "canvas"
+    );
+
+  const context =
+    canvas.getContext("2d");
+
+
+  context.font =
+    `500 ${NODE_FONT_SIZE}px Inter, system-ui, sans-serif`;
+
+
+  const words =
+    cleanLabel.split(/\s+/);
+
+
+  const lines = [];
+
+  let currentLine = "";
+
+  /*
+    Find the widest individual word.
+
+    If one word is wider than our normal wrapping
+    width, expand the node instead of cutting the word.
+  */
+  const longestWordWidth =
+    Math.max(
+      ...words.map(
+        word =>
+          context.measureText(
+            word
+          ).width
+      ),
+      1
+    );
+
+
+  /*
+    Normally wrap around 150px.
+
+    A single long word is allowed to make the
+    text area wider so it remains intact.
+  */
+  const effectiveWrapWidth =
+    Math.max(
+      NODE_TEXT_WRAP_WIDTH,
+      longestWordWidth + 4
+    );
+
+  for (const word of words) {
+
+    const testLine =
+      currentLine
+        ? `${currentLine} ${word}`
+        : word;
+
+
+    if (
+      context.measureText(
+        testLine
+      ).width >
+        effectiveWrapWidth &&
+      currentLine
+    ) {
+
+      lines.push(
+        currentLine
+      );
+
+      currentLine =
+        word;
+
+    } else {
+
+      currentLine =
+        testLine;
+
+    }
+
+  }
+
+
+  if (currentLine) {
+
+    lines.push(
+      currentLine
+    );
+
+  }
+
+  const widestLine =
+    Math.max(
+      ...lines.map(
+        line =>
+          context.measureText(
+            line
+          ).width
+      ),
+      1
+    );
+
+
+  const textHeight =
+    Math.max(
+      lines.length,
+      1
+    ) *
+    NODE_LINE_HEIGHT;
+
+
+  /*
+    Normal breathing room around the text.
+  */
+  const paddedWidth =
+    widestLine + 34;
+
+  const paddedHeight =
+    textHeight + 22;
+
+
+  const factors =
+    NODE_SHAPE_SIZE_FACTORS[
+      shape
+    ] ??
+    NODE_SHAPE_SIZE_FACTORS[
+      "round-rectangle"
+    ];
+
+  const width =
+    Math.max(
+      NODE_MIN_WIDTH,
+      Math.ceil(
+        paddedWidth *
+        factors.width
+      )
+    );
+
+  const height =
+    Math.max(
+      NODE_MIN_HEIGHT,
+      Math.ceil(
+        paddedHeight *
+        factors.height
+      )
+    );
+
+
+  /*
+    Cytoscape centres labels using the node's
+    bounding box.
+
+    A triangle's visual centre sits lower than
+    its bounding-box centre, so move only triangle
+    labels downward proportionally to their height.
+  */
+  const textMarginY =
+    shape === "triangle"
+      ? Math.round(
+          height * 0.12
+        )
+      : 0;
+
+  return {
+
+    width,
+
+    height,
+
+    textMaxWidth:
+      Math.ceil(
+        effectiveWrapWidth
+      ),
+
+    textMarginY,
+
+  };
+}
+
+function resizeNodeToLabel(
+  node
+) {
+
+  if (
+    !node ||
+    node.empty()
+  ) {
+    return;
+  }
+
+
+  const label =
+    node.data("label") ||
+    "New Node";
+
+  const shape =
+    node.data("shape") ||
+    "round-rectangle";
+
+
+  const {
+    width,
+    height,
+    textMaxWidth,
+    textMarginY,
+  } =
+    calculateNodeSize(
+      label,
+      shape
+    );
+
+
+  /*
+    Keep these as node data so the Cytoscape
+    stylesheet can consume them automatically.
+  */
+  node.data({
+    nodeWidth:
+      width,
+
+    nodeHeight:
+      height,
+
+    nodeTextMaxWidth:
+      textMaxWidth,
+
+    nodeTextMarginY:
+      textMarginY,
+  });
+
+  refreshConnectedEdgeLabels(
+    node
+  );
+}
+
+function refreshConnectedEdgeLabels(
+  node
+) {
+
+  if (
+    !node ||
+    node.empty()
+  ) {
+    return;
+  }
+
+
+  const cy =
+    node.cy();
+
+
+  const connectedEdges =
+    node.connectedEdges()
+      .filter(
+        edge =>
+          String(
+            edge.data(
+              "relationship"
+            ) || ""
+          ).trim()
+      );
+
+
+  if (
+    connectedEdges.length === 0
+  ) {
+    return;
+  }
+
+  /*
+    First allow Cytoscape to finish applying
+    the node's new width / height.
+  */
+  requestAnimationFrame(() => {
+
+    /*
+      Then give the renderer one more frame to
+      recalculate the new edge endpoints.
+    */
+    requestAnimationFrame(() => {
+
+      connectedEdges.forEach(
+        edge => {
+
+          const relationship =
+            edge.data(
+              "relationship"
+            ) || "";
+
+          /*
+            Force Cytoscape to rebuild the label's
+            rendered bounding box.
+
+            The zero-width character changes the
+            underlying label value without creating
+            any visible change on screen.
+          */
+          edge.style(
+            "label",
+            `${relationship}\u200B`
+          );
+
+        }
+      );
+
+      /*
+        On the following frame, remove the temporary
+        style override so the edge returns to using:
+
+          label: data(relationship)
+
+        from the normal Cytoscape stylesheet.
+      */
+      requestAnimationFrame(() => {
+
+        connectedEdges.forEach(
+          edge => {
+
+            edge.removeStyle(
+              "label"
+            );
+
+            if (
+              edge.id() !==
+              editingEdgeIdRef.current
+            ) {
+
+              edge.style(
+                "text-opacity",
+                1
+              );
+
+            }
+
+          }
+        );
+
+
+        cy.style()
+          .update();
+
+      });
+
+    });
+
+  });
+
+}
+
 function getThemeToken(
   tokenName,
   fallback
@@ -925,10 +1359,32 @@ const GraphPanel = forwardRef(function GraphPanel(
             "text-wrap": "wrap",
             "text-max-width": "75px",
 
+            "text-overflow-wrap": "whitespace",
+            "text-justification": "center",
+            "line-height": 1.15,
+
             "border-width": 2,
             "border-color": graphTheme.nodeBorder,
 
             "overlay-opacity": 0,
+          },
+        },
+
+        /* =====================================================
+          DYNAMIC NODE SIZE
+          ===================================================== */
+
+        {
+          selector: "node[nodeWidth][nodeHeight]",
+          style: {
+            width:
+              "data(nodeWidth)",
+            height:
+              "data(nodeHeight)",
+            "text-max-width":
+              "data(nodeTextMaxWidth)",
+            "text-margin-y":
+              "data(nodeTextMarginY)",
           },
         },
 
@@ -1064,6 +1520,12 @@ const GraphPanel = forwardRef(function GraphPanel(
 
             "font-weight":
               "500",
+            
+            "text-wrap":
+              "none",
+
+            "text-overflow-wrap":
+              "whitespace",
 
             /*
               Lift the label slightly above the edge
@@ -1200,6 +1662,20 @@ const GraphPanel = forwardRef(function GraphPanel(
       ],
     });
     cyRef.current = cy;
+
+    /*
+      Size every node after the graph has been
+      created or loaded.
+    */
+    cy.nodes().forEach(
+      node => {
+        resizeNodeToLabel(
+          node
+        );
+      }
+    );
+
+    cy.style().update();
 
     /* =========================================================
       WATCH TREE NOTES THEME / ACCESSIBILITY CHANGES
@@ -1352,13 +1828,25 @@ const GraphPanel = forwardRef(function GraphPanel(
         currentLabel
       );
 
+      const textMarginY =
+        Number(
+          node.data(
+            "nodeTextMarginY"
+          )
+        ) || 0;
 
       setRenamePosition({
         x:
           position.x,
 
+        /*
+          renderedPosition() is already in screen
+          coordinates, while nodeTextMarginY is in
+          graph coordinates, so scale it by zoom.
+        */
         y:
-          position.y,
+          position.y +
+          textMarginY * zoom,
       });
 
       setRenameZoom(
@@ -1804,9 +2292,22 @@ function syncRenameOverlay() {
   const position =
     node.renderedPosition();
 
+  const zoom =
+    cy.zoom();
+
+
+  const textMarginY =
+    Number(
+      node.data(
+        "nodeTextMarginY"
+      )
+    ) || 0;
+
   setRenamePosition({
     x: position.x,
-    y: position.y,
+    y:
+      position.y +
+      textMarginY * zoom,
   });
 
   setRenameZoom(
@@ -2023,17 +2524,30 @@ function addSelectedTextNode() {
   const centreX = (extent.x1 + extent.x2) / 2;
   const centreY = (extent.y1 + extent.y2) / 2;
 
-  cy.add({
-    group: "nodes",
-    data: {
-      id: newNodeId,
-      label: selectedText,
-    },
-    position: {
-      x: centreX + 60,
-      y: centreY + 60,
-    },
-  });
+  const newNode =
+    cy.add({
+      group: "nodes",
+
+      data: {
+        id:
+          newNodeId,
+
+        label:
+          selectedText,
+      },
+
+      position: {
+        x:
+          centreX + 60,
+
+        y:
+          centreY + 60,
+      },
+    });
+
+  resizeNodeToLabel(
+    newNode
+  );
 }   
 
 useEffect(() => 
@@ -2172,21 +2686,30 @@ function createLinkedTextNode(label, linkColor) {
     (extent.y1 + extent.y2) / 2;
 
 
-  cy.add({
-    group: "nodes",
+  const newNode =
+    cy.add({
+      group: "nodes",
 
-    data: {
-      id: newNodeId,
-      label: label,
-      linkColor: linkColor,
-    },
+      data: {
+        id:
+          newNodeId,
 
-    position: {
-      x: centreX + 60,
-      y: centreY + 60,
-    },
-  });
+        label:
+          selectedText,
+      },
 
+      position: {
+        x:
+          centreX + 60,
+
+        y:
+          centreY + 60,
+      },
+    });
+
+  resizeNodeToLabel(
+    newNode
+  );
 
   return newNodeId;
 }
@@ -2385,6 +2908,14 @@ function changeSelectedNodeShape(newShape) {
   node.data(
     "shape",
     newShape
+  );
+
+  /*
+    The amount of usable internal space
+    changes with the shape, so recalculate.
+  */
+  resizeNodeToLabel(
+    node
   );
 
   // Update toolbar/popover
@@ -2742,6 +3273,10 @@ function deleteSelectedElement() {
       },
     });
 
+    resizeNodeToLabel(
+      newNode
+    );
+
     cy.elements().unselect();
     newNode.select();
 
@@ -2802,6 +3337,12 @@ function finishNodeRename({
         cleanLabel
       );
 
+      /*
+        Label changed, so recompute the node body.
+      */
+      resizeNodeToLabel(
+        node
+      );
 
       setSelectedNode(
         (current) => {
@@ -4418,8 +4959,19 @@ const CurrentArrowShapeIcon =
               style={{
                 left: `${renamePosition.x}px`,
                 top: `${renamePosition.y}px`,
-                width: `${110 * renameZoom}px`,
-                height: `${52 * renameZoom}px`,
+                width: `${
+                  (
+                    selectedNode?.nodeWidth ||
+                    110
+                  ) * renameZoom
+                }px`,
+
+                height: `${
+                  (
+                    selectedNode?.nodeHeight ||
+                    52
+                  ) * renameZoom
+                }px`,
                 fontSize: `${15 * renameZoom}px`,
                 lineHeight: `${52 * renameZoom}px`,
                 color:
