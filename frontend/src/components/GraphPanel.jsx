@@ -148,6 +148,7 @@ const NODE_SHAPES = [
     value: "hexagon",
     label: "Hexagon",
     Icon: Hexagon,
+    rotation: 30,
   },
   {
     value: "octagon",
@@ -195,11 +196,13 @@ const ARROW_SHAPES = [
     value: "triangle",
     label: "Triangle",
     Icon: Triangle,
+    rotation: 90,
   },
   {
     value: "vee",
     label: "Vee",
     Icon: VeeIcon,
+    rotation: 135,
   },
   {
     value: "chevron",
@@ -210,7 +213,7 @@ const ARROW_SHAPES = [
     value: "tee",
     label: "Tee",
     Icon: Minus,
-    rotate: true,
+    rotation: 90,
   },
   {
     value: "circle",
@@ -811,6 +814,9 @@ const GraphPanel = forwardRef(function GraphPanel(
       .style({
         width: 4,
 
+        "line-style":
+          "solid",
+
         "line-color":
           graphTheme.selectedEdge,
 
@@ -1164,6 +1170,7 @@ const GraphPanel = forwardRef(function GraphPanel(
           selector: "edge:selected",
           style: {
             width: 4,
+            "line-style": "solid",
             "line-color": graphTheme.selectedEdge,
             "target-arrow-color": graphTheme.selectedEdge,
             opacity: 1,
@@ -3553,6 +3560,14 @@ const CurrentArrowShapeIcon =
               <CurrentNodeShapeIcon
                 size={19}
                 strokeWidth={1.8}
+                style={
+                  currentNodeShape?.rotation
+                    ? {
+                        transform:
+                          `rotate(${currentNodeShape.rotation}deg)`,
+                      }
+                    : undefined
+                }
               />
 
               <ChevronDown
@@ -3575,6 +3590,7 @@ const CurrentArrowShapeIcon =
                     value,
                     label,
                     Icon,
+                    rotation,
                   }) => (
 
                     <button
@@ -3602,6 +3618,14 @@ const CurrentArrowShapeIcon =
                       <Icon
                         size={18}
                         strokeWidth={1.8}
+                        style={
+                          rotation
+                            ? {
+                                transform:
+                                  `rotate(${rotation}deg)`,
+                              }
+                            : undefined
+                        }
                       />
                     </button>
 
@@ -4182,10 +4206,10 @@ const CurrentArrowShapeIcon =
               strokeWidth={1.8}
 
               style={
-                currentArrowShape?.rotate
+                currentArrowShape?.rotation
                   ? {
                       transform:
-                        "rotate(90deg)",
+                        `rotate(${currentArrowShape.rotation}deg)`,
                     }
                   : undefined
               }
@@ -4212,7 +4236,7 @@ const CurrentArrowShapeIcon =
                   value,
                   label,
                   Icon,
-                  rotate,
+                  rotation,
                 }) => (
 
                   <button
@@ -4243,10 +4267,10 @@ const CurrentArrowShapeIcon =
                       strokeWidth={1.8}
 
                       style={
-                        rotate
+                        rotation
                           ? {
                               transform:
-                                "rotate(90deg)",
+                                `rotate(${rotation}deg)`,
                             }
                           : undefined
                       }
