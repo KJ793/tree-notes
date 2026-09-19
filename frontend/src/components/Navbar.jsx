@@ -74,7 +74,10 @@ async function getLoggedInUserProfileImage() {
   return null;
 }
 
-function Navbar({onSave}) {
+function Navbar({
+  onSave,
+  showNoteActions = false,
+}) {
   const [saveStatus, setSaveStatus] =
     useState("idle");
   const [saveError, setSaveError] =
@@ -273,44 +276,53 @@ function Navbar({onSave}) {
 
       <div className="navbar-note-actions">
 
-        <button
-          className="navbar-action-button"
-          type="button"
-          onClick={handleSave}
-          title={
-            saveError ||
-            "Save current note"
-          }
-        >
-          <Save
-            size={24}
-            strokeWidth={1.8}
-          />
+        {showNoteActions && (
+          <div className="navbar-note-actions">
 
-          <span>
-            {saveStatus === "saving"
-              ? "Saving..."
-              : saveStatus === "saved"
-                ? "Saved"
-                : saveStatus === "error"
-                  ? "Save failed"
-                  : "Save"}
-          </span>
-        </button>
+            <button
+              className="navbar-action-button"
+              type="button"
+              onClick={handleSave}
+              title={
+                saveError ||
+                "Save current note"
+              }
+            >
+              <Save
+                size={24}
+                strokeWidth={1.8}
+              />
 
-        <button
-          className="navbar-action-button"
-          type="button"
-          disabled
-          title="Export is not connected yet"
-        >
-          <FileOutput
-            size={24}
-            strokeWidth={1.8}
-          />
+              <span>
+                {saveStatus === "saving"
+                  ? "Saving..."
+                  : saveStatus === "saved"
+                    ? "Saved"
+                    : saveStatus === "error"
+                      ? "Save failed"
+                      : "Save"}
+              </span>
+            </button>
 
-          <span>Export</span>
-        </button>
+
+            <button
+              className="navbar-action-button"
+              type="button"
+              disabled
+              title="Export is not connected yet"
+            >
+              <FileOutput
+                size={24}
+                strokeWidth={1.8}
+              />
+
+              <span>
+                Export
+              </span>
+            </button>
+
+          </div>
+        )}
 
         <button
           type="button"

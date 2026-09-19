@@ -12,6 +12,10 @@ import {
 } from "react";
 
 import {
+  useSearchParams,
+} from "react-router-dom";
+
+import {
   getNotes,
   createNote,
   deleteNote,
@@ -26,10 +30,40 @@ function Dashboard() {
   // =========================================================
 
   const [notesExpanded, setNotesExpanded] =
-    useState(false);
+    useState(() => {
+      return (
+        localStorage.getItem(
+          "treenotes-sidebar-notes-expanded"
+        ) === "true"
+      );
+    });
+
+  useEffect(() => {
+
+    localStorage.setItem(
+      "treenotes-sidebar-notes-expanded",
+      String(notesExpanded)
+    );
+
+  }, [notesExpanded]);
 
   const [sidebarCollapsed, setSidebarCollapsed] =
-    useState(false);
+    useState(() => {
+      return (
+        localStorage.getItem(
+          "treenotes-sidebar-collapsed"
+        ) === "true"
+      );
+    });
+
+  useEffect(() => {
+
+    localStorage.setItem(
+      "treenotes-sidebar-collapsed",
+      String(sidebarCollapsed)
+    );
+
+  }, [sidebarCollapsed]);
 
   const [activeView, setActiveView] =
   useState("dashboard");
@@ -65,6 +99,14 @@ function Dashboard() {
       (note) =>
         note.id === selectedNoteId
     ) ?? null;
+
+  const [
+    searchParams,
+    setSearchParams,
+  ] = useSearchParams();
+
+  const requestedNoteId =
+    searchParams.get("note");
 
 
   // =========================================================
@@ -138,6 +180,102 @@ function Dashboard() {
 
   }
 
+  function openNote(noteId) {
+
+    setSearchParams({
+      note: String(noteId),
+    });
+
+    setActiveView(
+      "dashboard"
+    );
+  }
+
+
+  function clearOpenNote() {
+
+    setSearchParams({});
+
+    setSelectedNoteId(null);
+
+  }
+
+  useEffect(() => {
+
+    /*
+      Wait until the user's notes have finished
+      loading before resolving the URL note ID.
+    */
+    if (notesLoading) {
+      return;
+    }
+
+
+    /*
+      No ?note= parameter means the plain
+      Dashboard landing screen.
+    */
+    if (!requestedNoteId) {
+
+      setSelectedNoteId(null);
+      setActiveView("dashboard");
+
+      return;
+    }
+
+
+    /*
+      URL parameters are strings, while real backend
+      note IDs may be numbers.
+
+      Find the real note object first so selectedNoteId
+      receives the ID in its original type.
+    */
+    const requestedNote =
+      notes.find(
+        (note) =>
+          String(note.id) ===
+          String(requestedNoteId)
+      );
+
+
+    /*
+      The requested note does not exist.
+    */
+    if (!requestedNote) {
+
+      setSelectedNoteId(null);
+
+      return;
+    }
+
+
+    /*
+      Already displaying this note.
+    */
+    if (
+      String(selectedNoteId ?? "") ===
+      String(requestedNote.id)
+    ) {
+      return;
+    }
+
+
+    setSelectedNoteId(
+      requestedNote.id
+    );
+
+    setActiveView(
+      "dashboard"
+    );
+
+  }, [
+    requestedNoteId,
+    notes,
+    notesLoading,
+    selectedNoteId,
+  ]);
+
 
   // =========================================================
   // CREATE NOTE
@@ -163,7 +301,7 @@ function Dashboard() {
       /*
         Automatically open the new note.
       */
-      setSelectedNoteId(
+      openNote(
         newNote.id
       );
 
@@ -306,6 +444,10 @@ function Dashboard() {
           noteWorkspaceRef.current
             ?.saveEverything()
         }
+
+        showNoteActions={
+          Boolean(selectedNote?.id)
+        }
       />
 
 
@@ -314,7 +456,7 @@ function Dashboard() {
         <Sidebar
 
           onNotesPageClick={() => {
-          setSelectedNoteId(null);
+          clearOpenNote();
           setActiveView("notes");
         }}
 
@@ -337,7 +479,7 @@ function Dashboard() {
           }
 
           onSelectNote={
-            handleSelectNote
+            openNote
           }
 
           onCreateNote={
@@ -361,12 +503,6 @@ function Dashboard() {
             )
           }
           activeView={activeView}
-
-          onDashboardClick={() => {
-            setSelectedNoteId(null);
-            setActiveView("dashboard");
-          }}
-        
 
         />
 

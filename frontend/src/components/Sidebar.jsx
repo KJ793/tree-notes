@@ -31,7 +31,6 @@ function Sidebar({
   onSidebarToggle,
 
   activeView,
-  onDashboardClick,
 }) {
 
   const [noteToDelete, setNoteToDelete] =
@@ -104,15 +103,12 @@ function Sidebar({
         <button
           type="button"
           className={`sidebar-nav-item ${
-          activeView === "dashboard" && !selectedNoteId
-            ? "sidebar-nav-item-active"
-            : ""
-        }`}
-          onClick={() => {
-            onDashboardClick();
-            onNotesToggle();
-          }}
-                  >
+            activeView === "dashboard" && !selectedNoteId
+              ? "sidebar-nav-item-active"
+              : ""
+          }`}
+          onClick={onNotesToggle}
+        >
 
           <House
             size={18}
