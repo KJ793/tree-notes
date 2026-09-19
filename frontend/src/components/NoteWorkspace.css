@@ -2141,6 +2141,26 @@
 
 
 /* ================================================== */
+/* 4 x 2 Graph Icon Popover                           */
+/* ================================================== */
+
+.note-workspace
+.graph-icon-grid-popover {
+  display: grid;
+
+  grid-template-columns:
+    repeat(4, 34px);
+
+  grid-template-rows:
+    repeat(2, 32px);
+
+  align-items: center;
+  justify-items: center;
+
+  gap: 3px;
+}
+
+/* ================================================== */
 /* Graph Canvas Overlay Container                     */
 /* ================================================== */
 

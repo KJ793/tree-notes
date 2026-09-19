@@ -8,11 +8,14 @@ import {
   Squircle,
   SquareDashed,
   Diamond,
+  Hexagon,
+  Octagon,
   Triangle,
   Trash2,
   Link2,
   Sparkles,
   ChevronDown,
+  ChevronRight,
   X,
   Check,
   CircleAlert,
@@ -30,6 +33,7 @@ import {
 } from "lucide-react";
 import SquareDottedIcon from "./icons/SquareDottedIcon";
 import VeeIcon from "./icons/VeeIcon";
+import VeeNodeIcon from "./icons/VeeNodeIcon";
 import cytoscape from "cytoscape";
 import { semanticSearchGraph,} from "../api/graphApi";
 
@@ -135,6 +139,21 @@ const NODE_SHAPES = [
     label: "Triangle",
     Icon: Triangle,
   },
+  {
+    value: "vee",
+    label: "Vee",
+    Icon: VeeNodeIcon,
+  },
+  {
+    value: "hexagon",
+    label: "Hexagon",
+    Icon: Hexagon,
+  },
+  {
+    value: "octagon",
+    label: "Octagon",
+    Icon: Octagon,
+  },
 ];
 
 const NODE_BORDER_STYLES = [
@@ -183,6 +202,17 @@ const ARROW_SHAPES = [
     Icon: VeeIcon,
   },
   {
+    value: "chevron",
+    label: "Chevron",
+    Icon: ChevronRight,
+  },
+  {
+    value: "tee",
+    label: "Tee",
+    Icon: Minus,
+    rotate: true,
+  },
+  {
     value: "circle",
     label: "Circle",
     Icon: Circle,
@@ -196,12 +226,6 @@ const ARROW_SHAPES = [
     value: "diamond",
     label: "Diamond",
     Icon: Diamond,
-  },
-  {
-    value: "tee",
-    label: "Tee",
-    Icon: Minus,
-    rotate: true,
   },
   {
     value: "none",
@@ -3539,7 +3563,12 @@ const CurrentArrowShapeIcon =
 
 
             {shapeMenuOpen && (
-              <div className="graph-shape-popover">
+              <div
+                className="
+                  graph-shape-popover
+                  graph-icon-grid-popover
+                "
+              >
 
                 {NODE_SHAPES.map(
                   ({
@@ -4171,7 +4200,12 @@ const CurrentArrowShapeIcon =
 
           {arrowShapeMenuOpen && (
 
-            <div className="graph-shape-popover">
+            <div
+              className="
+                graph-shape-popover
+                graph-icon-grid-popover
+              "
+            >
 
               {ARROW_SHAPES.map(
                 ({
