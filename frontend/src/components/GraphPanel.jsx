@@ -1031,7 +1031,7 @@ const GraphPanel = forwardRef(function GraphPanel(
       );
 
     } finally {
-      setLoading(false);
+      setTimeout(() => setLoading(false), 4000);
     }
   }
 
@@ -3980,6 +3980,8 @@ const CurrentArrowShapeIcon =
             </span>
           )}
 
+          
+
 
           <button
             type="button"
@@ -4972,12 +4974,34 @@ const CurrentArrowShapeIcon =
         {/* GRAPH CANVAS                                    */}
         {/* =============================================== */}
 
-        <div className="graph-canvas-shell">
+        <div
+          className={`graph-canvas-shell ${
+            loading ? "graph-generating" : ""
+          }`}
+>
 
           <div
             ref={graphContainerRef}
             className="graph-container"
           />
+
+          {loading && (
+            <div className="graph-generation-overlay">
+              <div className="graph-generation-glow" />
+
+              <div className="graph-generation-content">
+                <span className="graph-generation-label">
+                  Generating graph
+                </span>
+
+                <span className="graph-generation-dots">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              </div>
+            </div>
+          )}
 
           {editingNodeId && (
             <input
