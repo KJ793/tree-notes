@@ -1,24 +1,39 @@
 import { useRef, useEffect, useState, forwardRef, useImperativeHandle,} from "react";
 import {
   ChartLine,
-  Palette,
   Shapes,
   Circle,
   RectangleHorizontal,
+  Square,
   Squircle,
+  SquareDashed,
   Diamond,
+  Hexagon,
+  Octagon,
   Triangle,
   Trash2,
   Link2,
   Sparkles,
   ChevronDown,
+  ChevronRight,
   X,
   Check,
   CircleAlert,
   LoaderCircle,
   Search,
+  Plus,
   ArrowUp,
+  Type,
+  PaintBucket,
+  MoveUpRight,
+  Minus,
+  ArrowRight,
+  MousePointer2,
+  CircleX,
 } from "lucide-react";
+import SquareDottedIcon from "./icons/SquareDottedIcon";
+import VeeIcon from "./icons/VeeIcon";
+import VeeNodeIcon from "./icons/VeeNodeIcon";
 import cytoscape from "cytoscape";
 import { semanticSearchGraph,} from "../api/graphApi";
 
@@ -124,7 +139,537 @@ const NODE_SHAPES = [
     label: "Triangle",
     Icon: Triangle,
   },
+  {
+    value: "vee",
+    label: "Vee",
+    Icon: VeeNodeIcon,
+  },
+  {
+    value: "hexagon",
+    label: "Hexagon",
+    Icon: Hexagon,
+    rotation: 30,
+  },
+  {
+    value: "octagon",
+    label: "Octagon",
+    Icon: Octagon,
+  },
 ];
+
+const NODE_BORDER_STYLES = [
+  {
+    value: "solid",
+    label: "Solid border",
+    Icon: Square,
+  },
+  {
+    value: "dashed",
+    label: "Dashed border",
+    Icon: SquareDashed,
+  },
+  {
+    value: "dotted",
+    label: "Dotted border",
+    Icon: SquareDottedIcon,
+  },
+];
+
+const EDGE_STYLES = [
+  {
+    value: "solid",
+    label: "Solid",
+  },
+  {
+    value: "dashed",
+    label: "Dashed",
+  },
+  {
+    value: "dotted",
+    label: "Dotted",
+  },
+];
+
+
+const ARROW_SHAPES = [
+  {
+    value: "triangle",
+    label: "Triangle",
+    Icon: Triangle,
+    rotation: 90,
+  },
+  {
+    value: "vee",
+    label: "Vee",
+    Icon: VeeIcon,
+    rotation: 135,
+  },
+  {
+    value: "chevron",
+    label: "Chevron",
+    Icon: ChevronRight,
+  },
+  {
+    value: "tee",
+    label: "Tee",
+    Icon: Minus,
+    rotation: 90,
+  },
+  {
+    value: "circle",
+    label: "Circle",
+    Icon: Circle,
+  },
+  {
+    value: "square",
+    label: "Square",
+    Icon: Square,
+  },
+  {
+    value: "diamond",
+    label: "Diamond",
+    Icon: Diamond,
+  },
+  {
+    value: "none",
+    label: "No arrow",
+    Icon: CircleX,
+  },
+];
+
+/* =========================================================
+   NODE AUTO-SIZING
+   ========================================================= */
+
+const NODE_MIN_WIDTH = 110;
+const NODE_MIN_HEIGHT = 52;
+
+const NODE_FONT_SIZE = 15;
+const NODE_LINE_HEIGHT = 19;
+
+/*
+  Maximum width of the actual label text before
+  Cytoscape wraps it onto another line.
+*/
+const NODE_TEXT_WRAP_WIDTH = 150;
+
+
+/*
+  Shapes have very different amounts of usable
+  internal space.
+
+  Rectangles can use almost their entire body.
+  Diamond / triangle / vee need substantially more
+  outer size to contain the same text comfortably.
+*/
+const NODE_SHAPE_SIZE_FACTORS = {
+
+  rectangle: {
+    width: 1,
+    height: 1,
+  },
+
+  "round-rectangle": {
+    width: 1,
+    height: 1,
+  },
+
+  ellipse: {
+    width: 1.2,
+    height: 1.15,
+  },
+
+  diamond: {
+    width: 1.6,
+    height: 1.6,
+  },
+
+  triangle: {
+    width: 1.8,
+    height: 1.9,
+  },
+
+  vee: {
+    width: 1.9,
+    height: 1.9,
+  },
+
+  hexagon: {
+    width: 1.2,
+    height: 1.1,
+  },
+
+  octagon: {
+    width: 1.15,
+    height: 1.1,
+  },
+
+};
+
+function calculateNodeSize(
+  label,
+  shape = "round-rectangle"
+) {
+
+  const cleanLabel =
+    String(
+      label || "New Node"
+    ).trim();
+
+
+  /*
+    Canvas lets us measure approximately the same
+    text dimensions Cytoscape is rendering.
+  */
+  const canvas =
+    document.createElement(
+      "canvas"
+    );
+
+  const context =
+    canvas.getContext("2d");
+
+
+  context.font =
+    `500 ${NODE_FONT_SIZE}px Inter, system-ui, sans-serif`;
+
+
+  const words =
+    cleanLabel.split(/\s+/);
+
+
+  const lines = [];
+
+  let currentLine = "";
+
+  /*
+    Find the widest individual word.
+
+    If one word is wider than our normal wrapping
+    width, expand the node instead of cutting the word.
+  */
+  const longestWordWidth =
+    Math.max(
+      ...words.map(
+        word =>
+          context.measureText(
+            word
+          ).width
+      ),
+      1
+    );
+
+
+  /*
+    Normally wrap around 150px.
+
+    A single long word is allowed to make the
+    text area wider so it remains intact.
+  */
+  const effectiveWrapWidth =
+    Math.max(
+      NODE_TEXT_WRAP_WIDTH,
+      longestWordWidth + 4
+    );
+
+  for (const word of words) {
+
+    const testLine =
+      currentLine
+        ? `${currentLine} ${word}`
+        : word;
+
+
+    if (
+      context.measureText(
+        testLine
+      ).width >
+        effectiveWrapWidth &&
+      currentLine
+    ) {
+
+      lines.push(
+        currentLine
+      );
+
+      currentLine =
+        word;
+
+    } else {
+
+      currentLine =
+        testLine;
+
+    }
+
+  }
+
+
+  if (currentLine) {
+
+    lines.push(
+      currentLine
+    );
+
+  }
+
+  const widestLine =
+    Math.max(
+      ...lines.map(
+        line =>
+          context.measureText(
+            line
+          ).width
+      ),
+      1
+    );
+
+
+  const textHeight =
+    Math.max(
+      lines.length,
+      1
+    ) *
+    NODE_LINE_HEIGHT;
+
+
+  /*
+    Normal breathing room around the text.
+  */
+  const paddedWidth =
+    widestLine + 34;
+
+  const paddedHeight =
+    textHeight + 22;
+
+
+  const factors =
+    NODE_SHAPE_SIZE_FACTORS[
+      shape
+    ] ??
+    NODE_SHAPE_SIZE_FACTORS[
+      "round-rectangle"
+    ];
+
+  const width =
+    Math.max(
+      NODE_MIN_WIDTH,
+      Math.ceil(
+        paddedWidth *
+        factors.width
+      )
+    );
+
+  const height =
+    Math.max(
+      NODE_MIN_HEIGHT,
+      Math.ceil(
+        paddedHeight *
+        factors.height
+      )
+    );
+
+
+  /*
+    Cytoscape centres labels using the node's
+    bounding box.
+
+    A triangle's visual centre sits lower than
+    its bounding-box centre, so move only triangle
+    labels downward proportionally to their height.
+  */
+  const textMarginY =
+    shape === "triangle"
+      ? Math.round(
+          height * 0.12
+        )
+      : 0;
+
+  return {
+
+    width,
+
+    height,
+
+    textMaxWidth:
+      Math.ceil(
+        effectiveWrapWidth
+      ),
+
+    textMarginY,
+
+  };
+}
+
+function resizeNodeToLabel(
+  node
+) {
+
+  if (
+    !node ||
+    node.empty()
+  ) {
+    return;
+  }
+
+
+  const label =
+    node.data("label") ||
+    "New Node";
+
+  const shape =
+    node.data("shape") ||
+    "round-rectangle";
+
+
+  const {
+    width,
+    height,
+    textMaxWidth,
+    textMarginY,
+  } =
+    calculateNodeSize(
+      label,
+      shape
+    );
+
+
+  /*
+    Keep these as node data so the Cytoscape
+    stylesheet can consume them automatically.
+  */
+  node.data({
+    nodeWidth:
+      width,
+
+    nodeHeight:
+      height,
+
+    nodeTextMaxWidth:
+      textMaxWidth,
+
+    nodeTextMarginY:
+      textMarginY,
+  });
+
+  refreshConnectedEdgeLabels(
+    node
+  );
+}
+
+function refreshConnectedEdgeLabels(
+  node
+) {
+
+  if (
+    !node ||
+    node.empty()
+  ) {
+    return;
+  }
+
+
+  const cy =
+    node.cy();
+
+
+  const connectedEdges =
+    node.connectedEdges()
+      .filter(
+        edge =>
+          String(
+            edge.data(
+              "relationship"
+            ) || ""
+          ).trim()
+      );
+
+
+  if (
+    connectedEdges.length === 0
+  ) {
+    return;
+  }
+
+  /*
+    First allow Cytoscape to finish applying
+    the node's new width / height.
+  */
+  requestAnimationFrame(() => {
+
+    /*
+      Then give the renderer one more frame to
+      recalculate the new edge endpoints.
+    */
+    requestAnimationFrame(() => {
+
+      connectedEdges.forEach(
+        edge => {
+
+          const relationship =
+            edge.data(
+              "relationship"
+            ) || "";
+
+          /*
+            Force Cytoscape to rebuild the label's
+            rendered bounding box.
+
+            The zero-width character changes the
+            underlying label value without creating
+            any visible change on screen.
+          */
+          edge.style(
+            "label",
+            `${relationship}\u200B`
+          );
+
+        }
+      );
+
+      /*
+        On the following frame, remove the temporary
+        style override so the edge returns to using:
+
+          label: data(relationship)
+
+        from the normal Cytoscape stylesheet.
+      */
+      requestAnimationFrame(() => {
+
+        connectedEdges.forEach(
+          edge => {
+
+            edge.removeStyle(
+              "label"
+            );
+
+            if (
+              edge.id() !==
+              editingEdgeIdRef.current
+            ) {
+
+              edge.style(
+                "text-opacity",
+                1
+              );
+
+            }
+
+          }
+        );
+
+
+        cy.style()
+          .update();
+
+      });
+
+    });
+
+  });
+
+}
 
 function getThemeToken(
   tokenName,
@@ -277,9 +822,31 @@ const GraphPanel = forwardRef(function GraphPanel(
   // Hidden native colour picker
   const nodeColorInputRef = useRef(null);
 
+  // color picker for node text 
+  const nodeTextColorInputRef = useRef(null);
+
+  // Node border colour picker
+  const nodeBorderColorInputRef = useRef(null);
+
+  // Node border style popover
+  const nodeBorderStyleMenuRef = useRef(null);
+  const [nodeBorderStyleMenuOpen, setNodeBorderStyleMenuOpen] = useState(false);
+
   // Shape selector popover
   const shapeMenuRef = useRef(null);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
+
+  // Edge and Arrow colour picker
+  const edgeColorInputRef = useRef(null);
+  const arrowColorInputRef = useRef(null);
+
+  // Edge style selector popover
+  const edgeStyleMenuRef = useRef(null);
+  const [edgeStyleMenuOpen, setEdgeStyleMenuOpen] = useState(false);
+
+  // Arrow shape selector popover
+  const arrowShapeMenuRef = useRef(null);
+  const [arrowShapeMenuOpen, setArrowShapeMenuOpen] = useState(false);
 
   // Generic temporary feedback for graph actions
   const [graphFeedback, setGraphFeedback] = useState(null);
@@ -298,6 +865,38 @@ const GraphPanel = forwardRef(function GraphPanel(
   const [semanticSearchLoading, setSemanticSearchLoading] = useState(false);
 
   const semanticSearchRef = useRef(null);
+
+  // =========================================================
+  // Node Rename
+  // =========================================================
+
+  const [editingNodeId, setEditingNodeId] = useState(null);
+  const editingNodeIdRef = useRef(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameOriginalValueRef = useRef("");
+
+  const [renamePosition, setRenamePosition] = useState({
+    x: 0,
+    y: 0,
+  });
+
+  const [renameZoom, setRenameZoom] = useState(1);
+
+  // =========================================================
+  // Edge Relationship Editing
+  // =========================================================
+
+  const [editingEdgeId, setEditingEdgeId] = useState(null);
+  const editingEdgeIdRef = useRef(null);
+  const [relationshipValue, setRelationshipValue] = useState("");
+  const relationshipOriginalValueRef = useRef("");
+
+  const [relationshipPosition, setRelationshipPosition] = useState({
+    x: 0,
+    y: 0,
+  });
+
+  const [relationshipZoom, setRelationshipZoom] = useState(1);
 
   /*
     Keep GraphPanel synced with the graph_json belonging to the
@@ -339,12 +938,23 @@ const GraphPanel = forwardRef(function GraphPanel(
     setSelectedNode(null);
     setSelectedEdge(null);
     setShapeMenuOpen(false);
+    setNodeBorderStyleMenuOpen(false);
+    setEdgeStyleMenuOpen(false);
+    setArrowShapeMenuOpen(false);
     setGraphFeedback(null);
 
+    // Clear UI state and references belonging to linking mode.
     linkModeRef.current = false;
     firstNodeToLinkRef.current = null;
     setLinkMode(false);
     setFirstNodeToLink(null);
+
+    // Clear UI state belonging to previous editing node and edge.
+    editingNodeIdRef.current = null;
+    setEditingNodeId(null);
+    editingEdgeIdRef.current = null;
+    setEditingEdgeId(null);
+    setRelationshipValue("");
   }, [noteId, initialGraph]);
 
   async function generateGraph() {
@@ -538,6 +1148,17 @@ const GraphPanel = forwardRef(function GraphPanel(
           graphTheme.nodeText,
       })
 
+      .selector("node[borderColor]")
+      .style({
+        "border-color":
+          "data(borderColor)",
+      })
+
+      .selector("node[borderStyle]")
+      .style({
+        "border-style":
+          "data(borderStyle)",
+      })
 
       /*
         Normal selected node.
@@ -565,7 +1186,6 @@ const GraphPanel = forwardRef(function GraphPanel(
         "underlay-padding":
           8,
       })
-
 
       /*
         First node selected while
@@ -627,6 +1247,9 @@ const GraphPanel = forwardRef(function GraphPanel(
       .selector("edge:selected")
       .style({
         width: 4,
+
+        "line-style":
+          "solid",
 
         "line-color":
           graphTheme.selectedEdge,
@@ -726,8 +1349,9 @@ const GraphPanel = forwardRef(function GraphPanel(
             label: "data(label)",
 
             color: graphTheme.nodeText,
-            "font-size": "16px",
+            "font-size": "15px",
             "font-weight": "500",
+            "font-family": "Inter, system-ui, sans-serif",
 
             "text-valign": "center",
             "text-halign": "center",
@@ -735,10 +1359,56 @@ const GraphPanel = forwardRef(function GraphPanel(
             "text-wrap": "wrap",
             "text-max-width": "75px",
 
-            "border-width": 1,
+            "text-overflow-wrap": "whitespace",
+            "text-justification": "center",
+            "line-height": 1.15,
+
+            "border-width": 2,
             "border-color": graphTheme.nodeBorder,
 
             "overlay-opacity": 0,
+          },
+        },
+
+        /* =====================================================
+          DYNAMIC NODE SIZE
+          ===================================================== */
+
+        {
+          selector: "node[nodeWidth][nodeHeight]",
+          style: {
+            width:
+              "data(nodeWidth)",
+            height:
+              "data(nodeHeight)",
+            "text-max-width":
+              "data(nodeTextMaxWidth)",
+            "text-margin-y":
+              "data(nodeTextMarginY)",
+          },
+        },
+
+        /* =====================================================
+          SAVED NODE BORDER COLOUR
+          ===================================================== */
+
+        {
+          selector: "node[borderColor]",
+          style: {
+            "border-color":
+              "data(borderColor)",
+          },
+        },
+
+        /* =====================================================
+          SAVED NODE BORDER STYLE
+          ===================================================== */
+
+        {
+          selector: "node[borderStyle]",
+          style: {
+            "border-style":
+              "data(borderStyle)",
           },
         },
         
@@ -793,7 +1463,16 @@ const GraphPanel = forwardRef(function GraphPanel(
         {
           selector: "node[color]",
           style: {
-            "background-color": "data(color)",
+            "background-color":
+              "data(color)",
+          },
+        },
+
+        {
+          selector: "node[textColor]",
+          style: {
+            color:
+              "data(textColor)",
           },
         },
 
@@ -826,6 +1505,106 @@ const GraphPanel = forwardRef(function GraphPanel(
             opacity: 0.8,
 
             "arrow-scale": 1.1,
+
+            /*
+              Relationship label
+            */
+            label:
+              "data(relationship)",
+
+            color:
+              graphTheme.nodeText,
+
+            "font-size":
+              "12px",
+
+            "font-weight":
+              "500",
+            
+            "text-wrap":
+              "none",
+
+            "text-overflow-wrap":
+              "whitespace",
+
+            /*
+              Lift the label slightly above the edge
+              rather than drawing the line through it.
+            */
+            "text-margin-y":
+              -9,
+
+            /*
+              Allows clicking/double-clicking the
+              label itself to count as interacting
+              with the edge.
+            */
+            "text-events":
+              "yes",
+          },
+        },
+
+        /*
+          =========================================================
+          CUSTOM EDGE COLOUR
+          =========================================================
+        */
+
+        {
+          selector:
+            "edge[edgeColor]",
+
+          style: {
+            "line-color":
+              "data(edgeColor)",
+          },
+        },
+
+        /*
+          =========================================================
+          CUSTOM ARROW COLOUR
+          =========================================================
+        */
+
+        {
+          selector:
+            "edge[arrowColor]",
+
+          style: {
+            "target-arrow-color":
+              "data(arrowColor)",
+          },
+        },
+
+        /*
+          =========================================================
+          CUSTOM ARROW SHAPE
+          =========================================================
+        */
+
+        {
+          selector:
+            "edge[arrowShape]",
+
+          style: {
+            "target-arrow-shape":
+              "data(arrowShape)",
+          },
+        },
+
+        /*
+          =========================================================
+          CUSTOM EDGE STYLE
+          =========================================================
+        */
+
+        {
+          selector:
+            "edge[lineStyle]",
+
+          style: {
+            "line-style":
+              "data(lineStyle)",
           },
         },
 
@@ -853,16 +1632,50 @@ const GraphPanel = forwardRef(function GraphPanel(
           selector: "edge:selected",
           style: {
             width: 4,
+            "line-style": "solid",
             "line-color": graphTheme.selectedEdge,
             "target-arrow-color": graphTheme.selectedEdge,
             opacity: 1,
           },
         },
 
-        
+        {
+          selector:
+            "edge:selected[edgeColor]",
+
+          style: {
+            "line-color":
+              graphTheme.selectedEdge,
+          },
+        },
+
+        {
+          selector:
+            "edge:selected[arrowColor]",
+
+          style: {
+            "target-arrow-color":
+              graphTheme.selectedEdge,
+          },
+        },
+
       ],
     });
     cyRef.current = cy;
+
+    /*
+      Size every node after the graph has been
+      created or loaded.
+    */
+    cy.nodes().forEach(
+      node => {
+        resizeNodeToLabel(
+          node
+        );
+      }
+    );
+
+    cy.style().update();
 
     /* =========================================================
       WATCH TREE NOTES THEME / ACCESSIBILITY CHANGES
@@ -953,6 +1766,227 @@ const GraphPanel = forwardRef(function GraphPanel(
       }
     );
 
+  // =========================================================
+  // DOUBLE CLICK NODE = RENAME NODE
+  // =========================================================
+
+  cy.on(
+    "dbltap",
+    "node",
+    (event) => {
+
+      const node =
+        event.target;
+
+
+      const position =
+        node.renderedPosition();
+
+      const zoom = cy.zoom();
+
+      cy.elements().unselect();
+
+      node.select();
+
+
+      setSelectedNode({
+        ...node.data(),
+
+        color:
+          node.data("color") ||
+          getThemeColour(
+            "--graph-node-bg",
+            "#6366F1"
+          ),
+
+        textColor:
+          node.data("textColor") ||
+          getThemeColour(
+            "--graph-node-text",
+            "#ffffff"
+          ),
+
+        shape:
+          node.data("shape") ||
+          "round-rectangle",
+      });
+
+
+      setSelectedEdge(null);
+
+
+      const currentLabel =
+        node.data("label") ||
+        "";
+
+
+      renameOriginalValueRef.current =
+        currentLabel;
+
+
+      setRenameValue(
+        currentLabel
+      );
+
+      const textMarginY =
+        Number(
+          node.data(
+            "nodeTextMarginY"
+          )
+        ) || 0;
+
+      setRenamePosition({
+        x:
+          position.x,
+
+        /*
+          renderedPosition() is already in screen
+          coordinates, while nodeTextMarginY is in
+          graph coordinates, so scale it by zoom.
+        */
+        y:
+          position.y +
+          textMarginY * zoom,
+      });
+
+      setRenameZoom(
+        zoom
+      );
+
+      /*
+        Hide Cytoscape's painted text while
+        the HTML text field sits over it.
+      */
+      node.style(
+        "text-opacity",
+        0
+      );
+
+      editingNodeIdRef.current = node.id();
+
+      setEditingNodeId(
+        node.id()
+      );
+
+    }
+  );
+
+  // =========================================================
+  // DOUBLE CLICK EDGE = EDIT RELATIONSHIP
+  // =========================================================
+
+  cy.on(
+    "dbltap",
+    "edge",
+    (event) => {
+
+      /*
+        Don't start relationship editing while
+        the user is actively creating a link.
+      */
+      if (linkModeRef.current) {
+        return;
+      }
+
+
+      const edge =
+        event.target;
+
+
+      const sourceNode =
+        edge.source();
+
+      const targetNode =
+        edge.target();
+
+
+      const midpoint =
+        edge.renderedMidpoint();
+
+
+      const currentRelationship =
+        edge.data("relationship") ||
+        "";
+
+
+      /*
+        Keep normal graph selection synchronised.
+      */
+      cy.elements().unselect();
+
+      edge.select();
+
+
+      setSelectedEdge({
+        ...edge.data(),
+
+        sourceLabel:
+          sourceNode.data("label") ||
+          sourceNode.id(),
+
+        targetLabel:
+          targetNode.data("label") ||
+          targetNode.id(),
+      });
+
+
+      setSelectedNode(null);
+
+
+      setShapeMenuOpen(false);
+      setNodeBorderStyleMenuOpen(false);
+      setEdgeStyleMenuOpen(false);
+      setArrowShapeMenuOpen(false);
+
+
+      /*
+        Store existing value so Escape can
+        effectively leave it unchanged.
+      */
+      relationshipOriginalValueRef.current =
+        currentRelationship;
+
+
+      setRelationshipValue(
+        currentRelationship
+      );
+
+
+      setRelationshipPosition({
+        x:
+          midpoint.x,
+
+        y:
+          midpoint.y,
+      });
+
+
+      setRelationshipZoom(
+        cy.zoom()
+      );
+
+
+      /*
+        Hide Cytoscape's normal painted label
+        while our editable field is on top.
+      */
+      edge.style(
+        "text-opacity",
+        0
+      );
+
+
+      editingEdgeIdRef.current =
+        edge.id();
+
+
+      setEditingEdgeId(
+        edge.id()
+      );
+
+    }
+  );
+
     // =========================================================
     // NODE SELECTION
     // =========================================================
@@ -996,6 +2030,12 @@ const GraphPanel = forwardRef(function GraphPanel(
       setSelectedEdge(null);
 
       setShapeMenuOpen(false);
+
+      setNodeBorderStyleMenuOpen(false);
+
+      setEdgeStyleMenuOpen(false);
+
+      setArrowShapeMenuOpen(false);
 
 
       // =====================================================
@@ -1168,6 +2208,12 @@ const GraphPanel = forwardRef(function GraphPanel(
 
       setShapeMenuOpen(false);
 
+      setNodeBorderStyleMenuOpen(false);
+
+      setEdgeStyleMenuOpen(false);
+
+      setArrowShapeMenuOpen(false);
+
 
       console.log(
         "Selected edge:",
@@ -1205,6 +2251,12 @@ const GraphPanel = forwardRef(function GraphPanel(
 
       setShapeMenuOpen(false);
 
+      setNodeBorderStyleMenuOpen(false);
+
+      setEdgeStyleMenuOpen(false);
+
+      setArrowShapeMenuOpen(false);
+
 
       console.log(
         "Graph selection cleared"
@@ -1212,6 +2264,145 @@ const GraphPanel = forwardRef(function GraphPanel(
 
     });
 
+/* =========================================================
+   KEEP INLINE NODE RENAME SYNCED WITH GRAPH
+   ========================================================= */
+
+function syncRenameOverlay() {
+
+  const nodeId =
+    editingNodeIdRef.current;
+
+  if (!nodeId) {
+    return;
+  }
+
+  const node =
+    cy.getElementById(
+      nodeId
+    );
+
+  if (
+    !node ||
+    node.empty()
+  ) {
+    return;
+  }
+
+  const position =
+    node.renderedPosition();
+
+  const zoom =
+    cy.zoom();
+
+
+  const textMarginY =
+    Number(
+      node.data(
+        "nodeTextMarginY"
+      )
+    ) || 0;
+
+  setRenamePosition({
+    x: position.x,
+    y:
+      position.y +
+      textMarginY * zoom,
+  });
+
+  setRenameZoom(
+    cy.zoom()
+  );
+}
+
+/* =========================================================
+   KEEP EDGE RELATIONSHIP EDITOR SYNCED WITH GRAPH
+   ========================================================= */
+
+function syncRelationshipOverlay() {
+
+  const edgeId =
+    editingEdgeIdRef.current;
+
+
+  if (!edgeId) {
+    return;
+  }
+
+
+  const edge =
+    cy.getElementById(
+      edgeId
+    );
+
+
+  if (
+    !edge ||
+    edge.empty()
+  ) {
+    return;
+  }
+
+
+  const midpoint =
+    edge.renderedMidpoint();
+
+
+  setRelationshipPosition({
+    x:
+      midpoint.x,
+
+    y:
+      midpoint.y,
+  });
+
+
+  setRelationshipZoom(
+    cy.zoom()
+  );
+
+}
+
+/*
+  Keep the HTML rename field aligned with the
+  Cytoscape node while zooming or panning.
+*/
+cy.on(
+  "zoom pan",
+  syncRenameOverlay
+);
+
+cy.on(
+  "zoom pan",
+  syncRelationshipOverlay
+);
+
+cy.on(
+  "drag position",
+  "node",
+  () => {
+    syncRelationshipOverlay();
+  }
+);
+
+/*
+  Keep it aligned if the node itself is dragged
+  while it is being renamed.
+*/
+cy.on(
+  "drag",
+  "node",
+  (event) => {
+
+    if (
+      event.target.id() ===
+      editingNodeIdRef.current
+    ) {
+      syncRenameOverlay();
+    }
+
+  }
+);
 
 cy.one("layoutstop", () => {
   cy.resize();
@@ -1333,17 +2524,30 @@ function addSelectedTextNode() {
   const centreX = (extent.x1 + extent.x2) / 2;
   const centreY = (extent.y1 + extent.y2) / 2;
 
-  cy.add({
-    group: "nodes",
-    data: {
-      id: newNodeId,
-      label: selectedText,
-    },
-    position: {
-      x: centreX + 60,
-      y: centreY + 60,
-    },
-  });
+  const newNode =
+    cy.add({
+      group: "nodes",
+
+      data: {
+        id:
+          newNodeId,
+
+        label:
+          selectedText,
+      },
+
+      position: {
+        x:
+          centreX + 60,
+
+        y:
+          centreY + 60,
+      },
+    });
+
+  resizeNodeToLabel(
+    newNode
+  );
 }   
 
 useEffect(() => 
@@ -1482,21 +2686,30 @@ function createLinkedTextNode(label, linkColor) {
     (extent.y1 + extent.y2) / 2;
 
 
-  cy.add({
-    group: "nodes",
+  const newNode =
+    cy.add({
+      group: "nodes",
 
-    data: {
-      id: newNodeId,
-      label: label,
-      linkColor: linkColor,
-    },
+      data: {
+        id:
+          newNodeId,
 
-    position: {
-      x: centreX + 60,
-      y: centreY + 60,
-    },
-  });
+        label:
+          selectedText,
+      },
 
+      position: {
+        x:
+          centreX + 60,
+
+        y:
+          centreY + 60,
+      },
+    });
+
+  resizeNodeToLabel(
+    newNode
+  );
 
   return newNodeId;
 }
@@ -1527,6 +2740,12 @@ function focusNode(nodeId) {
   setSelectedEdge(null);
 
   setShapeMenuOpen(false);
+
+  setNodeBorderStyleMenuOpen(false);
+
+  setEdgeStyleMenuOpen(false);
+
+  setArrowShapeMenuOpen(false);
 
 
   cy.animate(
@@ -1691,6 +2910,14 @@ function changeSelectedNodeShape(newShape) {
     newShape
   );
 
+  /*
+    The amount of usable internal space
+    changes with the shape, so recalculate.
+  */
+  resizeNodeToLabel(
+    node
+  );
+
   // Update toolbar/popover
   setSelectedNode((current) => ({
     ...current,
@@ -1698,6 +2925,238 @@ function changeSelectedNodeShape(newShape) {
   }));
 
   setShapeMenuOpen(false);
+
+  setNodeBorderStyleMenuOpen(false);
+
+  setEdgeStyleMenuOpen(false);
+
+  setArrowShapeMenuOpen(false);
+}
+
+function changeSelectedNodeBorderColor(
+  newColor
+) {
+  const node =
+    getSelectedCyNode();
+
+  if (!node) {
+    return;
+  }
+
+  node.data(
+    "borderColor",
+    newColor
+  );
+
+  setSelectedNode(
+    current => ({
+      ...current,
+      borderColor:
+        newColor,
+    })
+  );
+}
+
+
+function changeSelectedNodeBorderStyle(
+  newStyle
+) {
+  const node =
+    getSelectedCyNode();
+
+  if (!node) {
+    return;
+  }
+
+  node.data(
+    "borderStyle",
+    newStyle
+  );
+
+  setSelectedNode(
+    current => ({
+      ...current,
+      borderStyle:
+        newStyle,
+    })
+  );
+
+  setNodeBorderStyleMenuOpen(
+    false
+  );
+}
+
+function changeSelectedEdgeColor(
+  colour
+) {
+
+  if (
+    !cyRef.current ||
+    !selectedEdge?.id
+  ) {
+    return;
+  }
+
+
+  const edge =
+    cyRef.current.getElementById(
+      selectedEdge.id
+    );
+
+
+  if (
+    !edge ||
+    edge.empty()
+  ) {
+    return;
+  }
+
+
+  edge.data(
+    "edgeColor",
+    colour
+  );
+
+
+  setSelectedEdge(
+    current => ({
+      ...current,
+      edgeColor:
+        colour,
+    })
+  );
+}
+
+function changeSelectedArrowColor(
+  colour
+) {
+
+  if (
+    !cyRef.current ||
+    !selectedEdge?.id
+  ) {
+    return;
+  }
+
+
+  const edge =
+    cyRef.current.getElementById(
+      selectedEdge.id
+    );
+
+
+  if (
+    !edge ||
+    edge.empty()
+  ) {
+    return;
+  }
+
+
+  edge.data(
+    "arrowColor",
+    colour
+  );
+
+
+  setSelectedEdge(
+    current => ({
+      ...current,
+      arrowColor:
+        colour,
+    })
+  );
+}
+
+function changeSelectedArrowShape(
+  shape
+) {
+
+  if (
+    !cyRef.current ||
+    !selectedEdge?.id
+  ) {
+    return;
+  }
+
+
+  const edge =
+    cyRef.current.getElementById(
+      selectedEdge.id
+    );
+
+
+  if (
+    !edge ||
+    edge.empty()
+  ) {
+    return;
+  }
+
+
+  edge.data(
+    "arrowShape",
+    shape
+  );
+
+
+  setSelectedEdge(
+    current => ({
+      ...current,
+      arrowShape:
+        shape,
+    })
+  );
+
+
+  setArrowShapeMenuOpen(
+    false
+  );
+}
+
+function changeSelectedEdgeStyle(
+  lineStyle
+) {
+
+  if (
+    !cyRef.current ||
+    !selectedEdge?.id
+  ) {
+    return;
+  }
+
+
+  const edge =
+    cyRef.current.getElementById(
+      selectedEdge.id
+    );
+
+
+  if (
+    !edge ||
+    edge.empty()
+  ) {
+    return;
+  }
+
+
+  edge.data(
+    "lineStyle",
+    lineStyle
+  );
+
+
+  setSelectedEdge(
+    current => ({
+      ...current,
+      lineStyle,
+    })
+  );
+
+
+  setEdgeStyleMenuOpen(
+    false
+  );
 }
 
 function showGraphFeedback(
@@ -1752,6 +3211,7 @@ function deleteSelectedElement() {
     return;
   }
 
+
   // Delete selected edge
   if (selectedEdge?.id) {
     const edge =
@@ -1780,6 +3240,344 @@ function deleteSelectedElement() {
     }
   }
 }
+
+  function createManualNode() {
+    const cy = cyRef.current;
+
+    if (!cy) return;
+
+    const nodeId = `manual-node-${Date.now()}`;
+
+    const extent = cy.extent();
+
+    const newNode = cy.add({
+      group: "nodes",
+      data: {
+        id: nodeId,
+        label: "New Node",
+        color: 
+          getThemeColour(
+            "--graph-node-bg",
+            "#6366F1"
+          ),
+        textColor:
+        getThemeColour(
+          "--graph-node-text",
+          "#ffffff"
+        ),
+        shape: "round-rectangle",
+      },
+      position: {
+        x: (extent.x1 + extent.x2) / 2,
+        y: (extent.y1 + extent.y2) / 2,
+      },
+    });
+
+    resizeNodeToLabel(
+      newNode
+    );
+
+    cy.elements().unselect();
+    newNode.select();
+
+    setSelectedEdge(null);
+
+    setSelectedNode({
+      ...newNode.data(),
+    });
+
+    showGraphFeedback(
+      "New node created",
+      "success"
+    );
+  }
+
+
+function finishNodeRename({
+  cancel = false,
+} = {}) {
+
+  if (
+    !cyRef.current ||
+    !editingNodeId
+  ) {
+    return;
+  }
+
+
+  const node =
+    cyRef.current.getElementById(
+      editingNodeId
+    );
+
+
+  if (
+    !node ||
+    node.empty()
+  ) {
+
+    editingNodeIdRef.current = null;
+
+    setEditingNodeId(null);
+
+    return;
+  }
+
+
+  if (!cancel) {
+
+    const cleanLabel =
+      renameValue.trim();
+
+
+    if (cleanLabel) {
+
+      node.data(
+        "label",
+        cleanLabel
+      );
+
+      /*
+        Label changed, so recompute the node body.
+      */
+      resizeNodeToLabel(
+        node
+      );
+
+      setSelectedNode(
+        (current) => {
+
+          if (
+            !current ||
+            current.id !==
+              editingNodeId
+          ) {
+            return current;
+          }
+
+
+          return {
+            ...current,
+            label:
+              cleanLabel,
+          };
+
+        }
+      );
+
+
+      showGraphFeedback(
+        `Renamed node to: ${cleanLabel}`,
+        "success"
+      );
+
+    }
+
+  }
+
+
+  /*
+    Restore Cytoscape's own label.
+  */
+  node.style(
+    "text-opacity",
+    1
+  );
+
+
+  setEditingNodeId(
+    null
+  );
+
+}
+
+function finishEdgeRelationship({
+  cancel = false,
+} = {}) {
+
+  if (!cyRef.current) {
+    return;
+  }
+
+
+  const edgeId =
+    editingEdgeIdRef.current;
+
+
+  if (!edgeId) {
+    return;
+  }
+
+
+  const edge =
+    cyRef.current.getElementById(
+      edgeId
+    );
+
+
+  if (
+    !edge ||
+    edge.empty()
+  ) {
+
+    editingEdgeIdRef.current =
+      null;
+
+    setEditingEdgeId(
+      null
+    );
+
+    return;
+  }
+
+
+  /*
+    ESCAPE:
+    Nothing has been written into Cytoscape yet,
+    so simply restore the old painted label.
+  */
+  if (cancel) {
+
+    setRelationshipValue(
+      relationshipOriginalValueRef.current
+    );
+
+
+    edge.style(
+      "text-opacity",
+      1
+    );
+
+
+    editingEdgeIdRef.current =
+      null;
+
+
+    setEditingEdgeId(
+      null
+    );
+
+
+    return;
+  }
+
+
+  const cleanRelationship =
+    relationshipValue.trim();
+
+
+  const oldRelationship =
+    relationshipOriginalValueRef.current
+      .trim();
+
+
+  /*
+    Empty value means remove the relationship.
+  */
+  if (cleanRelationship) {
+
+    edge.data(
+      "relationship",
+      cleanRelationship
+    );
+
+  } else {
+
+    edge.data(
+      "relationship",
+      ""
+    );
+
+    cyRef.current
+      .style()
+      .update();
+
+  }
+
+
+  /*
+    Keep React's Selected Edge card in sync.
+  */
+  setSelectedEdge(
+    current => {
+
+      if (
+        !current ||
+        current.id !== edgeId
+      ) {
+        return current;
+      }
+
+
+      return {
+        ...current,
+
+        relationship:
+          cleanRelationship,
+      };
+
+    }
+  );
+
+
+  edge.style(
+    "text-opacity",
+    1
+  );
+
+  relationshipOriginalValueRef.current = cleanRelationship;
+
+  editingEdgeIdRef.current =
+    null;
+
+
+  setEditingEdgeId(
+    null
+  );
+
+
+  /*
+    Avoid firing feedback if nothing actually changed.
+  */
+  if (
+    cleanRelationship !==
+    oldRelationship
+  ) {
+
+    showGraphFeedback(
+      cleanRelationship
+        ? `Relationship updated: ${cleanRelationship}`
+        : "Relationship removed",
+      "success"
+    );
+
+  }
+
+}
+
+// text color for node label
+function changeSelectedNodeTextColor(newColor) {
+  const node = getSelectedCyNode();
+
+  if (!node) return;
+
+  node.style(
+    "color",
+    newColor
+  );
+
+  node.data(
+    "textColor",
+    newColor
+  );
+
+  setSelectedNode((current) => ({
+    ...current,
+    textColor: newColor,
+  }));
+}
+
+
     
 async function handleSemanticSearch() {
   const query =
@@ -1914,34 +3712,93 @@ useEffect(() => {
 
 useEffect(() => {
 
-  function handleClickOutside(event) {
-    if (
-      shapeMenuRef.current &&
-      !shapeMenuRef.current.contains(
+  function handlePopoverPointerDown(
+    event
+  ) {
+
+    const clickedInsideShape =
+      shapeMenuRef.current?.contains(
         event.target
-      )
-    ) {
+      );
+    
+    const clickedInsideNodeBorderStyle =
+      nodeBorderStyleMenuRef.current &&
+      nodeBorderStyleMenuRef.current.contains(
+        event.target
+      );
+
+
+    const clickedInsideEdgeStyle =
+      edgeStyleMenuRef.current?.contains(
+        event.target
+      );
+
+
+    const clickedInsideArrowShape =
+      arrowShapeMenuRef.current?.contains(
+        event.target
+      );
+
+
+    /*
+      Close each menu when the click occurs
+      outside its own wrapper.
+
+      Capture mode means this runs before
+      Cytoscape or another control can consume
+      the pointer event.
+    */
+
+    if (!clickedInsideShape) {
       setShapeMenuOpen(false);
     }
+
+    if (!clickedInsideNodeBorderStyle) {
+      setNodeBorderStyleMenuOpen(false);
+    }
+
+
+    if (!clickedInsideEdgeStyle) {
+      setEdgeStyleMenuOpen(false);
+    }
+
+
+    if (!clickedInsideArrowShape) {
+      setArrowShapeMenuOpen(false);
+    }
+
   }
 
 
   function handleEscape(event) {
-    if (event.key === "Escape") {
 
-      setShapeMenuOpen(false);
-
-      if (linkModeRef.current) {
-        cancelLinkMode();
-      }
+    if (event.key !== "Escape") {
+      return;
     }
+
+
+    setShapeMenuOpen(false);
+
+    setNodeBorderStyleMenuOpen(false);
+
+    setEdgeStyleMenuOpen(false);
+
+    setArrowShapeMenuOpen(false);
+
+
+    if (linkModeRef.current) {
+      cancelLinkMode();
+    }
+
   }
 
 
   document.addEventListener(
-    "mousedown",
-    handleClickOutside
+    "pointerdown",
+    handlePopoverPointerDown,
+    true
   );
+
 
   document.addEventListener(
     "keydown",
@@ -1952,14 +3809,17 @@ useEffect(() => {
   return () => {
 
     document.removeEventListener(
-      "mousedown",
-      handleClickOutside
+      "pointerdown",
+      handlePopoverPointerDown,
+      true
     );
+
 
     document.removeEventListener(
       "keydown",
       handleEscape
     );
+
 
     if (
       graphFeedbackTimerRef.current
@@ -1968,6 +3828,7 @@ useEffect(() => {
         graphFeedbackTimerRef.current
       );
     }
+
   };
 
 }, []);
@@ -2019,6 +3880,76 @@ useImperativeHandle(ref, () => ({
   },
 
 }));
+
+
+/* =========================================================
+   CURRENT TOOLBAR ICONS
+   ========================================================= */
+
+const currentNodeShape =
+  selectedNode
+    ? NODE_SHAPES.find(
+        option =>
+          option.value ===
+          (
+            selectedNode.shape ||
+            "round-rectangle"
+          )
+      )
+    : null;
+
+const CurrentNodeShapeIcon =
+  selectedNode
+    ? (
+        currentNodeShape?.Icon ||
+        Squircle
+      )
+    : Shapes;
+
+
+const currentNodeBorderStyle =
+  NODE_BORDER_STYLES.find(
+    option =>
+      option.value ===
+      (
+        selectedNode?.borderStyle ||
+        "solid"
+      )
+  ) ||
+  NODE_BORDER_STYLES.find(
+    option =>
+      option.value ===
+      "solid"
+  );
+
+const CurrentNodeBorderStyleIcon =
+  currentNodeBorderStyle?.Icon ||
+  Square;
+
+
+const currentArrowShape =
+  ARROW_SHAPES.find(
+    option =>
+      option.value ===
+      (
+        selectedEdge?.arrowShape ||
+        "triangle"
+      )
+  ) ||
+  ARROW_SHAPES.find(
+    option =>
+      option.value ===
+      "triangle"
+  );
+
+const CurrentArrowShapeIcon =
+  currentArrowShape?.Icon ||
+  Triangle;
+
+
+/* =========================================================
+   RENDER
+   ========================================================= */
 
   return (
     <section className="graph-panel">
@@ -2098,8 +4029,156 @@ useImperativeHandle(ref, () => ({
           role="toolbar"
           aria-label="Graph editing"
         >
+          {/* ================================================= */}
+          {/* NODE TOOLS                                        */}
+          {/* ================================================= */}
 
-          {/* NODE COLOUR */}
+          {/* CREATE NODE */}
+
+          <button
+            type="button"
+            className="graph-toolbar-button"
+            onClick={createManualNode}
+            data-tooltip="Create node"
+            aria-label="Create node"
+          >
+            <span className="graph-create-action-icon">
+
+              <Squircle
+                size={18}
+                strokeWidth={1.8}
+              />
+
+              <Plus
+                className="graph-create-action-plus"
+                size={9}
+                strokeWidth={2.5}
+              />
+
+            </span>
+          </button>
+
+          {/* NODE SHAPE */}
+
+          <div
+            className="graph-toolbar-popover-wrapper"
+            ref={shapeMenuRef}
+          >
+
+            <button
+              type="button"
+
+              className={`graph-toolbar-button graph-shape-trigger ${
+                shapeMenuOpen
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
+
+              disabled={!selectedNode}
+
+              onClick={() => {
+                setShapeMenuOpen(
+                  current => !current
+                );
+                setEdgeStyleMenuOpen(
+                  false
+                );
+                setArrowShapeMenuOpen(
+                  false
+                );
+              }}
+
+              data-tooltip={
+                selectedNode
+                  ? "Node shape"
+                  : "Select a node first"
+              }
+
+              aria-label="Node shape"
+              aria-haspopup="true"
+              aria-expanded={shapeMenuOpen}
+            >
+              <CurrentNodeShapeIcon
+                size={19}
+                strokeWidth={1.8}
+                style={
+                  currentNodeShape?.rotation
+                    ? {
+                        transform:
+                          `rotate(${currentNodeShape.rotation}deg)`,
+                      }
+                    : undefined
+                }
+              />
+
+              <ChevronDown
+                size={12}
+                strokeWidth={1.8}
+              />
+            </button>
+
+
+            {shapeMenuOpen && (
+              <div
+                className="
+                  graph-shape-popover
+                  graph-icon-grid-popover
+                "
+              >
+
+                {NODE_SHAPES.map(
+                  ({
+                    value,
+                    label,
+                    Icon,
+                    rotation,
+                  }) => (
+
+                    <button
+                      key={value}
+                      type="button"
+
+                      className={`graph-shape-option ${
+                        (
+                          selectedNode?.shape ||
+                          "round-rectangle"
+                        ) === value
+                          ? "graph-shape-option-active"
+                          : ""
+                      }`}
+
+                      onClick={() =>
+                        changeSelectedNodeShape(
+                          value
+                        )
+                      }
+
+                      data-tooltip={label}
+                      aria-label={label}
+                    >
+                      <Icon
+                        size={18}
+                        strokeWidth={1.8}
+                        style={
+                          rotation
+                            ? {
+                                transform:
+                                  `rotate(${rotation}deg)`,
+                              }
+                            : undefined
+                        }
+                      />
+                    </button>
+
+                  )
+                )}
+
+              </div>
+            )}
+
+          </div>
+
+          {/* NODE FILL COLOUR */}
 
           <div className="graph-toolbar-popover-wrapper">
 
@@ -2119,7 +4198,7 @@ useImperativeHandle(ref, () => ({
             >
               <span className="graph-toolbar-color-icon">
 
-                <Palette
+                <PaintBucket
                   size={19}
                   strokeWidth={1.8}
                 />
@@ -2157,103 +4236,686 @@ useImperativeHandle(ref, () => ({
 
           </div>
 
+          {/* NODE TEXT COLOUR */}
 
-          {/* NODE SHAPE */}
-
-          <div
-            className="graph-toolbar-popover-wrapper"
-            ref={shapeMenuRef}
+          <div className="graph-toolbar-popover-wrapper">
+          <button
+            type="button"
+            className="graph-toolbar-button"
+            disabled={!selectedNode}
+            onClick={() =>
+              nodeTextColorInputRef.current?.click()
+            }
+            data-tooltip={
+              selectedNode
+                ? "Text colour"
+                : "Select a node first"
+            }
+            aria-label="Text colour"
           >
+            <span className="graph-toolbar-color-icon">
 
-            <button
-              type="button"
-
-              className={`graph-toolbar-button graph-shape-trigger ${
-                shapeMenuOpen
-                  ? "graph-toolbar-button-active"
-                  : ""
-              }`}
-
-              disabled={!selectedNode}
-
-              onClick={() =>
-                setShapeMenuOpen(
-                  (current) => !current
-                )
-              }
-
-              data-tooltip={
-                selectedNode
-                  ? "Node shape"
-                  : "Select a node first"
-              }
-
-              aria-label="Node shape"
-              aria-haspopup="true"
-              aria-expanded={shapeMenuOpen}
-            >
-              <Shapes
+              <Type
                 size={19}
                 strokeWidth={1.8}
               />
 
-              <ChevronDown
-                size={12}
+              <span
+                className="graph-toolbar-color-indicator"
+                style={{
+                  backgroundColor:
+                    selectedNode?.textColor ||
+                    getThemeColour(
+                      "--graph-node-text",
+                      "#ffffff"
+                    ),
+                }}
+              />
+
+            </span>
+          </button>
+
+          <input
+            ref={nodeTextColorInputRef}
+            className="graph-hidden-color-input"
+            type="color"
+            value={
+              selectedNode?.textColor ||
+              getThemeColour(
+                "--graph-node-text",
+                "#ffffff"
+              )
+            }
+            onChange={(event) =>
+              changeSelectedNodeTextColor(
+                event.target.value
+              )
+            }
+          />
+        </div>
+
+        {/* NODE BORDER STYLE */}
+
+        <div
+          className="graph-toolbar-popover-wrapper"
+          ref={nodeBorderStyleMenuRef}
+        >
+          <button
+            type="button"
+
+            className={`graph-toolbar-button ${
+              nodeBorderStyleMenuOpen
+                ? "graph-toolbar-button-active"
+                : ""
+            }`}
+
+            disabled={!selectedNode}
+
+            onClick={() => {
+              setNodeBorderStyleMenuOpen(
+                current => !current
+              );
+
+              setShapeMenuOpen(false);
+              setEdgeStyleMenuOpen(false);
+              setArrowShapeMenuOpen(false);
+            }}
+
+            data-tooltip={
+              selectedNode
+                ? "Node border style"
+                : "Select a node first"
+            }
+
+            aria-label="Node border style"
+            aria-haspopup="true"
+            aria-expanded={
+              nodeBorderStyleMenuOpen
+            }
+          >
+            <CurrentNodeBorderStyleIcon
+              size={19}
+              strokeWidth={1.8}
+            />
+
+            <ChevronDown
+              size={11}
+              strokeWidth={1.8}
+            />
+          </button>
+
+
+          {nodeBorderStyleMenuOpen && (
+            <div className="graph-shape-popover">
+
+              {NODE_BORDER_STYLES.map(
+                ({
+                  value,
+                  label,
+                  Icon,
+                }) => (
+
+                  <button
+                    key={value}
+                    type="button"
+
+                    className={`graph-shape-option ${
+                      (
+                        selectedNode
+                          ?.borderStyle ||
+                        "solid"
+                      ) === value
+                        ? "graph-shape-option-active"
+                        : ""
+                    }`}
+
+                    onClick={() =>
+                      changeSelectedNodeBorderStyle(
+                        value
+                      )
+                    }
+
+                    data-tooltip={label}
+                    aria-label={label}
+                  >
+                    <Icon
+                      size={18}
+                      strokeWidth={1.8}
+                    />
+                  </button>
+
+                )
+              )}
+
+            </div>
+          )}
+        </div>
+
+
+        {/* NODE BORDER COLOUR */}
+
+        <div className="graph-toolbar-popover-wrapper">
+
+          <button
+            type="button"
+
+            className="graph-toolbar-button"
+
+            disabled={!selectedNode}
+
+            onClick={() =>
+              nodeBorderColorInputRef
+                .current
+                ?.click()
+            }
+
+            data-tooltip={
+              selectedNode
+                ? "Node border colour"
+                : "Select a node first"
+            }
+
+            aria-label="Node border colour"
+          >
+            <span className="graph-toolbar-color-icon">
+
+              <SquareDashed
+                size={19}
                 strokeWidth={1.8}
               />
-            </button>
+
+              <span
+                className="graph-toolbar-color-indicator"
+                style={{
+                  backgroundColor:
+                    selectedNode
+                      ?.borderColor ||
+                    getThemeColour(
+                      "--graph-node-border",
+                      "#818CF8"
+                    ),
+                }}
+              />
+
+            </span>
+          </button>
 
 
-            {shapeMenuOpen && (
-              <div className="graph-shape-popover">
+          <input
+            ref={nodeBorderColorInputRef}
 
-                {NODE_SHAPES.map(
-                  ({
-                    value,
-                    label,
-                    Icon,
-                  }) => (
+            className="graph-hidden-color-input"
 
-                    <button
-                      key={value}
-                      type="button"
+            type="color"
 
-                      className={`graph-shape-option ${
-                        (
-                          selectedNode?.shape ||
-                          "round-rectangle"
-                        ) === value
-                          ? "graph-shape-option-active"
-                          : ""
-                      }`}
+            value={
+              selectedNode
+                ?.borderColor ||
+              getThemeColour(
+                "--graph-node-border",
+                "#818CF8"
+              )
+            }
 
-                      onClick={() =>
-                        changeSelectedNodeShape(
-                          value
-                        )
+            onChange={(event) =>
+              changeSelectedNodeBorderColor(
+                event.target.value
+              )
+            }
+          />
+
+        </div>
+
+        <span className="graph-toolbar-divider" />
+
+        {/* ================================================= */}
+        {/* EDGE / RELATIONSHIP TOOLS                         */}
+        {/* ================================================= */}
+
+        {/* LINK NODES */}
+
+        <button
+          type="button"
+
+          className={`graph-toolbar-button ${
+            linkMode
+              ? "graph-toolbar-button-active"
+              : ""
+          }`}
+
+          onClick={startLinkMode}
+
+          data-tooltip={
+            linkMode
+              ? "Cancel linking"
+              : "Create link"
+          }
+
+          aria-label={
+            linkMode
+              ? "Cancel linking"
+              : "Create link"
+          }
+          aria-pressed={linkMode}
+        >
+          <span className="graph-create-action-icon">
+
+            <MoveUpRight
+              size={18}
+              strokeWidth={1.8}
+            />
+
+            <Plus
+              className="graph-create-action-plus"
+              size={9}
+              strokeWidth={2.5}
+            />
+
+          </span>
+        </button>
+
+        {/* EDGE STYLE */}
+
+        <div
+          className="graph-toolbar-popover-wrapper"
+          ref={edgeStyleMenuRef}
+        >
+
+          <button
+            type="button"
+
+            className={`graph-toolbar-button ${
+              edgeStyleMenuOpen
+                ? "graph-toolbar-button-active"
+                : ""
+            }`}
+
+            disabled={
+              !selectedEdge
+            }
+
+            onClick={() => {
+              setEdgeStyleMenuOpen(
+                current => !current
+              );
+              setShapeMenuOpen(
+                false
+              );
+              setArrowShapeMenuOpen(
+                false
+              );
+            }}
+
+            data-tooltip={
+              selectedEdge
+                ? "Edge style"
+                : "Select an edge first"
+            }
+
+            aria-label="Edge style"
+          >
+
+            <span
+              className={`
+                graph-edge-style-preview
+                graph-edge-style-${
+                  selectedEdge?.lineStyle ||
+                  "solid"
+                }
+              `}
+            />
+
+            <ChevronDown
+              size={11}
+              strokeWidth={1.8}
+            />
+
+          </button>
+
+
+          {edgeStyleMenuOpen && (
+
+            <div className="graph-shape-popover">
+
+              {EDGE_STYLES.map(
+                ({ value, label }) => (
+
+                  <button
+                    key={value}
+                    type="button"
+
+                    className={`graph-shape-option ${
+                      (
+                        selectedEdge?.lineStyle ||
+                        "solid"
+                      ) === value
+                        ? "graph-shape-option-active"
+                        : ""
+                    }`}
+
+                    onClick={() =>
+                      changeSelectedEdgeStyle(
+                        value
+                      )
+                    }
+
+                    data-tooltip={label}
+                    aria-label={label}
+                  >
+
+                    <span
+                      className={`
+                        graph-edge-style-preview
+                        graph-edge-style-${value}
+                      `}
+                    />
+
+                  </button>
+
+                )
+              )}
+
+            </div>
+
+          )}
+
+        </div>
+
+        {/* EDGE COLOUR */}
+
+        <div className="graph-toolbar-popover-wrapper">
+
+          <button
+            type="button"
+
+            className="graph-toolbar-button"
+
+            disabled={
+              !selectedEdge
+            }
+
+            onClick={() =>
+              edgeColorInputRef
+                .current
+                ?.click()
+            }
+
+            data-tooltip={
+              selectedEdge
+                ? "Edge colour"
+                : "Select an edge first"
+            }
+
+            aria-label="Edge colour"
+          >
+
+            <span className="graph-toolbar-color-icon">
+
+              <Minus
+                size={20}
+                strokeWidth={2}
+              />
+
+              <span
+                className="graph-toolbar-color-indicator"
+
+                style={{
+                  backgroundColor:
+                    selectedEdge?.edgeColor ||
+                    getThemeColour(
+                      "--graph-edge",
+                      "#465873"
+                    ),
+                }}
+              />
+
+            </span>
+
+          </button>
+
+
+          <input
+            ref={
+              edgeColorInputRef
+            }
+
+            className="graph-hidden-color-input"
+
+            type="color"
+
+            value={
+              selectedEdge?.edgeColor ||
+              getThemeColour(
+                "--graph-edge",
+                "#465873"
+              )
+            }
+
+            onChange={
+              event =>
+                changeSelectedEdgeColor(
+                  event.target.value
+                )
+            }
+          />
+
+        </div>
+
+        {/* ARROW SHAPE */}
+
+        <div
+          className="graph-toolbar-popover-wrapper"
+          ref={arrowShapeMenuRef}
+        >
+
+          <button
+            type="button"
+
+            className={`graph-toolbar-button ${
+              arrowShapeMenuOpen
+                ? "graph-toolbar-button-active"
+                : ""
+            }`}
+
+            disabled={
+              !selectedEdge
+            }
+
+            onClick={() => {
+              setArrowShapeMenuOpen(
+                current => !current
+              );
+              setShapeMenuOpen(
+                false
+              );
+              setEdgeStyleMenuOpen(
+                false
+              );
+            }}
+
+            data-tooltip={
+              selectedEdge
+                ? "Arrow shape"
+                : "Select an edge first"
+            }
+
+            aria-label="Arrow shape"
+          >
+
+            <CurrentArrowShapeIcon
+              size={19}
+              strokeWidth={1.8}
+
+              style={
+                currentArrowShape?.rotation
+                  ? {
+                      transform:
+                        `rotate(${currentArrowShape.rotation}deg)`,
+                    }
+                  : undefined
+              }
+            />
+
+            <ChevronDown
+              size={11}
+              strokeWidth={1.8}
+            />
+
+          </button>
+
+          {arrowShapeMenuOpen && (
+
+            <div
+              className="
+                graph-shape-popover
+                graph-icon-grid-popover
+              "
+            >
+
+              {ARROW_SHAPES.map(
+                ({
+                  value,
+                  label,
+                  Icon,
+                  rotation,
+                }) => (
+
+                  <button
+                    key={value}
+                    type="button"
+
+                    className={`graph-shape-option ${
+                      (
+                        selectedEdge?.arrowShape ||
+                        "triangle"
+                      ) === value
+                        ? "graph-shape-option-active"
+                        : ""
+                    }`}
+
+                    onClick={() =>
+                      changeSelectedArrowShape(
+                        value
+                      )
+                    }
+
+                    data-tooltip={label}
+                    aria-label={label}
+                  >
+
+                    <Icon
+                      size={18}
+                      strokeWidth={1.8}
+
+                      style={
+                        rotation
+                          ? {
+                              transform:
+                                `rotate(${rotation}deg)`,
+                            }
+                          : undefined
                       }
+                    />
 
-                      data-tooltip={label}
-                      aria-label={label}
-                    >
-                      <Icon
-                        size={18}
-                        strokeWidth={1.8}
-                      />
-                    </button>
+                  </button>
 
-                  )
-                )}
+                )
+              )}
 
-              </div>
-            )}
+            </div>
 
-          </div>
+          )}
+
+        </div>
+
+        {/* ARROW COLOUR */}
+
+        <div className="graph-toolbar-popover-wrapper">
+
+          <button
+            type="button"
+
+            className="graph-toolbar-button"
+
+            disabled={
+              !selectedEdge
+            }
+
+            onClick={() =>
+              arrowColorInputRef
+                .current
+                ?.click()
+            }
+
+            data-tooltip={
+              selectedEdge
+                ? "Arrow colour"
+                : "Select an edge first"
+            }
+
+            aria-label="Arrow colour"
+          >
+
+            <span className="graph-toolbar-color-icon">
+
+              <ArrowRight
+                size={19}
+                strokeWidth={1.8}
+              />
+
+              <span
+                className="graph-toolbar-color-indicator"
+
+                style={{
+                  backgroundColor:
+                    selectedEdge?.arrowColor ||
+                    getThemeColour(
+                      "--graph-edge-arrow",
+                      "#7772ff"
+                    ),
+                }}
+              />
+
+            </span>
+
+          </button>
 
 
-          <span className="graph-toolbar-divider" />
+          <input
+            ref={
+              arrowColorInputRef
+            }
+
+            className="graph-hidden-color-input"
+
+            type="color"
+
+            value={
+              selectedEdge?.arrowColor ||
+              getThemeColour(
+                "--graph-edge-arrow",
+                "#7772ff"
+              )
+            }
+
+            onChange={
+              event =>
+                changeSelectedArrowColor(
+                  event.target.value
+                )
+            }
+          />
+
+        </div>
+
+        <span className="graph-toolbar-divider" />
+
+        {/* ================================================= */}
+        {/* GENERAL TOOLS                                     */}
+        {/* ================================================= */}
 
         {/* DELETE ELEMENT */}
+
         <button
           type="button"
           className="graph-toolbar-button"
@@ -2274,36 +4936,7 @@ useImperativeHandle(ref, () => ({
           />
         </button>
 
-
-          {/* LINK NODES */}
-
-          <button
-            type="button"
-
-            className={`graph-toolbar-button ${
-              linkMode
-                ? "graph-toolbar-button-active"
-                : ""
-            }`}
-
-            onClick={startLinkMode}
-
-            data-tooltip={
-              linkMode
-                ? "Cancel link mode"
-                : "Link nodes"
-            }
-
-            aria-label="Link nodes"
-            aria-pressed={linkMode}
-          >
-            <Link2
-              size={19}
-              strokeWidth={1.8}
-            />
-          </button>
-
-        </div>
+      </div>
 
 
         {/* =============================================== */}
@@ -2317,10 +4950,165 @@ useImperativeHandle(ref, () => ({
             className="graph-container"
           />
 
+          {editingNodeId && (
+            <input
+              className="graph-inline-rename"
+              type="text"
+              value={renameValue}
+              autoFocus
+              style={{
+                left: `${renamePosition.x}px`,
+                top: `${renamePosition.y}px`,
+                width: `${
+                  (
+                    selectedNode?.nodeWidth ||
+                    110
+                  ) * renameZoom
+                }px`,
+
+                height: `${
+                  (
+                    selectedNode?.nodeHeight ||
+                    52
+                  ) * renameZoom
+                }px`,
+                fontSize: `${15 * renameZoom}px`,
+                lineHeight: `${52 * renameZoom}px`,
+                color:
+                  selectedNode?.textColor ||
+                  getThemeColour(
+                    "--graph-node-text",
+                    "#ffffff"
+                  ),
+              }}
+              onChange={(event) =>
+                setRenameValue(event.target.value)
+              }
+              onBlur={() =>
+                finishNodeRename()
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+
+                  finishNodeRename();
+                }
+
+                if (event.key === "Escape") {
+                  event.preventDefault();
+
+                  finishNodeRename({
+                    cancel: true,
+                  });
+                }
+              }}
+            />
+          )}
+
+          {editingEdgeId && (
+            <input
+              className="graph-inline-edge-relationship"
+
+              type="text"
+
+              value={
+                relationshipValue
+              }
+
+              autoFocus
+
+              spellCheck={false}
+
+              placeholder="Relationship"
+
+              style={{
+                left:
+                  `${relationshipPosition.x}px`,
+
+                top:
+                  `${relationshipPosition.y}px`,
+
+                width:
+                  `${
+                    Math.max(
+                      90,
+                      Math.min(
+                        220,
+                        relationshipValue.length * 7 +
+                          36
+                      )
+                    ) *
+                    relationshipZoom
+                  }px`,
+
+                height:
+                  `${
+                    28 *
+                    relationshipZoom
+                  }px`,
+
+                fontSize:
+                  `${
+                    12 *
+                    relationshipZoom
+                  }px`,
+
+                lineHeight:
+                  `${
+                    26 *
+                    relationshipZoom
+                  }px`,
+              }}
+
+              onChange={
+                event =>
+                  setRelationshipValue(
+                    event.target.value
+                  )
+              }
+
+              onBlur={() =>
+                finishEdgeRelationship()
+              }
+
+              onKeyDown={
+                event => {
+
+                  if (
+                    event.key ===
+                    "Enter"
+                  ) {
+
+                    event.preventDefault();
+
+                    finishEdgeRelationship();
+
+                  }
+
+
+                  if (
+                    event.key ===
+                    "Escape"
+                  ) {
+
+                    event.preventDefault();
+
+                    finishEdgeRelationship({
+                      cancel: true,
+                    });
+
+                  }
+
+                }
+              }
+            />
+
+          )}
 
           {/* CURRENT GRAPH SELECTION */}
 
           {(selectedNode || selectedEdge) && (
+
             <div className="graph-selected-node-overlay">
 
               <span>
@@ -2329,13 +5117,28 @@ useImperativeHandle(ref, () => ({
                   : "Selected edge"}
               </span>
 
+
               <strong>
                 {selectedNode
                   ? selectedNode.label
                   : `${selectedEdge.sourceLabel} → ${selectedEdge.targetLabel}`}
               </strong>
 
+
+              {selectedEdge && (
+
+                <div className="graph-selected-edge-relationship">
+
+                  {selectedEdge.relationship?.trim()
+                    ? selectedEdge.relationship
+                    : "Double-click edge to add relationship"}
+
+                </div>
+
+              )}
+
             </div>
+
           )}
 
 
@@ -2523,6 +5326,8 @@ useImperativeHandle(ref, () => ({
                 />
 
               </button>
+
+              
 
             )}
 

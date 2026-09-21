@@ -102,46 +102,160 @@ function SummaryPanel({ rawNotes, summary, onSummaryChange }) {
   // =========================================================
 
   async function generateOrReviewSummary() {
-    if (!rawNotes || rawNotes.trim() == "") {
-      setSummaryError("Please write some notes before generating a summary.");
+    if (!rawNotes || rawNotes.trim() === "") {
+      setSummaryError(
+        "Please write some notes before generating a summary."
+      );
+
       return;
     }
 
-    setSummaryLoading(true);
-    setSummaryError("");
+    /*
+      Capture the mode at the moment the button is pressed.
+
+      false = generate a brand-new summary
+      true  = review/improve the user's existing summary
+    */
+    const isReviewingExistingSummary =
+      hasUserSummary;
+
+
+    if (isReviewingExistingSummary) {
+      setReviewLoading(true);
+      setReviewError("");
+    } else {
+      setSummaryLoading(true);
+      setSummaryError("");
+    }
+
 
     try {
-      const response = await fetch("/api/summary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          rawNotes,
-//           graphJson: graphData ? JSON.stringify(graphData) : "",
-          userSummary: mySummary || "",
-        }),
-      });
+      const response = await fetch(
+        "/api/summary",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          credentials: "include",
+
+          body: JSON.stringify({
+            rawNotes,
+
+            /*
+              Send the user's existing summary when
+              reviewing.
+
+              When generating from scratch this will
+              simply be an empty string.
+            */
+            userSummary:
+              mySummary || "",
+          }),
+        }
+      );
+
 
       if (!response.ok) {
-        throw new Error("Summary generation failed. Please try again.");
+        throw new Error(
+          "Summary generation failed. Please try again."
+        );
       }
 
-      const data = await response.json();
 
-      // Use backend results directly
-      setAiSummary(data.aiSummary);
-      setMySummary(data.aiSummary);
+      const data =
+        await response.json();
 
-      setSummaryScore(data.userScore ?? null);
-      setSummaryFeedback(data.userSummaryReview ?? "");
 
-      setImprovedSummary(data.improvedSummary ?? "");
+      /*
+        =====================================================
+        GENERATE MODE
+        =====================================================
+
+        There is no user summary yet, so the AI result
+        becomes the summary shown in the editor.
+      */
+      if (!isReviewingExistingSummary) {
+
+        const generatedSummary =
+          data.aiSummary ?? "";
+
+        setAiSummary(
+          generatedSummary
+        );
+
+        setMySummary(
+          generatedSummary
+        );
+
+
+        /*
+          A fresh generation has no user-review state.
+        */
+        setSummaryScore(null);
+        setSummaryFeedback("");
+        setImprovedSummary("");
+
+        return;
+      }
+
+
+      /*
+        =====================================================
+        REVIEW / IMPROVE MODE
+        =====================================================
+
+        IMPORTANT:
+        Do NOT call setMySummary() here.
+
+        The user's original summary must stay untouched
+        until they explicitly press "Use this version".
+      */
+
+      setSummaryScore(
+        data.userScore ?? null
+      );
+
+      setSummaryFeedback(
+        data.userSummaryReview ?? ""
+      );
+
+      setImprovedSummary(
+        data.aiSummary ?? ""
+      );
+
 
     } catch (error) {
-      console.error("Summary generation error:", error);
-      setSummaryError("Unable to generate summary. Please try again.");
+
+      console.error(
+        "Summary generation error:",
+        error
+      );
+
+
+      if (isReviewingExistingSummary) {
+
+        setReviewError(
+          "Unable to review summary. Please try again."
+        );
+
+      } else {
+
+        setSummaryError(
+          "Unable to generate summary. Please try again."
+        );
+      }
+
     } finally {
-      setSummaryLoading(false);
+
+      if (isReviewingExistingSummary) {
+        setReviewLoading(false);
+      } else {
+        setSummaryLoading(false);
+      }
     }
   }
 

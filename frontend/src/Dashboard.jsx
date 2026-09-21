@@ -3,12 +3,17 @@ import Sidebar from "./components/Sidebar";
 import DashboardContent from "./components/DashboardContent";
 import NoteWorkspace from "./components/NoteWorkspace";
 import usePageTitle from "./hooks/usePageTitle";
+import MasterGraph from "./components/MasterGraph";
 
 import {
   useEffect,
   useRef,
   useState,
 } from "react";
+
+import {
+  useSearchParams,
+} from "react-router-dom";
 
 import {
   getNotes,
@@ -25,10 +30,43 @@ function Dashboard() {
   // =========================================================
 
   const [notesExpanded, setNotesExpanded] =
-    useState(false);
+    useState(() => {
+      return (
+        localStorage.getItem(
+          "treenotes-sidebar-notes-expanded"
+        ) === "true"
+      );
+    });
+
+  useEffect(() => {
+
+    localStorage.setItem(
+      "treenotes-sidebar-notes-expanded",
+      String(notesExpanded)
+    );
+
+  }, [notesExpanded]);
 
   const [sidebarCollapsed, setSidebarCollapsed] =
-    useState(false);
+    useState(() => {
+      return (
+        localStorage.getItem(
+          "treenotes-sidebar-collapsed"
+        ) === "true"
+      );
+    });
+
+  useEffect(() => {
+
+    localStorage.setItem(
+      "treenotes-sidebar-collapsed",
+      String(sidebarCollapsed)
+    );
+
+  }, [sidebarCollapsed]);
+
+  const [activeView, setActiveView] =
+  useState("dashboard");
 
 
   // =========================================================
@@ -62,6 +100,16 @@ function Dashboard() {
         note.id === selectedNoteId
     ) ?? null;
 
+  const [
+    searchParams,
+    setSearchParams,
+  ] = useSearchParams();
+
+  const requestedNoteId =
+    searchParams.get("note");
+
+  const requestedView =
+    searchParams.get("view");
 
   // =========================================================
   // WORKSPACE REFERENCE
@@ -134,6 +182,127 @@ function Dashboard() {
 
   }
 
+  function openNote(noteId) {
+
+    setSearchParams({
+      note: String(noteId),
+    });
+
+  }
+
+  function openConnectionsPage() {
+
+    setSearchParams({
+      view:
+        "connections",
+    });
+
+  }
+
+  function clearOpenNote() {
+
+    setSearchParams({});
+
+    setSelectedNoteId(null);
+
+  }
+
+  useEffect(() => {
+
+  if (notesLoading) {
+    return;
+  }
+
+
+  /*
+    CONNECTIONS PAGE
+  */
+  if (
+    requestedView ===
+    "connections"
+  ) {
+
+    setSelectedNoteId(
+      null
+    );
+
+    setActiveView(
+      "connections"
+    );
+
+    return;
+  }
+
+
+  /*
+    PLAIN DASHBOARD
+  */
+  if (!requestedNoteId) {
+
+    setSelectedNoteId(
+      null
+    );
+
+    setActiveView(
+      "dashboard"
+    );
+
+    return;
+  }
+
+
+  /*
+    SPECIFIC NOTE
+  */
+  const requestedNote =
+    notes.find(
+      note =>
+        String(note.id) ===
+        String(requestedNoteId)
+    );
+
+
+  if (!requestedNote) {
+
+    setSelectedNoteId(
+      null
+    );
+
+    setActiveView(
+      "dashboard"
+    );
+
+    return;
+  }
+
+
+  if (
+    String(
+      selectedNoteId ?? ""
+    ) !==
+    String(
+      requestedNote.id
+    )
+  ) {
+
+    setSelectedNoteId(
+      requestedNote.id
+    );
+
+  }
+
+
+  setActiveView(
+    "dashboard"
+  );
+
+}, [
+  requestedView,
+  requestedNoteId,
+  notes,
+  notesLoading,
+  selectedNoteId,
+]);
 
   // =========================================================
   // CREATE NOTE
@@ -159,7 +328,7 @@ function Dashboard() {
       /*
         Automatically open the new note.
       */
-      setSelectedNoteId(
+      openNote(
         newNote.id
       );
 
@@ -302,6 +471,10 @@ function Dashboard() {
           noteWorkspaceRef.current
             ?.saveEverything()
         }
+
+        showNoteActions={
+          Boolean(selectedNote?.id)
+        }
       />
 
 
@@ -319,7 +492,6 @@ function Dashboard() {
             )
           }
 
-
           // Dynamic notes
           notes={notes}
 
@@ -328,7 +500,7 @@ function Dashboard() {
           }
 
           onSelectNote={
-            handleSelectNote
+            openNote
           }
 
           onCreateNote={
@@ -339,6 +511,9 @@ function Dashboard() {
             handleDeleteNote
           }
 
+          onConnectionsPageClick={
+            openConnectionsPage
+          }
 
           // Sidebar collapse
           sidebarCollapsed={
@@ -351,6 +526,7 @@ function Dashboard() {
                 !current
             )
           }
+          activeView={activeView}
 
         />
 
@@ -359,39 +535,33 @@ function Dashboard() {
 
           {notesLoading ? (
 
-            <div className="dashboard-loading">
-              Loading notes...
-            </div>
+          <div className="dashboard-loading">
+            Loading notes...
+          </div>
 
-          ) : selectedNote ? (
+        ) : selectedNote ? (
 
-            <NoteWorkspace
+          <NoteWorkspace
+            key={selectedNote.id}
+            note={selectedNote}
+            ref={noteWorkspaceRef}
+            onNoteSaved={handleNoteSaved}
+          />
 
-              /*
-                Force React to initialise a fresh
-                workspace when switching notes.
-              */
-              key={selectedNote.id}
+        ) : activeView === "connections" ? (
 
-              note={
-                selectedNote
-              }
+          <MasterGraph
+            notes={notes}
+            onOpenNote={
+              openNote
+            }
+          />
 
-              ref={
-                noteWorkspaceRef
-              }
+        ) : (
 
-              onNoteSaved={
-                handleNoteSaved
-              }
+          <DashboardContent />
 
-            />
-
-          ) : (
-
-            <DashboardContent />
-
-          )}
+        )}
 
         </section>
 

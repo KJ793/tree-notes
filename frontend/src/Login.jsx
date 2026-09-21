@@ -1,6 +1,7 @@
 import "./App.css";
 import { useState } from "react";
 import usePageTitle from "./hooks/usePageTitle";
+import treeNotesWideLogo from "./assets/logo-wide.png";
 
 import treeGraph from "./assets/graph.png";
 
@@ -23,12 +24,11 @@ function Login() {
 
       <nav className="navbar">
 
-        <div className="logo">
-          <div className="logotext">
-            <h2>TreeNotes</h2>
-            <p>Organise. Connect. Remember.</p>
-          </div>
-        </div>
+        <img
+          src={treeNotesWideLogo}
+          alt="TreeNotes - Organise. Connect. Remember"
+          className="login-brand-logo"
+        />
 
         <div className="navlinks">
           <a href="#">Features</a>
