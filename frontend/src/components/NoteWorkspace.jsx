@@ -16,7 +16,7 @@ import {
   List,
   ListOrdered,
   Link,
-  Info,
+  Notebook,
   CirclePlus,
   Type,
   Highlighter,
@@ -28,7 +28,9 @@ import {
   AlignJustify,
   IndentIncrease,
   IndentDecrease,
+  ChevronUp,
   ChevronDown,
+  X,
   ChevronRight,
   Replace,
 } from "lucide-react";
@@ -71,6 +73,8 @@ const [activeAlignment, setActiveAlignment] = useState("left");
 
 const selectedRangeRef = useRef(null);
 const graphLinkColourIndexRef = useRef(0);
+
+const [linkedTextNavigator, setLinkedTextNavigator] = useState(null);
 
 /*
   =========================================================
@@ -2122,6 +2126,207 @@ function inferGraphLinkPaletteSlot(
     updateRawNotes();
   }
 
+  function getLinkedTextReferences(nodeId) {
+    if (!editorRef.current) {
+      return [];
+    }
+
+    return Array.from(
+      editorRef.current.querySelectorAll(
+        ".graph-linked-text"
+      )
+    ).filter(
+      (span) =>
+        span.dataset.graphNodeId ===
+        String(nodeId)
+    );
+  }
+
+
+  function clearLinkedTextNavigatorFocus() {
+    if (!editorRef.current) {
+      return;
+    }
+
+    editorRef.current
+      .querySelectorAll(
+        ".graph-linked-text-navigation-current"
+      )
+      .forEach((span) => {
+        span.classList.remove(
+          "graph-linked-text-navigation-current"
+        );
+      });
+  }
+
+
+  function focusLinkedTextReference(
+    nodeId,
+    nodeLabel,
+    requestedIndex
+  ) {
+    const editor = editorRef.current;
+
+    if (!editor) {
+      return;
+    }
+
+    const references =
+      getLinkedTextReferences(nodeId);
+
+    clearLinkedTextNavigatorFocus();
+
+
+    // Node exists, but has no Raw Notes references.
+    if (references.length === 0) {
+      setLinkedTextNavigator({
+        nodeId: String(nodeId),
+        nodeLabel:
+          nodeLabel || "Selected node",
+        currentIndex: 0,
+        total: 0,
+      });
+
+      return;
+    }
+
+
+    /*
+      Wrap navigation around:
+      previous from 0 -> final result
+      next from final -> 0
+    */
+    const normalizedIndex =
+      (
+        requestedIndex %
+        references.length +
+        references.length
+      ) %
+      references.length;
+
+
+    const reference =
+      references[normalizedIndex];
+
+
+    reference.classList.add(
+      "graph-linked-text-navigation-current"
+    );
+
+
+    setLinkedTextNavigator({
+      nodeId: String(nodeId),
+      nodeLabel:
+        nodeLabel || "Selected node",
+      currentIndex: normalizedIndex,
+      total: references.length,
+    });
+
+
+    /*
+      Scroll only the Raw Notes content area.
+
+      We calculate the reference position relative
+      to the current editor scroll position so that
+      even references far below the visible area
+      can be brought into view.
+    */
+
+    const editorRect =
+      editor.getBoundingClientRect();
+
+    const referenceRect =
+      reference.getBoundingClientRect();
+
+
+    const targetScrollTop =
+      editor.scrollTop +
+      (
+        referenceRect.top -
+        editorRect.top
+      ) -
+      (
+        editor.clientHeight / 2
+      ) +
+      (
+        referenceRect.height / 2
+      );
+
+
+    editor.scrollTo({
+      top: Math.max(
+        0,
+        targetScrollTop
+      ),
+
+      behavior: "smooth",
+    });
+  }
+
+
+  function openLinkedTextNavigator(
+    nodeId,
+    nodeLabel
+  ) {
+    focusLinkedTextReference(
+      nodeId,
+      nodeLabel,
+      0
+    );
+  }
+
+
+  function moveLinkedTextNavigator(direction) {
+    if (!linkedTextNavigator) {
+      return;
+    }
+
+
+    const references =
+      getLinkedTextReferences(
+        linkedTextNavigator.nodeId
+      );
+
+
+    /*
+      Re-read references every time rather than
+      trusting the old total.
+
+      This means navigation still works if the
+      user edits/removes linked text while the
+      navigator is open.
+    */
+
+    if (references.length === 0) {
+      focusLinkedTextReference(
+        linkedTextNavigator.nodeId,
+        linkedTextNavigator.nodeLabel,
+        0
+      );
+
+      return;
+    }
+
+
+    const nextIndex =
+      linkedTextNavigator.currentIndex +
+      direction;
+
+
+    focusLinkedTextReference(
+      linkedTextNavigator.nodeId,
+      linkedTextNavigator.nodeLabel,
+      nextIndex
+    );
+  }
+
+
+  function closeLinkedTextNavigator() {
+    clearLinkedTextNavigatorFocus();
+
+    setLinkedTextNavigator(null);
+  }
+
   // =========================================================
   // Load Raw Notes content
   // =========================================================
@@ -2341,7 +2546,7 @@ function inferGraphLinkPaletteSlot(
             <div className="raw-notes-heading-title">
               <h2>Raw Notes</h2>
 
-              <Info
+              <Notebook
                 size={21}
                 strokeWidth={2}
                 aria-hidden="true"
@@ -2912,6 +3117,106 @@ function inferGraphLinkPaletteSlot(
               </button>
               
             </div>
+
+            {linkedTextNavigator && (
+              <div
+                className="linked-text-navigator"
+                role="group"
+                aria-label="Linked text navigation"
+              >
+
+                <div className="linked-text-navigator-info">
+
+                  <strong
+                    title={
+                      linkedTextNavigator.nodeLabel
+                    }
+                  >
+                    {linkedTextNavigator.nodeLabel}
+                  </strong>
+
+
+                  <span aria-live="polite">
+
+                    {linkedTextNavigator.total > 0
+                      ? `${
+                          linkedTextNavigator.currentIndex +
+                          1
+                        } / ${
+                          linkedTextNavigator.total
+                        }`
+                      : "No linked text"}
+
+                  </span>
+
+                </div>
+
+
+                <div className="linked-text-navigator-actions">
+
+                  <button
+                    type="button"
+                    disabled={
+                      linkedTextNavigator.total <= 1
+                    }
+                    onMouseDown={(event) =>
+                      event.preventDefault()
+                    }
+                    onClick={() =>
+                      moveLinkedTextNavigator(-1)
+                    }
+                    data-tooltip="Previous reference"
+                    aria-label="Previous linked text"
+                  >
+                    <ChevronUp
+                      size={17}
+                      strokeWidth={1.9}
+                    />
+                  </button>
+
+
+                  <button
+                    type="button"
+                    disabled={
+                      linkedTextNavigator.total <= 1
+                    }
+                    onMouseDown={(event) =>
+                      event.preventDefault()
+                    }
+                    onClick={() =>
+                      moveLinkedTextNavigator(1)
+                    }
+                    data-tooltip="Next reference"
+                    aria-label="Next linked text"
+                  >
+                    <ChevronDown
+                      size={17}
+                      strokeWidth={1.9}
+                    />
+                  </button>
+
+
+                  <button
+                    type="button"
+                    onMouseDown={(event) =>
+                      event.preventDefault()
+                    }
+                    onClick={
+                      closeLinkedTextNavigator
+                    }
+                    data-tooltip="Close"
+                    aria-label="Close linked text navigation"
+                  >
+                    <X
+                      size={16}
+                      strokeWidth={1.9}
+                    />
+                  </button>
+
+                </div>
+
+              </div>
+            )}
             
             <div
               ref={editorRef}
@@ -3646,6 +3951,7 @@ function inferGraphLinkPaletteSlot(
         noteId={note.id}
         initialGraph={note.graph_json}
         ref={graphPanelRef}
+        onNavigateLinkedText={openLinkedTextNavigator}
         />
       </div>
 

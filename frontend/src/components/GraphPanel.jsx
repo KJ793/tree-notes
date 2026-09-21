@@ -28,7 +28,6 @@ import {
   MoveUpRight,
   Minus,
   ArrowRight,
-  MousePointer2,
   CircleX,
 } from "lucide-react";
 import SquareDottedIcon from "./icons/SquareDottedIcon";
@@ -757,6 +756,7 @@ const GraphPanel = forwardRef(function GraphPanel(
     addNodeTrigger,
     noteId,
     initialGraph,
+    onNavigateLinkedText,
   },
   ref
 ) {
@@ -4913,6 +4913,35 @@ const CurrentArrowShapeIcon =
         {/* ================================================= */}
         {/* GENERAL TOOLS                                     */}
         {/* ================================================= */}
+
+        {/* FIND LINKED TEXT */}
+
+        <button
+          type="button"
+          className="graph-toolbar-button"
+          disabled={!selectedNode}
+          onClick={() => {
+            if (!selectedNode) {
+              return;
+            }
+
+            onNavigateLinkedText?.(
+              selectedNode.id,
+              selectedNode.label
+            );
+          }}
+          data-tooltip={
+            selectedNode
+              ? "Find linked text"
+              : "Select a node first"
+          }
+          aria-label="Find linked text"
+        >
+          <Search
+            size={19}
+            strokeWidth={1.8}
+          />
+        </button>
 
         {/* DELETE ELEMENT */}
 

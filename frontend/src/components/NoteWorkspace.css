@@ -2222,7 +2222,13 @@
     var(--bg-panel-elevated);
 
   box-shadow:
-    var(--shadow-panel);
+    0 0 0 1px
+      color-mix(
+        in srgb,
+        var(--accent-primary) 10%,
+        transparent
+      ),
+    var(--shadow-popover);
 
   pointer-events: none;
 }
@@ -2289,7 +2295,13 @@
     var(--bg-panel-elevated);
 
   box-shadow:
-    var(--shadow-panel);
+    0 0 0 1px
+      color-mix(
+        in srgb,
+        var(--accent-primary) 10%,
+        transparent
+      ),
+    var(--shadow-popover);
 
   color:
     var(--text-primary);
@@ -2363,10 +2375,10 @@
 .note-workspace
 .graph-link-mode-overlay button:hover {
   background:
-    var(--bg-hover);
+    var(--accent-primary);
 
   color:
-    var(--text-primary);
+    var(--text-on-accent);
 }
 
 .note-workspace .graph-selected-node-overlay,
@@ -3004,19 +3016,24 @@ button[data-tooltip]:hover::after,
 
   border-radius: 6px;
 
-  background:
-    var(--accent-primary);
+  background: transparent;
 
-  color:
-    #ffffff;
+  color: var(--text-muted);
 
   cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 
 .graph-semantic-submit:hover:not(:disabled) {
   filter:
     brightness(1.08);
+  
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
 }
 
 
@@ -3042,6 +3059,15 @@ button[data-tooltip]:hover::after,
       var(--bg-panel-elevated) 60%,
       transparent
     );
+
+  box-shadow:
+    0 0 0 1px
+      color-mix(
+        in srgb,
+        var(--accent-primary) 10%,
+        transparent
+      ),
+    var(--shadow-popover);
 
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
@@ -3159,4 +3185,183 @@ button[data-tooltip]:hover::after,
 
   text-transform:
     none;
+}
+
+/* ================================================== */
+/* Linked Text Navigator                              */
+/* ================================================== */
+
+.note-workspace .raw-notes-editor {
+  position: relative;
+}
+
+.note-workspace .linked-text-navigator {
+  position: absolute;
+
+  top: 51px;
+  right: 22px;
+
+  z-index: 80;
+
+  max-width:
+    calc(100% - 24px);
+
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+
+  padding: 6px 7px 6px 11px;
+
+  border:
+    1px solid
+    var(--border-accent-muted);
+
+  border-radius: 7px;
+
+  background:
+    color-mix(
+      in srgb,
+      var(--bg-panel-elevated) 72%,
+      transparent
+    );
+
+  backdrop-filter:
+    blur(6px);
+
+  -webkit-backdrop-filter:
+    blur(6px);
+
+  box-shadow:
+    0 0 0 1px
+      color-mix(
+        in srgb,
+        var(--accent-primary) 10%,
+        transparent
+      ),
+    var(--shadow-popover);
+
+  color:
+    var(--text-primary);
+}
+
+
+.note-workspace
+.linked-text-navigator-info {
+  min-width: 0;
+
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+}
+
+
+.note-workspace
+.linked-text-navigator-info strong {
+  max-width: 145px;
+
+  overflow: hidden;
+
+  font-size: 11px;
+  font-weight: 600;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.note-workspace
+.linked-text-navigator-info span {
+  flex-shrink: 0;
+
+  color:
+    var(--text-muted);
+
+  font-size: 10px;
+  font-weight: 500;
+}
+
+
+.note-workspace
+.linked-text-navigator-actions {
+  display: flex;
+  align-items: center;
+
+  gap: 2px;
+}
+
+
+.note-workspace
+.linked-text-navigator-actions button {
+  width: 27px;
+  height: 27px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border: none;
+  border-radius: 5px;
+
+  background: transparent;
+
+  color:
+    var(--toolbar-button-text);
+
+  cursor: pointer;
+}
+
+
+.note-workspace
+.linked-text-navigator-actions
+button:hover:not(:disabled) {
+  background:
+    var(--accent-primary);
+
+  color:
+    var(--text-on-accent);
+}
+
+
+.note-workspace
+.linked-text-navigator-actions
+button:disabled {
+  opacity: 0.35;
+
+  cursor: default;
+}
+
+/* ================================================== */
+/* Highlight Current Reference Outline                */
+/* ================================================== */
+
+.note-workspace
+.graph-linked-text-navigation-current {
+  outline:
+    2px solid
+    var(--accent-primary);
+
+  outline-offset: 2px;
+
+  border-radius: 3px;
+
+  animation:
+    graph-link-navigation-pulse
+    0.35s ease;
+}
+
+
+@keyframes graph-link-navigation-pulse {
+
+  0% {
+    outline-offset: 6px;
+  }
+
+  100% {
+    outline-offset: 2px;
+  }
+
 }
