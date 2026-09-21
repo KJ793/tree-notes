@@ -746,6 +746,12 @@ function getGraphThemeTokens() {
         "--graph-edge-arrow",
         "#7772ff"
       ),
+
+    edgeLabel:
+      getThemeToken(
+        "--graph-edge-label",
+        "#cbd5e1"
+      ),
   };
 }
 
@@ -1126,16 +1132,16 @@ const GraphPanel = forwardRef(function GraphPanel(
       return;
     }
 
-
     const graphTheme =
       getGraphThemeTokens();
 
 
     cy.style()
 
-      /*
-        Default nodes
-      */
+      // =====================================================
+      // DEFAULT NODE
+      // =====================================================
+
       .selector("node")
       .style({
         "background-color":
@@ -1146,6 +1152,29 @@ const GraphPanel = forwardRef(function GraphPanel(
 
         color:
           graphTheme.nodeText,
+      })
+
+
+      // =====================================================
+      // CUSTOM NODE APPEARANCE
+      // =====================================================
+
+      .selector("node[color]")
+      .style({
+        "background-color":
+          "data(color)",
+      })
+
+      .selector("node[textColor]")
+      .style({
+        color:
+          "data(textColor)",
+      })
+
+      .selector("node[shape]")
+      .style({
+        shape:
+          "data(shape)",
       })
 
       .selector("node[borderColor]")
@@ -1160,13 +1189,11 @@ const GraphPanel = forwardRef(function GraphPanel(
           "data(borderStyle)",
       })
 
-      /*
-        Normal selected node.
 
-        Solid ring = selected.
-        Colour comes from the current
-        accessibility palette.
-      */
+      // =====================================================
+      // SELECTED NODE
+      // =====================================================
+
       .selector("node:selected")
       .style({
         "border-width": 4,
@@ -1187,15 +1214,11 @@ const GraphPanel = forwardRef(function GraphPanel(
           8,
       })
 
-      /*
-        First node selected while
-        creating a graph link.
 
-        IMPORTANT:
-        Dashed ring distinguishes this
-        from normal selection even if the
-        colours appear similar.
-      */
+      // =====================================================
+      // LINK SOURCE
+      // =====================================================
+
       .selector("node.link-source")
       .style({
         "border-width": 4,
@@ -1217,9 +1240,10 @@ const GraphPanel = forwardRef(function GraphPanel(
       })
 
 
-      /*
-        Default edges
-      */
+      // =====================================================
+      // DEFAULT EDGE
+      // =====================================================
+
       .selector("edge")
       .style({
         width: 2,
@@ -1230,26 +1254,57 @@ const GraphPanel = forwardRef(function GraphPanel(
         "target-arrow-color":
           graphTheme.edgeArrow,
 
+        "target-arrow-shape":
+          "triangle",
+
         "line-style":
           "solid",
+
+        color:
+          graphTheme.edgeLabel,
 
         opacity:
           0.8,
       })
 
 
-      /*
-        Selected edge.
+      // =====================================================
+      // CUSTOM EDGE APPEARANCE
+      // =====================================================
 
-        Extra thickness means selection
-        does not depend on colour alone.
-      */
+      .selector("edge[edgeColor]")
+      .style({
+        "line-color":
+          "data(edgeColor)",
+      })
+
+      .selector("edge[arrowColor]")
+      .style({
+        "target-arrow-color":
+          "data(arrowColor)",
+      })
+
+      .selector("edge[arrowShape]")
+      .style({
+        "target-arrow-shape":
+          "data(arrowShape)",
+      })
+
+      .selector("edge[lineStyle]")
+      .style({
+        "line-style":
+          "data(lineStyle)",
+      })
+
+
+      // =====================================================
+      // SELECTED EDGE
+      // Must come AFTER custom edge styles.
+      // =====================================================
+
       .selector("edge:selected")
       .style({
         width: 4,
-
-        "line-style":
-          "solid",
 
         "line-color":
           graphTheme.selectedEdge,
@@ -1259,6 +1314,22 @@ const GraphPanel = forwardRef(function GraphPanel(
 
         opacity:
           1,
+      })
+
+      .selector(
+        "edge:selected[edgeColor]"
+      )
+      .style({
+        "line-color":
+          graphTheme.selectedEdge,
+      })
+
+      .selector(
+        "edge:selected[arrowColor]"
+      )
+      .style({
+        "target-arrow-color":
+          graphTheme.selectedEdge,
       })
 
 
@@ -1513,7 +1584,7 @@ const GraphPanel = forwardRef(function GraphPanel(
               "data(relationship)",
 
             color:
-              graphTheme.nodeText,
+              graphTheme.edgeLabel,
 
             "font-size":
               "12px",
@@ -1700,9 +1771,7 @@ const GraphPanel = forwardRef(function GraphPanel(
             return;
           }
 
-
           applyGraphTheme(cy);
-
 
           /*
             Keep the Selected Node toolbar colour
@@ -2443,58 +2512,6 @@ return () => {
 
 }, [graphData]);
 
-useEffect(() => {
-
-  const root =
-    document.documentElement;
-
-
-  const observer =
-    new MutationObserver(
-      (mutations) => {
-
-        const themeChanged =
-          mutations.some(
-            (mutation) =>
-              mutation.attributeName ===
-                "data-theme" ||
-              mutation.attributeName ===
-                "data-color-vision"
-          );
-
-
-        if (!themeChanged) {
-          return;
-        }
-
-
-        requestAnimationFrame(() => {
-          applyGraphTheme();
-        });
-
-      }
-    );
-
-
-  observer.observe(
-    root,
-    {
-      attributes: true,
-
-      attributeFilter: [
-        "data-theme",
-        "data-color-vision",
-      ],
-    }
-  );
-
-
-  return () => {
-    observer.disconnect();
-  };
-
-}, []);
-
 function addSelectedTextNode() {
   if (!cyRef.current || !selectedText) {
     return;
@@ -2872,17 +2889,13 @@ function changeSelectedNodeColor(newColor) {
     return;
   }
 
-  // Change visually
-  node.style(
-    "background-color",
-    newColor
-  );
-
   // Preserve for saving
   node.data(
     "color",
     newColor
   );
+
+  node.updateStyle();
 
   // Update toolbar indicator
   setSelectedNode((current) => ({
@@ -2898,17 +2911,13 @@ function changeSelectedNodeShape(newShape) {
     return;
   }
 
-  // Change visually
-  node.style(
-    "shape",
-    newShape
-  );
-
   // Preserve for saving
   node.data(
     "shape",
     newShape
   );
+
+  node.updateStyle();
 
   /*
     The amount of usable internal space
@@ -2948,6 +2957,8 @@ function changeSelectedNodeBorderColor(
     newColor
   );
 
+  node.updateStyle();
+
   setSelectedNode(
     current => ({
       ...current,
@@ -2972,6 +2983,8 @@ function changeSelectedNodeBorderStyle(
     "borderStyle",
     newStyle
   );
+
+  node.updateStyle();
 
   setSelectedNode(
     current => ({
@@ -3017,6 +3030,7 @@ function changeSelectedEdgeColor(
     colour
   );
 
+  edge.updateStyle();
 
   setSelectedEdge(
     current => ({
@@ -3058,6 +3072,7 @@ function changeSelectedArrowColor(
     colour
   );
 
+  edge.updateStyle();
 
   setSelectedEdge(
     current => ({
@@ -3099,6 +3114,7 @@ function changeSelectedArrowShape(
     shape
   );
 
+  edge.updateStyle();
 
   setSelectedEdge(
     current => ({
@@ -3145,6 +3161,7 @@ function changeSelectedEdgeStyle(
     lineStyle
   );
 
+  edge.updateStyle();
 
   setSelectedEdge(
     current => ({
@@ -3561,15 +3578,12 @@ function changeSelectedNodeTextColor(newColor) {
 
   if (!node) return;
 
-  node.style(
-    "color",
-    newColor
-  );
-
   node.data(
     "textColor",
     newColor
   );
+
+  node.updateStyle();
 
   setSelectedNode((current) => ({
     ...current,
@@ -4932,10 +4946,10 @@ const CurrentArrowShapeIcon =
           }}
           data-tooltip={
             selectedNode
-              ? "Find linked text"
+              ? "Find linked references"
               : "Select a node first"
           }
-          aria-label="Find linked text"
+          aria-label="Find linked references"
         >
           <Search
             size={19}
