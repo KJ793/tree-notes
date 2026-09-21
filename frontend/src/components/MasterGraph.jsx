@@ -1,6 +1,107 @@
 import { useEffect, useRef } from "react";
 import cytoscape from "cytoscape";
 
+function getThemeToken(
+  tokenName,
+  fallback
+) {
+  const value =
+    getComputedStyle(
+      document.documentElement
+    )
+      .getPropertyValue(
+        tokenName
+      )
+      .trim();
+
+  return value || fallback;
+}
+
+
+function getMasterGraphTheme() {
+
+  return {
+
+    nodeBackground:
+      getThemeToken(
+        "--graph-node-bg",
+        "#6366f1"
+      ),
+
+    nodeBorder:
+      getThemeToken(
+        "--graph-node-border",
+        "#7772ff"
+      ),
+
+    nodeText:
+      getThemeToken(
+        "--graph-node-text",
+        "#ffffff"
+      ),
+
+    edge:
+      getThemeToken(
+        "--graph-edge",
+        "#5b6b88"
+      ),
+
+    edgeArrow:
+      getThemeToken(
+        "--graph-edge-arrow",
+        "#7c8cff"
+      ),
+
+  };
+
+}
+
+function applyMasterGraphTheme(
+  cy
+) {
+
+  if (!cy) {
+    return;
+  }
+
+
+  const graphTheme =
+    getMasterGraphTheme();
+
+
+  cy.style()
+
+    .selector("node")
+    .style({
+
+      "background-color":
+        graphTheme.nodeBackground,
+
+      "border-color":
+        graphTheme.nodeBorder,
+
+      color:
+        graphTheme.nodeText,
+
+    })
+
+
+    .selector("edge")
+    .style({
+
+      "line-color":
+        graphTheme.edge,
+
+      "target-arrow-color":
+        graphTheme.edgeArrow,
+
+    })
+
+
+    .update();
+
+}
+
 function MasterGraph({
   notes,
   onOpenNote,
@@ -30,6 +131,9 @@ function MasterGraph({
         ...noteEdges,
         ];
 
+    const graphTheme =
+      getMasterGraphTheme();
+    
     const cy = cytoscape({
       container: containerRef.current,
       elements,
@@ -51,8 +155,12 @@ function MasterGraph({
             width: 150,
             height: 60,
             shape: "round-rectangle",
-            "background-color": "#6366F1",
-            color: "#ffffff",
+            "background-color": 
+              graphTheme.nodeBackground,
+            "border-width": 2,
+            "border-color":
+              graphTheme.nodeBorder,
+            color: graphTheme.nodeText,
             "text-valign": "center",
             "text-halign": "center",
             "text-wrap": "wrap",
@@ -64,8 +172,10 @@ function MasterGraph({
         selector: "edge",
         style: {
             width: 3,
-            "line-color": "#5b6b88",
-            "target-arrow-color": "#7c8cff",
+            "line-color":
+              graphTheme.edge,
+            "target-arrow-color":
+              graphTheme.edgeArrow,
             "target-arrow-shape": "triangle",
             "curve-style": "bezier",
             opacity: 0.95,
@@ -75,6 +185,50 @@ function MasterGraph({
     });
 
     cyRef.current = cy;
+
+    /* =========================================================
+      WATCH TREE NOTES THEME / ACCESSIBILITY CHANGES
+      ========================================================= */
+
+    const themeObserver =
+      new MutationObserver(
+        (mutations) => {
+
+          const themeChanged =
+            mutations.some(
+              mutation =>
+                mutation.attributeName ===
+                  "data-theme" ||
+
+                mutation.attributeName ===
+                  "data-color-vision"
+            );
+
+
+          if (!themeChanged) {
+            return;
+          }
+
+
+          applyMasterGraphTheme(
+            cy
+          );
+
+        }
+      );
+
+
+    themeObserver.observe(
+      document.documentElement,
+      {
+        attributes: true,
+
+        attributeFilter: [
+          "data-theme",
+          "data-color-vision",
+        ],
+      }
+    );
 
     cy.on(
       "dbltap",
@@ -88,6 +242,7 @@ function MasterGraph({
     );
 
     return () => {
+      themeObserver.disconnect();
       cy.destroy();
       cyRef.current = null;
     };
@@ -96,7 +251,7 @@ function MasterGraph({
   return (
     <section className="master-graph-page">
       <div className="master-graph-header">
-        <h1>Notes Graph</h1>
+        <h1>Note Connections</h1>
 
         <p>
           Explore connections across all your notes.

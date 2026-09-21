@@ -1,9 +1,6 @@
 import {
   House,
-  NotebookText,
   Network,
-  Tags,
-  Settings,
   ChevronRight,
   ChevronLeft,
   ChevronsRight,
@@ -25,7 +22,7 @@ function Sidebar({
   onCreateNote,
   onDeleteNote,
 
-  onNotesPageClick,
+  onConnectionsPageClick,
 
   sidebarCollapsed,
   onSidebarToggle,
@@ -103,7 +100,7 @@ function Sidebar({
         <button
           type="button"
           className={`sidebar-nav-item ${
-            activeView === "dashboard" && !selectedNoteId
+            activeView === "dashboard"
               ? "sidebar-nav-item-active"
               : ""
           }`}
@@ -274,36 +271,17 @@ function Sidebar({
 
 
         {/* ==================================================
-            FRONTEND NAVIGATION
+            CONNECTIONS
             ================================================== */}
 
         <button
           type="button"
           className={`sidebar-nav-item ${
-            activeView === "notes" || selectedNoteId
+            activeView === "connections"
               ? "sidebar-nav-item-active"
               : ""
           }`}
-          onClick={onNotesPageClick}
-        >
-
-          <NotebookText
-            size={17}
-            strokeWidth={1.8}
-          />
-
-          {!sidebarCollapsed && (
-            <span>
-              Notes
-            </span>
-          )}
-
-        </button>
-
-
-        <button
-          type="button"
-          className="sidebar-nav-item"
+          onClick={onConnectionsPageClick}
         >
 
           <Network
@@ -313,51 +291,11 @@ function Sidebar({
 
           {!sidebarCollapsed && (
             <span>
-              Graphs
+              Connections
             </span>
           )}
 
         </button>
-
-
-        <button
-          type="button"
-          className="sidebar-nav-item"
-        >
-
-          <Tags
-            size={17}
-            strokeWidth={1.8}
-          />
-
-          {!sidebarCollapsed && (
-            <span>
-              Tags
-            </span>
-          )}
-
-        </button>
-
-
-        <button
-          type="button"
-          className="sidebar-nav-item"
-        >
-
-          <Settings
-            size={17}
-            strokeWidth={1.8}
-          />
-
-          {!sidebarCollapsed && (
-            <span>
-              Settings
-            </span>
-          )}
-
-        </button>
-
-
 
         {/* ==================================================
             COLLAPSE SIDEBAR

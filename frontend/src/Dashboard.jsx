@@ -108,6 +108,8 @@ function Dashboard() {
   const requestedNoteId =
     searchParams.get("note");
 
+  const requestedView =
+    searchParams.get("view");
 
   // =========================================================
   // WORKSPACE REFERENCE
@@ -186,11 +188,16 @@ function Dashboard() {
       note: String(noteId),
     });
 
-    setActiveView(
-      "dashboard"
-    );
   }
 
+  function openConnectionsPage() {
+
+    setSearchParams({
+      view:
+        "connections",
+    });
+
+  }
 
   function clearOpenNote() {
 
@@ -202,80 +209,100 @@ function Dashboard() {
 
   useEffect(() => {
 
-    /*
-      Wait until the user's notes have finished
-      loading before resolving the URL note ID.
-    */
-    if (notesLoading) {
-      return;
-    }
+  if (notesLoading) {
+    return;
+  }
 
 
-    /*
-      No ?note= parameter means the plain
-      Dashboard landing screen.
-    */
-    if (!requestedNoteId) {
-
-      setSelectedNoteId(null);
-      setActiveView("dashboard");
-
-      return;
-    }
-
-
-    /*
-      URL parameters are strings, while real backend
-      note IDs may be numbers.
-
-      Find the real note object first so selectedNoteId
-      receives the ID in its original type.
-    */
-    const requestedNote =
-      notes.find(
-        (note) =>
-          String(note.id) ===
-          String(requestedNoteId)
-      );
-
-
-    /*
-      The requested note does not exist.
-    */
-    if (!requestedNote) {
-
-      setSelectedNoteId(null);
-
-      return;
-    }
-
-
-    /*
-      Already displaying this note.
-    */
-    if (
-      String(selectedNoteId ?? "") ===
-      String(requestedNote.id)
-    ) {
-      return;
-    }
-
+  /*
+    CONNECTIONS PAGE
+  */
+  if (
+    requestedView ===
+    "connections"
+  ) {
 
     setSelectedNoteId(
-      requestedNote.id
+      null
+    );
+
+    setActiveView(
+      "connections"
+    );
+
+    return;
+  }
+
+
+  /*
+    PLAIN DASHBOARD
+  */
+  if (!requestedNoteId) {
+
+    setSelectedNoteId(
+      null
     );
 
     setActiveView(
       "dashboard"
     );
 
-  }, [
-    requestedNoteId,
-    notes,
-    notesLoading,
-    selectedNoteId,
-  ]);
+    return;
+  }
 
+
+  /*
+    SPECIFIC NOTE
+  */
+  const requestedNote =
+    notes.find(
+      note =>
+        String(note.id) ===
+        String(requestedNoteId)
+    );
+
+
+  if (!requestedNote) {
+
+    setSelectedNoteId(
+      null
+    );
+
+    setActiveView(
+      "dashboard"
+    );
+
+    return;
+  }
+
+
+  if (
+    String(
+      selectedNoteId ?? ""
+    ) !==
+    String(
+      requestedNote.id
+    )
+  ) {
+
+    setSelectedNoteId(
+      requestedNote.id
+    );
+
+  }
+
+
+  setActiveView(
+    "dashboard"
+  );
+
+}, [
+  requestedView,
+  requestedNoteId,
+  notes,
+  notesLoading,
+  selectedNoteId,
+]);
 
   // =========================================================
   // CREATE NOTE
@@ -455,11 +482,6 @@ function Dashboard() {
 
         <Sidebar
 
-          onNotesPageClick={() => {
-          clearOpenNote();
-          setActiveView("notes");
-        }}
-
           // Notes dropdown
           notesExpanded={notesExpanded}
 
@@ -469,7 +491,6 @@ function Dashboard() {
                 !current
             )
           }
-
 
           // Dynamic notes
           notes={notes}
@@ -490,6 +511,9 @@ function Dashboard() {
             handleDeleteNote
           }
 
+          onConnectionsPageClick={
+            openConnectionsPage
+          }
 
           // Sidebar collapse
           sidebarCollapsed={
@@ -524,14 +548,13 @@ function Dashboard() {
             onNoteSaved={handleNoteSaved}
           />
 
-        ) : activeView === "notes" ? (
+        ) : activeView === "connections" ? (
 
           <MasterGraph
             notes={notes}
-            onOpenNote={(noteId) => {
-              setSelectedNoteId(noteId);
-              setActiveView("dashboard");
-            }}
+            onOpenNote={
+              openNote
+            }
           />
 
         ) : (

@@ -259,14 +259,11 @@ function Profile() {
           onDeleteNote={
             handleDeleteNote
           }
-
-          /*
-            Until the dedicated Notes page/view
-            behaviour is finalised, this can
-            return to the dashboard.
-          */
-          onNotesPageClick={() =>
-            navigate("/dashboard")
+          
+          onConnectionsPageClick={() =>
+            navigate(
+              "/dashboard?view=connections"
+            )
           }
 
           sidebarCollapsed={
