@@ -37,6 +37,8 @@ services:
         condition: service_healthy
       ollama:
         condition: service_started
+      vosk:
+        condition: service_started
     volumes:
       - ./backend:/app/backend
       - /var/run/docker.sock:/var/run/docker.sock
@@ -86,6 +88,15 @@ services:
       - "11434:11434"
     volumes:
       - ollama:/root/.ollama
+    # GPU CONFIG MOVED TO docker-compose.override.yml
+  
+  vosk:
+    image: ./backend/asr
+    container_name: vosk
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./models/vosk:/models
     # GPU CONFIG MOVED TO docker-compose.override.yml
 
 volumes:
