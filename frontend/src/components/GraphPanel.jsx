@@ -35,6 +35,7 @@ import VeeIcon from "./icons/VeeIcon";
 import VeeNodeIcon from "./icons/VeeNodeIcon";
 import cytoscape from "cytoscape";
 import { semanticSearchGraph,} from "../api/graphApi";
+import TreeNotesColorPicker from "./TreeNotesColorPicker";
 
 /* =========================================================
    GRAPH THEME HELPERS
@@ -826,13 +827,13 @@ const GraphPanel = forwardRef(function GraphPanel(
   // =========================================================
 
   // Hidden native colour picker
-  const nodeColorInputRef = useRef(null);
+  // const nodeColorInputRef = useRef(null);
 
   // color picker for node text 
-  const nodeTextColorInputRef = useRef(null);
+  // const nodeTextColorInputRef = useRef(null);
 
   // Node border colour picker
-  const nodeBorderColorInputRef = useRef(null);
+  // const nodeBorderColorInputRef = useRef(null);
 
   // Node border style popover
   const nodeBorderStyleMenuRef = useRef(null);
@@ -842,9 +843,28 @@ const GraphPanel = forwardRef(function GraphPanel(
   const shapeMenuRef = useRef(null);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
 
-  // Edge and Arrow colour picker
-  const edgeColorInputRef = useRef(null);
-  const arrowColorInputRef = useRef(null);
+  // Custom graph colour pickers
+  const nodeColorButtonRef = useRef(null);
+  const nodeTextColorButtonRef = useRef(null);
+  const nodeBorderColorButtonRef = useRef(null);
+  const edgeColorButtonRef = useRef(null);
+  const arrowColorButtonRef = useRef(null);
+
+  const [graphColorPicker, setGraphColorPicker] = useState(null);
+
+  function toggleGraphColorPicker(type) {
+    setShapeMenuOpen(false);
+    setNodeBorderStyleMenuOpen(false);
+    setEdgeStyleMenuOpen(false);
+    setArrowShapeMenuOpen(false);
+
+    setGraphColorPicker(
+      current =>
+        current === type
+          ? null
+          : type
+    );
+  }
 
   // Edge style selector popover
   const edgeStyleMenuRef = useRef(null);
@@ -947,6 +967,7 @@ const GraphPanel = forwardRef(function GraphPanel(
     setNodeBorderStyleMenuOpen(false);
     setEdgeStyleMenuOpen(false);
     setArrowShapeMenuOpen(false);
+    setGraphColorPicker(null);
     setGraphFeedback(null);
 
     // Clear UI state and references belonging to linking mode.
@@ -1336,7 +1357,11 @@ const GraphPanel = forwardRef(function GraphPanel(
       .update();
   }
 
-  // << CYTOSCAPE FRONTEND >> //
+  // =========================================================
+  // CYTOSCAPE INITIALISATION
+  // Create Cytoscape once and keep the instance alive.
+  // =========================================================
+
   useEffect(() => {
 
     if (!graphContainerRef.current) {
@@ -2006,7 +2031,7 @@ const GraphPanel = forwardRef(function GraphPanel(
       setNodeBorderStyleMenuOpen(false);
       setEdgeStyleMenuOpen(false);
       setArrowShapeMenuOpen(false);
-
+      setGraphColorPicker(null);
 
       /*
         Store existing value so Escape can
@@ -2106,6 +2131,7 @@ const GraphPanel = forwardRef(function GraphPanel(
 
       setArrowShapeMenuOpen(false);
 
+      setGraphColorPicker(null);
 
       // =====================================================
       // NORMAL NODE SELECTION
@@ -2326,6 +2352,7 @@ const GraphPanel = forwardRef(function GraphPanel(
 
       setArrowShapeMenuOpen(false);
 
+      setGraphColorPicker(null);
 
       console.log(
         "Graph selection cleared"
@@ -2764,6 +2791,7 @@ function focusNode(nodeId) {
 
   setArrowShapeMenuOpen(false);
 
+  setGraphColorPicker(null);
 
   cy.animate(
     {
@@ -2940,6 +2968,8 @@ function changeSelectedNodeShape(newShape) {
   setEdgeStyleMenuOpen(false);
 
   setArrowShapeMenuOpen(false);
+
+  setGraphColorPicker(null);
 }
 
 function changeSelectedNodeBorderColor(
@@ -4199,18 +4229,34 @@ const CurrentArrowShapeIcon =
           <div className="graph-toolbar-popover-wrapper">
 
             <button
+              ref={nodeColorButtonRef}
               type="button"
-              className="graph-toolbar-button tooltip-align-left"
+
+              className={`graph-toolbar-button tooltip-align-left ${
+                graphColorPicker === "node-fill"
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
+
               disabled={!selectedNode}
+
               onClick={() =>
-                nodeColorInputRef.current?.click()
+                toggleGraphColorPicker(
+                  "node-fill"
+                )
               }
+
               data-tooltip={
                 selectedNode
                   ? "Node colour"
                   : "Select a node first"
               }
+
               aria-label="Node colour"
+              aria-haspopup="dialog"
+              aria-expanded={
+                graphColorPicker === "node-fill"
+              }
             >
               <span className="graph-toolbar-color-icon">
 
@@ -4234,19 +4280,29 @@ const CurrentArrowShapeIcon =
               </span>
             </button>
 
+            <TreeNotesColorPicker
+              open={
+                graphColorPicker === "node-fill"
+              }
 
-            <input
-              ref={nodeColorInputRef}
-              className="graph-hidden-color-input"
-              type="color"
+              anchorRef={
+                nodeColorButtonRef
+              }
+
               value={
                 selectedNode?.color ||
-                "#6366F1"
-              }
-              onChange={(event) =>
-                changeSelectedNodeColor(
-                  event.target.value
+                getThemeColour(
+                  "--graph-node-bg",
+                  "#6366F1"
                 )
+              }
+
+              onChange={
+                changeSelectedNodeColor
+              }
+
+              onClose={() =>
+                setGraphColorPicker(null)
               }
             />
 
@@ -4255,734 +4311,776 @@ const CurrentArrowShapeIcon =
           {/* NODE TEXT COLOUR */}
 
           <div className="graph-toolbar-popover-wrapper">
-          <button
-            type="button"
-            className="graph-toolbar-button"
-            disabled={!selectedNode}
-            onClick={() =>
-              nodeTextColorInputRef.current?.click()
-            }
-            data-tooltip={
-              selectedNode
-                ? "Text colour"
-                : "Select a node first"
-            }
-            aria-label="Text colour"
-          >
-            <span className="graph-toolbar-color-icon">
 
-              <Type
-                size={19}
-                strokeWidth={1.8}
-              />
+            <button
+              ref={nodeTextColorButtonRef}
+              type="button"
 
-              <span
-                className="graph-toolbar-color-indicator"
-                style={{
-                  backgroundColor:
-                    selectedNode?.textColor ||
-                    getThemeColour(
-                      "--graph-node-text",
-                      "#ffffff"
-                    ),
-                }}
-              />
+              className={`graph-toolbar-button ${
+                graphColorPicker === "node-text"
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
 
-            </span>
-          </button>
+              disabled={!selectedNode}
 
-          <input
-            ref={nodeTextColorInputRef}
-            className="graph-hidden-color-input"
-            type="color"
-            value={
-              selectedNode?.textColor ||
-              getThemeColour(
-                "--graph-node-text",
-                "#ffffff"
-              )
-            }
-            onChange={(event) =>
-              changeSelectedNodeTextColor(
-                event.target.value
-              )
-            }
-          />
-        </div>
-
-        {/* NODE BORDER STYLE */}
-
-        <div
-          className="graph-toolbar-popover-wrapper"
-          ref={nodeBorderStyleMenuRef}
-        >
-          <button
-            type="button"
-
-            className={`graph-toolbar-button ${
-              nodeBorderStyleMenuOpen
-                ? "graph-toolbar-button-active"
-                : ""
-            }`}
-
-            disabled={!selectedNode}
-
-            onClick={() => {
-              setNodeBorderStyleMenuOpen(
-                current => !current
-              );
-
-              setShapeMenuOpen(false);
-              setEdgeStyleMenuOpen(false);
-              setArrowShapeMenuOpen(false);
-            }}
-
-            data-tooltip={
-              selectedNode
-                ? "Node border style"
-                : "Select a node first"
-            }
-
-            aria-label="Node border style"
-            aria-haspopup="true"
-            aria-expanded={
-              nodeBorderStyleMenuOpen
-            }
-          >
-            <CurrentNodeBorderStyleIcon
-              size={19}
-              strokeWidth={1.8}
-            />
-
-            <ChevronDown
-              size={11}
-              strokeWidth={1.8}
-            />
-          </button>
-
-
-          {nodeBorderStyleMenuOpen && (
-            <div className="graph-shape-popover">
-
-              {NODE_BORDER_STYLES.map(
-                ({
-                  value,
-                  label,
-                  Icon,
-                }) => (
-
-                  <button
-                    key={value}
-                    type="button"
-
-                    className={`graph-shape-option ${
-                      (
-                        selectedNode
-                          ?.borderStyle ||
-                        "solid"
-                      ) === value
-                        ? "graph-shape-option-active"
-                        : ""
-                    }`}
-
-                    onClick={() =>
-                      changeSelectedNodeBorderStyle(
-                        value
-                      )
-                    }
-
-                    data-tooltip={label}
-                    aria-label={label}
-                  >
-                    <Icon
-                      size={18}
-                      strokeWidth={1.8}
-                    />
-                  </button>
-
+              onClick={() =>
+                toggleGraphColorPicker(
+                  "node-text"
                 )
-              )}
+              }
 
-            </div>
-          )}
-        </div>
+              data-tooltip={
+                selectedNode
+                  ? "Text colour"
+                  : "Select a node first"
+              }
 
+              aria-label="Text colour"
+              aria-haspopup="dialog"
+              aria-expanded={
+                graphColorPicker === "node-text"
+              }
+            >
+              <span className="graph-toolbar-color-icon">
 
-        {/* NODE BORDER COLOUR */}
+                <Type
+                  size={19}
+                  strokeWidth={1.8}
+                />
 
-        <div className="graph-toolbar-popover-wrapper">
+                <span
+                  className="graph-toolbar-color-indicator"
+                  style={{
+                    backgroundColor:
+                      selectedNode?.textColor ||
+                      getThemeColour(
+                        "--graph-node-text",
+                        "#ffffff"
+                      ),
+                  }}
+                />
 
-          <button
-            type="button"
+              </span>
+            </button>
 
-            className="graph-toolbar-button"
+            <TreeNotesColorPicker
+              open={
+                graphColorPicker === "node-text"
+              }
 
-            disabled={!selectedNode}
+              anchorRef={
+                nodeTextColorButtonRef
+              }
 
-            onClick={() =>
-              nodeBorderColorInputRef
-                .current
-                ?.click()
-            }
-
-            data-tooltip={
-              selectedNode
-                ? "Node border colour"
-                : "Select a node first"
-            }
-
-            aria-label="Node border colour"
-          >
-            <span className="graph-toolbar-color-icon">
-
-              <SquareDashed
-                size={19}
-                strokeWidth={1.8}
-              />
-
-              <span
-                className="graph-toolbar-color-indicator"
-                style={{
-                  backgroundColor:
-                    selectedNode
-                      ?.borderColor ||
-                    getThemeColour(
-                      "--graph-node-border",
-                      "#818CF8"
-                    ),
-                }}
-              />
-
-            </span>
-          </button>
-
-
-          <input
-            ref={nodeBorderColorInputRef}
-
-            className="graph-hidden-color-input"
-
-            type="color"
-
-            value={
-              selectedNode
-                ?.borderColor ||
-              getThemeColour(
-                "--graph-node-border",
-                "#818CF8"
-              )
-            }
-
-            onChange={(event) =>
-              changeSelectedNodeBorderColor(
-                event.target.value
-              )
-            }
-          />
-
-        </div>
-
-        <span className="graph-toolbar-divider" />
-
-        {/* ================================================= */}
-        {/* EDGE / RELATIONSHIP TOOLS                         */}
-        {/* ================================================= */}
-
-        {/* LINK NODES */}
-
-        <button
-          type="button"
-
-          className={`graph-toolbar-button ${
-            linkMode
-              ? "graph-toolbar-button-active"
-              : ""
-          }`}
-
-          onClick={startLinkMode}
-
-          data-tooltip={
-            linkMode
-              ? "Cancel linking"
-              : "Create link"
-          }
-
-          aria-label={
-            linkMode
-              ? "Cancel linking"
-              : "Create link"
-          }
-          aria-pressed={linkMode}
-        >
-          <span className="graph-create-action-icon">
-
-            <MoveUpRight
-              size={18}
-              strokeWidth={1.8}
-            />
-
-            <Plus
-              className="graph-create-action-plus"
-              size={9}
-              strokeWidth={2.5}
-            />
-
-          </span>
-        </button>
-
-        {/* EDGE STYLE */}
-
-        <div
-          className="graph-toolbar-popover-wrapper"
-          ref={edgeStyleMenuRef}
-        >
-
-          <button
-            type="button"
-
-            className={`graph-toolbar-button ${
-              edgeStyleMenuOpen
-                ? "graph-toolbar-button-active"
-                : ""
-            }`}
-
-            disabled={
-              !selectedEdge
-            }
-
-            onClick={() => {
-              setEdgeStyleMenuOpen(
-                current => !current
-              );
-              setShapeMenuOpen(
-                false
-              );
-              setArrowShapeMenuOpen(
-                false
-              );
-            }}
-
-            data-tooltip={
-              selectedEdge
-                ? "Edge style"
-                : "Select an edge first"
-            }
-
-            aria-label="Edge style"
-          >
-
-            <span
-              className={`
-                graph-edge-style-preview
-                graph-edge-style-${
-                  selectedEdge?.lineStyle ||
-                  "solid"
-                }
-              `}
-            />
-
-            <ChevronDown
-              size={11}
-              strokeWidth={1.8}
-            />
-
-          </button>
-
-
-          {edgeStyleMenuOpen && (
-
-            <div className="graph-shape-popover">
-
-              {EDGE_STYLES.map(
-                ({ value, label }) => (
-
-                  <button
-                    key={value}
-                    type="button"
-
-                    className={`graph-shape-option ${
-                      (
-                        selectedEdge?.lineStyle ||
-                        "solid"
-                      ) === value
-                        ? "graph-shape-option-active"
-                        : ""
-                    }`}
-
-                    onClick={() =>
-                      changeSelectedEdgeStyle(
-                        value
-                      )
-                    }
-
-                    data-tooltip={label}
-                    aria-label={label}
-                  >
-
-                    <span
-                      className={`
-                        graph-edge-style-preview
-                        graph-edge-style-${value}
-                      `}
-                    />
-
-                  </button>
-
+              value={
+                selectedNode?.textColor ||
+                getThemeColour(
+                  "--graph-node-text",
+                  "#ffffff"
                 )
-              )}
+              }
 
-            </div>
+              onChange={
+                changeSelectedNodeTextColor
+              }
 
-          )}
-
-        </div>
-
-        {/* EDGE COLOUR */}
-
-        <div className="graph-toolbar-popover-wrapper">
-
-          <button
-            type="button"
-
-            className="graph-toolbar-button"
-
-            disabled={
-              !selectedEdge
-            }
-
-            onClick={() =>
-              edgeColorInputRef
-                .current
-                ?.click()
-            }
-
-            data-tooltip={
-              selectedEdge
-                ? "Edge colour"
-                : "Select an edge first"
-            }
-
-            aria-label="Edge colour"
-          >
-
-            <span className="graph-toolbar-color-icon">
-
-              <Minus
-                size={20}
-                strokeWidth={2}
-              />
-
-              <span
-                className="graph-toolbar-color-indicator"
-
-                style={{
-                  backgroundColor:
-                    selectedEdge?.edgeColor ||
-                    getThemeColour(
-                      "--graph-edge",
-                      "#465873"
-                    ),
-                }}
-              />
-
-            </span>
-
-          </button>
-
-
-          <input
-            ref={
-              edgeColorInputRef
-            }
-
-            className="graph-hidden-color-input"
-
-            type="color"
-
-            value={
-              selectedEdge?.edgeColor ||
-              getThemeColour(
-                "--graph-edge",
-                "#465873"
-              )
-            }
-
-            onChange={
-              event =>
-                changeSelectedEdgeColor(
-                  event.target.value
-                )
-            }
-          />
-
-        </div>
-
-        {/* ARROW SHAPE */}
-
-        <div
-          className="graph-toolbar-popover-wrapper"
-          ref={arrowShapeMenuRef}
-        >
-
-          <button
-            type="button"
-
-            className={`graph-toolbar-button ${
-              arrowShapeMenuOpen
-                ? "graph-toolbar-button-active"
-                : ""
-            }`}
-
-            disabled={
-              !selectedEdge
-            }
-
-            onClick={() => {
-              setArrowShapeMenuOpen(
-                current => !current
-              );
-              setShapeMenuOpen(
-                false
-              );
-              setEdgeStyleMenuOpen(
-                false
-              );
-            }}
-
-            data-tooltip={
-              selectedEdge
-                ? "Arrow shape"
-                : "Select an edge first"
-            }
-
-            aria-label="Arrow shape"
-          >
-
-            <CurrentArrowShapeIcon
-              size={19}
-              strokeWidth={1.8}
-
-              style={
-                currentArrowShape?.rotation
-                  ? {
-                      transform:
-                        `rotate(${currentArrowShape.rotation}deg)`,
-                    }
-                  : undefined
+              onClose={() =>
+                setGraphColorPicker(null)
               }
             />
 
-            <ChevronDown
-              size={11}
-              strokeWidth={1.8}
-            />
+          </div>
 
-          </button>
+          {/* NODE BORDER STYLE */}
 
-          {arrowShapeMenuOpen && (
-
-            <div
-              className="
-                graph-shape-popover
-                graph-icon-grid-popover
-              "
-            >
-
-              {ARROW_SHAPES.map(
-                ({
-                  value,
-                  label,
-                  Icon,
-                  rotation,
-                }) => (
-
-                  <button
-                    key={value}
-                    type="button"
-
-                    className={`graph-shape-option ${
-                      (
-                        selectedEdge?.arrowShape ||
-                        "triangle"
-                      ) === value
-                        ? "graph-shape-option-active"
-                        : ""
-                    }`}
-
-                    onClick={() =>
-                      changeSelectedArrowShape(
-                        value
-                      )
-                    }
-
-                    data-tooltip={label}
-                    aria-label={label}
-                  >
-
-                    <Icon
-                      size={18}
-                      strokeWidth={1.8}
-
-                      style={
-                        rotation
-                          ? {
-                              transform:
-                                `rotate(${rotation}deg)`,
-                            }
-                          : undefined
-                      }
-                    />
-
-                  </button>
-
-                )
-              )}
-
-            </div>
-
-          )}
-
-        </div>
-
-        {/* ARROW COLOUR */}
-
-        <div className="graph-toolbar-popover-wrapper">
-
-          <button
-            type="button"
-
-            className="graph-toolbar-button"
-
-            disabled={
-              !selectedEdge
-            }
-
-            onClick={() =>
-              arrowColorInputRef
-                .current
-                ?.click()
-            }
-
-            data-tooltip={
-              selectedEdge
-                ? "Arrow colour"
-                : "Select an edge first"
-            }
-
-            aria-label="Arrow colour"
+          <div
+            className="graph-toolbar-popover-wrapper"
+            ref={nodeBorderStyleMenuRef}
           >
+            <button
+              type="button"
 
-            <span className="graph-toolbar-color-icon">
+              className={`graph-toolbar-button ${
+                nodeBorderStyleMenuOpen
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
 
-              <ArrowRight
+              disabled={!selectedNode}
+
+              onClick={() => {
+                setNodeBorderStyleMenuOpen(
+                  current => !current
+                );
+
+                setShapeMenuOpen(false);
+                setEdgeStyleMenuOpen(false);
+                setArrowShapeMenuOpen(false);
+              }}
+
+              data-tooltip={
+                selectedNode
+                  ? "Node border style"
+                  : "Select a node first"
+              }
+
+              aria-label="Node border style"
+              aria-haspopup="true"
+              aria-expanded={
+                nodeBorderStyleMenuOpen
+              }
+            >
+              <CurrentNodeBorderStyleIcon
                 size={19}
                 strokeWidth={1.8}
               />
 
-              <span
-                className="graph-toolbar-color-indicator"
+              <ChevronDown
+                size={11}
+                strokeWidth={1.8}
+              />
+            </button>
 
-                style={{
-                  backgroundColor:
-                    selectedEdge?.arrowColor ||
-                    getThemeColour(
-                      "--graph-edge-arrow",
-                      "#7772ff"
-                    ),
-                }}
+
+            {nodeBorderStyleMenuOpen && (
+              <div className="graph-shape-popover">
+
+                {NODE_BORDER_STYLES.map(
+                  ({
+                    value,
+                    label,
+                    Icon,
+                  }) => (
+
+                    <button
+                      key={value}
+                      type="button"
+
+                      className={`graph-shape-option ${
+                        (
+                          selectedNode
+                            ?.borderStyle ||
+                          "solid"
+                        ) === value
+                          ? "graph-shape-option-active"
+                          : ""
+                      }`}
+
+                      onClick={() =>
+                        changeSelectedNodeBorderStyle(
+                          value
+                        )
+                      }
+
+                      data-tooltip={label}
+                      aria-label={label}
+                    >
+                      <Icon
+                        size={18}
+                        strokeWidth={1.8}
+                      />
+                    </button>
+
+                  )
+                )}
+
+              </div>
+            )}
+          </div>
+
+          {/* NODE BORDER COLOUR */}
+
+          <div className="graph-toolbar-popover-wrapper">
+
+            <button
+              ref={nodeBorderColorButtonRef}
+              type="button"
+
+              className={`graph-toolbar-button ${
+                graphColorPicker === "node-border"
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
+
+              disabled={!selectedNode}
+
+              onClick={() =>
+                toggleGraphColorPicker(
+                  "node-border"
+                )
+              }
+
+              data-tooltip={
+                selectedNode
+                  ? "Node border colour"
+                  : "Select a node first"
+              }
+
+              aria-label="Node border colour"
+              aria-haspopup="dialog"
+              aria-expanded={
+                graphColorPicker === "node-border"
+              }
+            >
+              <span className="graph-toolbar-color-icon">
+
+                <SquareDashed
+                  size={19}
+                  strokeWidth={1.8}
+                />
+
+                <span
+                  className="graph-toolbar-color-indicator"
+                  style={{
+                    backgroundColor:
+                      selectedNode?.borderColor ||
+                      getThemeColour(
+                        "--graph-node-border",
+                        "#818CF8"
+                      ),
+                  }}
+                />
+
+              </span>
+            </button>
+
+            <TreeNotesColorPicker
+              open={
+                graphColorPicker === "node-border"
+              }
+
+              anchorRef={
+                nodeBorderColorButtonRef
+              }
+
+              value={
+                selectedNode?.borderColor ||
+                getThemeColour(
+                  "--graph-node-border",
+                  "#818CF8"
+                )
+              }
+
+              onChange={
+                changeSelectedNodeBorderColor
+              }
+
+              onClose={() =>
+                setGraphColorPicker(null)
+              }
+            />
+
+          </div>
+
+          <span className="graph-toolbar-divider" />
+
+          {/* ================================================= */}
+          {/* EDGE / RELATIONSHIP TOOLS                         */}
+          {/* ================================================= */}
+
+          {/* LINK NODES */}
+
+          <button
+            type="button"
+
+            className={`graph-toolbar-button ${
+              linkMode
+                ? "graph-toolbar-button-active"
+                : ""
+            }`}
+
+            onClick={startLinkMode}
+
+            data-tooltip={
+              linkMode
+                ? "Cancel linking"
+                : "Create link"
+            }
+
+            aria-label={
+              linkMode
+                ? "Cancel linking"
+                : "Create link"
+            }
+            aria-pressed={linkMode}
+          >
+            <span className="graph-create-action-icon">
+
+              <MoveUpRight
+                size={18}
+                strokeWidth={1.8}
+              />
+
+              <Plus
+                className="graph-create-action-plus"
+                size={9}
+                strokeWidth={2.5}
               />
 
             </span>
-
           </button>
 
+          {/* EDGE STYLE */}
 
-          <input
-            ref={
-              arrowColorInputRef
-            }
+          <div
+            className="graph-toolbar-popover-wrapper"
+            ref={edgeStyleMenuRef}
+          >
 
-            className="graph-hidden-color-input"
+            <button
+              type="button"
 
-            type="color"
+              className={`graph-toolbar-button ${
+                edgeStyleMenuOpen
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
 
-            value={
-              selectedEdge?.arrowColor ||
-              getThemeColour(
-                "--graph-edge-arrow",
-                "#7772ff"
-              )
-            }
+              disabled={
+                !selectedEdge
+              }
 
-            onChange={
-              event =>
-                changeSelectedArrowColor(
-                  event.target.value
+              onClick={() => {
+                setEdgeStyleMenuOpen(
+                  current => !current
+                );
+                setShapeMenuOpen(
+                  false
+                );
+                setArrowShapeMenuOpen(
+                  false
+                );
+              }}
+
+              data-tooltip={
+                selectedEdge
+                  ? "Edge style"
+                  : "Select an edge first"
+              }
+
+              aria-label="Edge style"
+            >
+
+              <span
+                className={`
+                  graph-edge-style-preview
+                  graph-edge-style-${
+                    selectedEdge?.lineStyle ||
+                    "solid"
+                  }
+                `}
+              />
+
+              <ChevronDown
+                size={11}
+                strokeWidth={1.8}
+              />
+
+            </button>
+
+
+            {edgeStyleMenuOpen && (
+
+              <div className="graph-shape-popover">
+
+                {EDGE_STYLES.map(
+                  ({ value, label }) => (
+
+                    <button
+                      key={value}
+                      type="button"
+
+                      className={`graph-shape-option ${
+                        (
+                          selectedEdge?.lineStyle ||
+                          "solid"
+                        ) === value
+                          ? "graph-shape-option-active"
+                          : ""
+                      }`}
+
+                      onClick={() =>
+                        changeSelectedEdgeStyle(
+                          value
+                        )
+                      }
+
+                      data-tooltip={label}
+                      aria-label={label}
+                    >
+
+                      <span
+                        className={`
+                          graph-edge-style-preview
+                          graph-edge-style-${value}
+                        `}
+                      />
+
+                    </button>
+
+                  )
+                )}
+
+              </div>
+
+            )}
+
+          </div>
+
+          {/* EDGE COLOUR */}
+
+          <div className="graph-toolbar-popover-wrapper">
+
+            <button
+              ref={edgeColorButtonRef}
+              type="button"
+
+              className={`graph-toolbar-button ${
+                graphColorPicker === "edge"
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
+
+              disabled={!selectedEdge}
+
+              onClick={() =>
+                toggleGraphColorPicker(
+                  "edge"
                 )
+              }
+
+              data-tooltip={
+                selectedEdge
+                  ? "Edge colour"
+                  : "Select an edge first"
+              }
+
+              aria-label="Edge colour"
+              aria-haspopup="dialog"
+              aria-expanded={
+                graphColorPicker === "edge"
+              }
+            >
+              <span className="graph-toolbar-color-icon">
+
+                <Minus
+                  size={20}
+                  strokeWidth={2}
+                />
+
+                <span
+                  className="graph-toolbar-color-indicator"
+                  style={{
+                    backgroundColor:
+                      selectedEdge?.edgeColor ||
+                      getThemeColour(
+                        "--graph-edge",
+                        "#465873"
+                      ),
+                  }}
+                />
+
+              </span>
+            </button>
+
+            <TreeNotesColorPicker
+              open={
+                graphColorPicker === "edge"
+              }
+
+              anchorRef={
+                edgeColorButtonRef
+              }
+
+              value={
+                selectedEdge?.edgeColor ||
+                getThemeColour(
+                  "--graph-edge",
+                  "#465873"
+                )
+              }
+
+              onChange={
+                changeSelectedEdgeColor
+              }
+
+              onClose={() =>
+                setGraphColorPicker(null)
+              }
+            />
+
+          </div>
+
+          {/* ARROW SHAPE */}
+
+          <div
+            className="graph-toolbar-popover-wrapper"
+            ref={arrowShapeMenuRef}
+          >
+
+            <button
+              type="button"
+
+              className={`graph-toolbar-button ${
+                arrowShapeMenuOpen
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
+
+              disabled={
+                !selectedEdge
+              }
+
+              onClick={() => {
+                setArrowShapeMenuOpen(
+                  current => !current
+                );
+                setShapeMenuOpen(
+                  false
+                );
+                setEdgeStyleMenuOpen(
+                  false
+                );
+              }}
+
+              data-tooltip={
+                selectedEdge
+                  ? "Arrow shape"
+                  : "Select an edge first"
+              }
+
+              aria-label="Arrow shape"
+            >
+
+              <CurrentArrowShapeIcon
+                size={19}
+                strokeWidth={1.8}
+
+                style={
+                  currentArrowShape?.rotation
+                    ? {
+                        transform:
+                          `rotate(${currentArrowShape.rotation}deg)`,
+                      }
+                    : undefined
+                }
+              />
+
+              <ChevronDown
+                size={11}
+                strokeWidth={1.8}
+              />
+
+            </button>
+
+            {arrowShapeMenuOpen && (
+
+              <div
+                className="
+                  graph-shape-popover
+                  graph-icon-grid-popover
+                "
+              >
+
+                {ARROW_SHAPES.map(
+                  ({
+                    value,
+                    label,
+                    Icon,
+                    rotation,
+                  }) => (
+
+                    <button
+                      key={value}
+                      type="button"
+
+                      className={`graph-shape-option ${
+                        (
+                          selectedEdge?.arrowShape ||
+                          "triangle"
+                        ) === value
+                          ? "graph-shape-option-active"
+                          : ""
+                      }`}
+
+                      onClick={() =>
+                        changeSelectedArrowShape(
+                          value
+                        )
+                      }
+
+                      data-tooltip={label}
+                      aria-label={label}
+                    >
+
+                      <Icon
+                        size={18}
+                        strokeWidth={1.8}
+
+                        style={
+                          rotation
+                            ? {
+                                transform:
+                                  `rotate(${rotation}deg)`,
+                              }
+                            : undefined
+                        }
+                      />
+
+                    </button>
+
+                  )
+                )}
+
+              </div>
+
+            )}
+
+          </div>
+
+          {/* ARROW COLOUR */}
+
+          <div className="graph-toolbar-popover-wrapper">
+
+            <button
+              ref={arrowColorButtonRef}
+              type="button"
+
+              className={`graph-toolbar-button ${
+                graphColorPicker === "arrow"
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
+
+              disabled={!selectedEdge}
+
+              onClick={() =>
+                toggleGraphColorPicker(
+                  "arrow"
+                )
+              }
+
+              data-tooltip={
+                selectedEdge
+                  ? "Arrow colour"
+                  : "Select an edge first"
+              }
+
+              aria-label="Arrow colour"
+              aria-haspopup="dialog"
+              aria-expanded={
+                graphColorPicker === "arrow"
+              }
+            >
+              <span className="graph-toolbar-color-icon">
+
+                <ArrowRight
+                  size={19}
+                  strokeWidth={1.8}
+                />
+
+                <span
+                  className="graph-toolbar-color-indicator"
+                  style={{
+                    backgroundColor:
+                      selectedEdge?.arrowColor ||
+                      getThemeColour(
+                        "--graph-edge-arrow",
+                        "#7772ff"
+                      ),
+                  }}
+                />
+
+              </span>
+            </button>
+
+            <TreeNotesColorPicker
+              open={
+                graphColorPicker === "arrow"
+              }
+
+              anchorRef={
+                arrowColorButtonRef
+              }
+
+              value={
+                selectedEdge?.arrowColor ||
+                getThemeColour(
+                  "--graph-edge-arrow",
+                  "#7772ff"
+                )
+              }
+
+              onChange={
+                changeSelectedArrowColor
+              }
+
+              onClose={() =>
+                setGraphColorPicker(null)
+              }
+            />
+
+          </div>
+
+          <span className="graph-toolbar-divider" />
+
+          {/* ================================================= */}
+          {/* GENERAL TOOLS                                     */}
+          {/* ================================================= */}
+
+          {/* FIND LINKED TEXT */}
+
+          <button
+            type="button"
+            className="graph-toolbar-button"
+            disabled={!selectedNode}
+            onClick={() => {
+              if (!selectedNode) {
+                return;
+              }
+
+              onNavigateLinkedText?.(
+                selectedNode.id,
+                selectedNode.label
+              );
+            }}
+            data-tooltip={
+              selectedNode
+                ? "Find linked references"
+                : "Select a node first"
             }
-          />
+            aria-label="Find linked references"
+          >
+            <Search
+              size={19}
+              strokeWidth={1.8}
+            />
+          </button>
+
+          {/* DELETE ELEMENT */}
+
+          <button
+            type="button"
+            className="graph-toolbar-button"
+            onClick={deleteSelectedElement}
+            disabled={!selectedNode && !selectedEdge}
+            data-tooltip={
+              selectedNode
+                ? "Delete node"
+                : selectedEdge
+                ? "Delete edge"
+                : "Select a node or edge first"
+            }
+            aria-label="Delete selected item"
+          >
+            <Trash2
+              size={19}
+              strokeWidth={1.8}
+            />
+          </button>
 
         </div>
-
-        <span className="graph-toolbar-divider" />
-
-        {/* ================================================= */}
-        {/* GENERAL TOOLS                                     */}
-        {/* ================================================= */}
-
-        {/* FIND LINKED TEXT */}
-
-        <button
-          type="button"
-          className="graph-toolbar-button"
-          disabled={!selectedNode}
-          onClick={() => {
-            if (!selectedNode) {
-              return;
-            }
-
-            onNavigateLinkedText?.(
-              selectedNode.id,
-              selectedNode.label
-            );
-          }}
-          data-tooltip={
-            selectedNode
-              ? "Find linked references"
-              : "Select a node first"
-          }
-          aria-label="Find linked references"
-        >
-          <Search
-            size={19}
-            strokeWidth={1.8}
-          />
-        </button>
-
-        {/* DELETE ELEMENT */}
-
-        <button
-          type="button"
-          className="graph-toolbar-button"
-          onClick={deleteSelectedElement}
-          disabled={!selectedNode && !selectedEdge}
-          data-tooltip={
-            selectedNode
-              ? "Delete node"
-              : selectedEdge
-              ? "Delete edge"
-              : "Select a node or edge first"
-          }
-          aria-label="Delete selected item"
-        >
-          <Trash2
-            size={19}
-            strokeWidth={1.8}
-          />
-        </button>
-
-      </div>
-
 
         {/* =============================================== */}
         {/* GRAPH CANVAS                                    */}

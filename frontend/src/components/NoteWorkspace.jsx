@@ -9,6 +9,7 @@ import usePageTitle from "../hooks/usePageTitle";
 import { updateNote } from "../api/notesApi";
 import GraphPanel from "./GraphPanel";
 import SummaryPanel from "./SummaryPanel";
+import TreeNotesColorPicker from "./TreeNotesColorPicker";
 import {
   Bold,
   Italic,
@@ -49,14 +50,22 @@ const graphPanelRef = useRef(null);
 // Stores the current text selection while using colour pickers
 const savedSelectionRef = useRef(null);
 
-// Hidden colour picker references
-const textColorInputRef = useRef(null);
-const highlightColorInputRef = useRef(null);
-const linkHighlightInputRef = useRef(null);
-
 // Current selected toolbar colours
 const [textColor, setTextColor] = useState("#eef1f7");
 const [highlightColor, setHighlightColor] = useState("#625df0");
+
+// Custom Text Colour picker
+const textColorButtonRef = useRef(null);
+const [textColorPickerOpen, setTextColorPickerOpen] = useState(false);
+
+// Custom Highlight Colour picker
+const highlightColorButtonRef = useRef(null);
+const [highlightColorPickerOpen, setHighlightColorPickerOpen] = useState(false);
+const [highlightNoneDisabled, setHighlightNoneDisabled] = useState(false);
+
+// Custom Link Highlight Colour picker
+const linkHighlightButtonRef = useRef(null);
+const [linkHighlightPickerOpen, setLinkHighlightPickerOpen] = useState(false);
 
 // Current formatting colours at the editor cursor
 const [activeTextColor, setActiveTextColor] = useState("#eef1f7");
@@ -1177,6 +1186,8 @@ function inferGraphLinkPaletteSlot(
   }
 
   function toggleGraphNodeMenu() {
+
+    setLinkHighlightPickerOpen(false);
 
     if (graphNodeMenuOpen) {
       setGraphNodeMenuOpen(false);
@@ -2525,6 +2536,7 @@ function inferGraphLinkPaletteSlot(
       onClick={() => {
         setContextMenu(null);
         setGraphNodeMenuOpen(false);
+        setLinkHighlightPickerOpen(false);
       }}
     >
 
@@ -2670,21 +2682,53 @@ function inferGraphLinkPaletteSlot(
               <div className="toolbar-color-wrapper">
 
                 <button
+                  ref={textColorButtonRef}
+
                   type="button"
-                  className="toolbar-icon-button toolbar-color-button"
+
+                  className={`
+                    toolbar-icon-button
+                    toolbar-color-button
+                    ${
+                      textColorPickerOpen
+                        ? "toolbar-button-active"
+                        : ""
+                    }
+                  `}
 
                   onMouseDown={(event) => {
+
+                    /*
+                      Preserve the current Raw Notes
+                      selection before focus moves to
+                      the colour picker.
+                    */
+
                     saveEditorSelection();
+
                     event.preventDefault();
+
                   }}
 
-                  onClick={() =>
-                    textColorInputRef.current?.click()
-                  }
+                  onClick={() => {
+
+                    setTextColorPickerOpen(
+                      (current) => !current
+                    );
+
+                  }}
 
                   data-tooltip="Text colour"
+
                   aria-label="Text colour"
+
+                  aria-expanded={
+                    textColorPickerOpen
+                  }
+
+                  aria-haspopup="dialog"
                 >
+
                   <Type
                     size={18}
                     strokeWidth={1.9}
@@ -2692,53 +2736,136 @@ function inferGraphLinkPaletteSlot(
 
                   <span
                     className="toolbar-color-indicator"
+
                     style={{
-                      backgroundColor: activeTextColor,
+                      backgroundColor:
+                        activeTextColor,
                     }}
                   />
+
                 </button>
 
 
-                <input
-                  ref={textColorInputRef}
-                  className="toolbar-hidden-color-input"
-                  type="color"
-                  value={textColor}
+                <TreeNotesColorPicker
+                  open={
+                    textColorPickerOpen
+                  }
 
-                  onChange={(event) => {
-                    const color = event.target.value;
+                  anchorRef={
+                    textColorButtonRef
+                  }
 
-                    setTextColor(color);
+                  value={
+                    textColor ||
+                    activeTextColor ||
+                    "#eef1f7"
+                  }
+
+                  onChange={(color) => {
+
+                    /*
+                      Store the selected colour so the
+                      picker and toolbar remain synced.
+                    */
+
+                    setTextColor(
+                      color
+                    );
+
+                    setActiveTextColor(
+                      color
+                    );
+
+
+                    /*
+                      Apply it to the Raw Notes selection.
+
+                      applyEditorColor already restores the
+                      saved editor selection, so interacting
+                      with the floating picker won't lose
+                      the selected text.
+                    */
 
                     applyEditorColor(
                       "foreColor",
                       color
                     );
+
+                  }}
+
+                  onClose={() => {
+
+                    setTextColorPickerOpen(
+                      false
+                    );
+
                   }}
                 />
 
               </div>
-
 
               {/* Highlight Colour */}
 
               <div className="toolbar-color-wrapper">
 
                 <button
+                  ref={highlightColorButtonRef}
+
                   type="button"
-                  className="toolbar-icon-button toolbar-color-button"
+
+                  className={`
+                    toolbar-icon-button
+                    toolbar-color-button
+                    ${
+                      highlightColorPickerOpen
+                        ? "toolbar-button-active"
+                        : ""
+                    }
+                  `}
 
                   onMouseDown={(event) => {
+
                     saveEditorSelection();
+
                     event.preventDefault();
+
                   }}
 
-                  onClick={() =>
-                    highlightColorInputRef.current?.click()
-                  }
+                  onClick={() => {
+
+                    /*
+                      Check whether the saved Raw Notes selection
+                      contains graph-linked text.
+
+                      Graph-linked text may be recoloured, but its
+                      highlight cannot be removed because that
+                      colour is part of the visual graph connection.
+                    */
+
+                    const containsGraphLink =
+                      getGraphLinksInSelection()
+                        .length > 0;
+
+                    setHighlightNoneDisabled(
+                      containsGraphLink
+                    );
+
+
+                    setHighlightColorPickerOpen(
+                      (current) => !current
+                    );
+
+                  }}
 
                   data-tooltip="Highlight colour"
+
                   aria-label="Highlight colour"
+
+                  aria-expanded={
+                    highlightColorPickerOpen
+                  }
+
+                  aria-haspopup="dialog"
                 >
                   <Highlighter
                     size={18}
@@ -2747,56 +2874,92 @@ function inferGraphLinkPaletteSlot(
 
                   <span
                     className="toolbar-color-indicator"
+
                     style={{
                       backgroundColor:
-                        activeHighlightColor,
+                        activeHighlightColor ||
+                        "transparent",
                     }}
                   />
+
                 </button>
 
 
-                <input
-                  ref={highlightColorInputRef}
-                  className="toolbar-hidden-color-input"
-                  type="color"
-                  value={highlightColor}
+                <TreeNotesColorPicker
+                  open={
+                    highlightColorPickerOpen
+                  }
 
-                  onChange={(event) => {
-                    const color = event.target.value;
+                  anchorRef={
+                    highlightColorButtonRef
+                  }
+
+                  value={
+                    highlightColor ||
+                    activeHighlightColor ||
+                    "#625DF0"
+                  }
+
+                  showNone
+
+                  noneSelected={
+                    !activeHighlightColor
+                  }
+
+                  noneDisabled={
+                    highlightNoneDisabled
+                  }
+
+                  onChange={(color) => {
+
+                    setHighlightColor(
+                      color
+                    );
+
+                    setActiveHighlightColor(
+                      color
+                    );
+
+
+                    /*
+                      applyHighlightColor already handles both:
+                        normal text -> normal highlight
+                        graph-linked text -> graph-link recolour
+                    */
 
                     applyHighlightColor(
                       color
                     );
 
                   }}
+
+                  onNone={() => {
+
+                    /*
+                      removeManualHighlight already contains a
+                      second safety check preventing linked text
+                      from losing its structural highlight.
+                    */
+
+                    removeManualHighlight();
+
+
+                    setHighlightColorPickerOpen(
+                      false
+                    );
+
+                  }}
+
+                  onClose={() => {
+
+                    setHighlightColorPickerOpen(
+                      false
+                    );
+
+                  }}
                 />
 
               </div>
-
-              {/* Remove Highlight */}
-
-              <button
-                type="button"
-
-                className="toolbar-icon-button"
-
-                onMouseDown={(event) => {
-                  saveEditorSelection();
-
-                  event.preventDefault();
-                }}
-
-                onClick={removeManualHighlight}
-
-                data-tooltip="Remove highlight"
-
-                aria-label="Remove highlight"
-              >
-                <Eraser
-                  size={18}
-                  strokeWidth={1.9}
-                />
-              </button>
 
               <span className="toolbar-divider" />
               
@@ -3262,6 +3425,8 @@ function inferGraphLinkPaletteSlot(
 
                   setGraphNodeMenuOpen(false);
 
+                  setLinkHighlightPickerOpen(false);
+
                   setContextMenu({
                     type: "linked",
 
@@ -3347,6 +3512,8 @@ function inferGraphLinkPaletteSlot(
                 selectedRangeRef.current = range.cloneRange();
 
                 setGraphNodeMenuOpen(false);
+
+                setLinkHighlightPickerOpen(false);
 
                 setContextMenu({
                   type: "new",
@@ -3678,14 +3845,19 @@ function inferGraphLinkPaletteSlot(
                       <div className="notes-context-color-wrapper">
 
                         <button
+                          ref={linkHighlightButtonRef}
                           type="button"
-                          className="notes-context-menu-item"
+
+                          className={`notes-context-menu-item ${
+                            linkHighlightPickerOpen
+                              ? "notes-context-menu-item-active"
+                              : ""
+                          }`}
+
+                          aria-haspopup="dialog"
+                          aria-expanded={linkHighlightPickerOpen}
 
                           onMouseDown={(event) => {
-                            /*
-                              Keep the Raw Notes editor from trying
-                              to change its selection.
-                            */
                             event.preventDefault();
                             event.stopPropagation();
                           }}
@@ -3693,7 +3865,11 @@ function inferGraphLinkPaletteSlot(
                           onClick={(event) => {
                             event.stopPropagation();
 
-                            linkHighlightInputRef.current?.click();
+                            setGraphNodeMenuOpen(false);
+
+                            setLinkHighlightPickerOpen(
+                              current => !current
+                            );
                           }}
                         >
 
@@ -3715,34 +3891,48 @@ function inferGraphLinkPaletteSlot(
 
                           </span>
 
-
                           <span>
                             Link highlight
                           </span>
 
+                          <ChevronRight
+                            size={15}
+                            strokeWidth={1.8}
+
+                            className={`notes-context-submenu-chevron ${
+                              linkHighlightPickerOpen
+                                ? "notes-context-submenu-chevron-open"
+                                : ""
+                            }`}
+                          />
+
                         </button>
 
+                        <TreeNotesColorPicker
+                          open={linkHighlightPickerOpen}
+                          anchorRef={linkHighlightButtonRef}
 
-                        <input
-                          ref={linkHighlightInputRef}
-                          className="notes-context-hidden-color-input"
-
-                          type="color"
+                          placement="right-start"
 
                           value={
                             contextMenu.color ||
                             getDefaultGraphLinkColor()
                           }
 
-                          onChange={(event) => {
-
+                          onChange={(color) => {
                             handleGraphLinkColorChange(
                               contextMenu.nodeId,
                               contextMenu.linkId,
-                              event.target.value
+                              color
                             );
-
                           }}
+
+                          onClose={() => {
+                            setLinkHighlightPickerOpen(false);
+                          }}
+
+                          showNone
+                          noneDisabled
                         />
 
                       </div>
