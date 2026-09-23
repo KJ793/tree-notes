@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from backend.ai.ai import ai_generate_graph, ai_generate_summary, ai_search_graph
+from backend.ai.ollama import ai_generate_graph, ai_generate_summary, ai_search_graph
 from backend.dependencies import get_current_user
 from backend.models import User
 from backend.schemas import RawNotesRequest, SummaryResponse

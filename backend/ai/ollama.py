@@ -1,21 +1,17 @@
 from typing import cast
 
-import requests, json, subprocess, os
+import requests, json
 from .models import SummaryResponse, ConceptGraphResponse, SearchGraphResult
 from ..schemas import SemanticSearchRequest
-
-OLLAMA_URL = os.getenv("OLLAMA_URL")
-SMALL_MODEL = os.getenv("SMALL_MODEL_NAME")
-LARGE_MODEL = os.getenv("LARGE_MODEL_NAME")
-EXPLICIT_MODEL = os.getenv("OLLAMA_MODEL")
-
-ACTIVE_MODEL = SMALL_MODEL
+from .config import OLLAMA_URL, ACTIVE_MODEL
 
 ### Simple Prompts for use in Frontend Testing
 
 (
     # Roses grow best in sunny gardens. Bees are attracted to their bright colors and sweet fragrance. When bees visit roses, they help pollinate the flowers, allowing new blooms to form. Without enough sunlight or pollination, roses struggle to grow strong and healthy.
+
     # Cacti store water in their thick stems to survive in hot deserts. Their spines protect them from animals and help reduce water loss. When rainfall occurs, cacti absorb moisture quickly, allowing them to grow new stems. Without enough sunlight, cacti become weak and struggle to thrive.
+
     # Volcanoes erupt when pressure builds beneath the Earth’s crust. Lava flows from the crater, destroying plants and reshaping the landscape. Ash clouds rise into the sky, affecting air quality and blocking sunlight. After an eruption, minerals in the lava help enrich the soil, allowing new plants to grow.
 
     # Volcanoes erupt when pressure builds beneath the Earth’s crust, forcing molten rock and gases upward. Lava flows from the crater, destroying vegetation, reshaping the landscape, and creating new rock formations as it cools. Ash clouds rise high into the atmosphere, reducing air quality, blocking sunlight, and sometimes altering local temperatures for days or weeks. Volcanic eruptions also release gases such as sulfur dioxide, which can combine with moisture to form acidic aerosols that affect nearby ecosystems. As the eruption subsides, minerals within the lava and ash enrich the soil, making the surrounding area highly fertile. This nutrient‑rich ground supports rapid plant regrowth, and many pioneer species quickly colonize the fresh terrain. Over time, repeated eruptions build layered volcanic cones, and the cooled lava flows can redirect rivers, create new valleys, or form natural barriers. Some eruptions even generate pyroclastic flows—fast‑moving currents of hot gas and debris—that further shape the environment before eventually contributing to long‑term soil formation.
@@ -25,37 +21,6 @@ ACTIVE_MODEL = SMALL_MODEL
     # Spiders (order Araneae) are air-breathing arthropods that have eight limbs, chelicerae with fangs generally able to inject venom, and spinnerets that extrude silk. They are the largest order of arachnids and rank seventh in total species diversity among all orders of organisms. Spiders are found worldwide on every continent except Antarctica, and have become established in nearly every land habitat. As of January 2026, 53,680 spider species in 139 families have been recorded by taxonomists. However, there has been debate among scientists about how families should be classified, with over 20 different classifications proposed since 1900. Anatomically, spiders (as with all arachnids) differ from other arthropods in that the usual body segments are fused into two tagmata, the cephalothorax or prosoma, and the opisthosoma, or abdomen, and joined by a small, cylindrical pedicel. However, as there is currently neither paleontological nor embryological evidence that spiders ever had a separate thorax-like division, there exists an argument against the validity of the term cephalothorax, which means fused cephalon (head) and the thorax. Similarly, arguments can be formed against the use of the term "abdomen", as the opisthosoma of all spiders contains a heart and respiratory organs, organs atypical of an abdomen. Unlike insects, spiders do not have antennae. In all except the most primitive group, the Mesothelae, spiders have the most centralized nervous systems of all arthropods, as all their ganglia are fused into one mass in the cephalothorax. Unlike most arthropods, spiders have no extensor muscles in their limbs and instead extend them by hydraulic pressure. Their abdomens bear appendages, modified into spinnerets that extrude silk from up to six types of glands. Spider webs vary widely in size, shape and the amount of sticky thread used. It now appears that the spiral orb web may be one of the earliest forms, and spiders that produce tangled cobwebs are more abundant and diverse than orb-weaver spiders. Spider-like arachnids with silk-producing spigots (Uraraneida) appeared in the Devonian period, about 386 million years ago, but these animals apparently lacked spinnerets. True spiders have been found in Carboniferous rocks from 318 to 299 million years ago and are very similar to the most primitive surviving suborder, the Mesothelae. The main groups of modern spiders, Mygalomorphae and Araneomorphae, first appeared in the Triassic period, more than 200 million years ago. The species Bagheera kiplingi was described as herbivorous in 2008, but all other known species are predators, mostly preying on insects and other spiders, although a few large species also take birds and lizards. An estimated 25 million tons of spiders kill 400–800 million tons of prey every year. Spiders use numerous strategies to capture prey: trapping it in sticky webs, lassoing it with sticky bolas, mimicking the prey to avoid detection, or running it down. Most detect prey mainly by sensing vibrations, but the active hunters have acute vision and hunters of the genus Portia show signs of intelligence in their choice of tactics and ability to develop new ones.
 )
 
-### ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-### WARM UP OLLAMA ---> PRELOAD
-
-def detect_vram_gb():
-    try:
-        output = subprocess.check_output(
-            ["docker", "exec", "ollama", "nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"]
-        )
-        return int(output.decode().strip()) // 1024
-    except Exception:
-        return 0
-
-def warm_ollama():
-    global ACTIVE_MODEL
-
-    if EXPLICIT_MODEL:
-        ACTIVE_MODEL = EXPLICIT_MODEL
-    else:
-        if detect_vram_gb() >= 12:
-            ACTIVE_MODEL = LARGE_MODEL
-
-    resp = requests.post(OLLAMA_URL, json={
-        "model": ACTIVE_MODEL,
-        "prompt": "Warm-up prompt",
-        "stream": False
-    })
-    _ = resp.json() # forces Ollama to load fully
-
-    return
-
 ### Prompt Templates ~~~~~~~~~~~~~~~
 
 concept_extraction_template = """
@@ -64,7 +29,21 @@ You are an AI that extracts concepts and relationships from text.
 Return ONLY valid JSON matching this EXACT schema:
 
 ```json
-{"concepts": [{"concept_id": int,"concept_name": str,"importance": float,"relationships": [{"target_id": int,"relationship": str,"weight": float}]}]}
+{
+    "concepts":
+    [
+        {"concept_id": int,
+        "concept_name": str,
+        "relationships": [
+                {
+                    "source_id": int,
+                    "target_id": int,
+                    "relationship": str
+                }
+            ]
+        }
+    ]
+}
 ```
 
 Concept Importance is a type of score and must reflect:

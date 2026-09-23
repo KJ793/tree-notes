@@ -9,7 +9,7 @@ from backend.database import get_db
 from backend.dependencies import get_current_user
 from backend.models import Group, Note, User
 from backend.schemas import CytoscapeGraph, NoteCreate, NoteResponse, NoteUpdate, SemanticSearchRequest
-from backend.ai.ai import ai_search_graph
+from backend.ai.ollama import ai_search_graph
 
 router = APIRouter()
 

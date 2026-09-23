@@ -37,7 +37,7 @@ services:
         condition: service_healthy
       ollama:
         condition: service_started
-      vosk:
+      asr:
         condition: service_started
     volumes:
       - ./backend:/app/backend
@@ -89,16 +89,22 @@ services:
     volumes:
       - ollama:/root/.ollama
     # GPU CONFIG MOVED TO docker-compose.override.yml
-  
-  vosk:
-    image: ./backend/asr
-    container_name: vosk
+
+  asr:
+    build:
+      context: .
+      dockerfile: backend/asr/Dockerfile
+    container_name: asr
     ports:
       - "8001:8000"
+    env_file:
+      - .env
     volumes:
-      - ./models/vosk:/models
+      - asr_models:/models
     # GPU CONFIG MOVED TO docker-compose.override.yml
+
 
 volumes:
   postgres_data:
   ollama:
+  asr_models:

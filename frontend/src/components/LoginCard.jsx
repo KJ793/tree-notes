@@ -108,7 +108,6 @@ function LoginCard({ onCreateAccount }) {
     }
   }
 
-
   return (
     <div className="logincard auth-card">
 
@@ -207,12 +206,9 @@ function LoginCard({ onCreateAccount }) {
         >
           Continue with Google
         </button>
-
       </form>
-
     </div>
   );
 }
-
 
 export default LoginCard;

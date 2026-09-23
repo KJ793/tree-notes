@@ -18,7 +18,7 @@ build/
 .vite/
 
 # Docker (keep the tracked compose files; ignore local overrides)
-docker-compose.override.yml
+# docker-compose.override.yml
 
 # IDE / OS
 .vscode/
