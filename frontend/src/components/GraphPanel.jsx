@@ -1384,90 +1384,6 @@ useEffect(() => {
 
   }
 
-  function applyActiveGraphTheme(cy) {
-
-    if (!cy) {
-      return;
-    }
-
-
-    const graphTheme =
-      getGraphThemeColours();
-
-
-    cy.style()
-
-      /* Normal nodes */
-
-      .selector("node")
-
-      .style({
-        "background-color":
-          graphTheme.nodeBackground,
-
-        "border-color":
-          graphTheme.nodeBorder,
-
-        color:
-          graphTheme.nodeText,
-      })
-
-
-      /* Selected node */
-
-      .selector("node:selected")
-
-      .style({
-        "border-color":
-          graphTheme.selectedBorder,
-
-        "underlay-color":
-          graphTheme.selectedBorder,
-      })
-
-
-      /* First node in link mode */
-
-      .selector("node.link-source")
-
-      .style({
-        "border-color":
-          graphTheme.linkSource,
-
-        "overlay-color":
-          graphTheme.linkSource,
-      })
-
-
-      /* Normal edges */
-
-      .selector("edge")
-
-      .style({
-        "line-color":
-          graphTheme.edge,
-
-        "target-arrow-color":
-          graphTheme.nodeBorder,
-      })
-
-
-      /* Selected edges */
-
-      .selector("edge:selected")
-
-      .style({
-        "line-color":
-          graphTheme.selectedBorder,
-
-        "target-arrow-color":
-          graphTheme.selectedBorder,
-      })
-
-
-      .update();
-  }
-
   function applyGraphTheme(
     cy = cyRef.current
   ) {
@@ -1475,9 +1391,7 @@ useEffect(() => {
       return;
     }
 
-    const graphTheme =
-      getGraphThemeTokens();
-
+    const graphTheme = getGraphThemeTokens();
 
     cy.style()
 
@@ -1487,16 +1401,10 @@ useEffect(() => {
 
       .selector("node")
       .style({
-        "background-color":
-          graphTheme.nodeBg,
-
-        "border-color":
-          graphTheme.nodeBorder,
-
-        color:
-          graphTheme.nodeText,
+        "background-color": graphTheme.nodeBg,
+        "border-color": graphTheme.nodeBorder,
+        color: graphTheme.nodeText,
       })
-
 
       // =====================================================
       // CUSTOM NODE APPEARANCE
@@ -1504,34 +1412,28 @@ useEffect(() => {
 
       .selector("node[color]")
       .style({
-        "background-color":
-          "data(color)",
+        "background-color": "data(color)",
       })
 
       .selector("node[textColor]")
       .style({
-        color:
-          "data(textColor)",
+        color: "data(textColor)",
       })
 
       .selector("node[shape]")
       .style({
-        shape:
-          "data(shape)",
+        shape: "data(shape)",
       })
 
       .selector("node[borderColor]")
       .style({
-        "border-color":
-          "data(borderColor)",
+        "border-color": "data(borderColor)",
       })
 
       .selector("node[borderStyle]")
       .style({
-        "border-style":
-          "data(borderStyle)",
+        "border-style": "data(borderStyle)",
       })
-
 
       // =====================================================
       // SELECTED NODE
@@ -1539,24 +1441,21 @@ useEffect(() => {
 
       .selector("node:selected")
       .style({
-        "border-width": 4,
-
-        "border-style":
-          "solid",
-
-        "border-color":
-          graphTheme.selectedBorder,
-
-        "underlay-color":
-          graphTheme.selectedBorder,
-
-        "underlay-opacity":
-          0.18,
-
-        "underlay-padding":
-          8,
+        "underlay-color": graphTheme.selectedBorder,
+        "underlay-opacity": 0.28,
+        "underlay-padding": 10,
       })
 
+      // =====================================================
+      // LINKED RAW NOTES HOVER
+      // =====================================================
+
+      .selector("node.linked-text-hover")
+      .style({
+        "underlay-color": "data(linkColor)",
+        "underlay-opacity": 0.38,
+        "underlay-padding": 20,
+      })
 
       // =====================================================
       // LINK SOURCE
@@ -1565,23 +1464,12 @@ useEffect(() => {
       .selector("node.link-source")
       .style({
         "border-width": 4,
-
-        "border-style":
-          "dashed",
-
-        "border-color":
-          graphTheme.linkSource,
-
-        "underlay-color":
-          graphTheme.linkSource,
-
-        "underlay-opacity":
-          0.22,
-
-        "underlay-padding":
-          8,
+        "border-style": "dashed",
+        "border-color": graphTheme.linkSource,
+        "underlay-color": graphTheme.linkSource,
+        "underlay-opacity": 0.22,
+        "underlay-padding": 8,
       })
-
 
       // =====================================================
       // DEFAULT EDGE
@@ -1590,26 +1478,13 @@ useEffect(() => {
       .selector("edge")
       .style({
         width: 2,
-
-        "line-color":
-          graphTheme.edge,
-
-        "target-arrow-color":
-          graphTheme.edgeArrow,
-
-        "target-arrow-shape":
-          "triangle",
-
-        "line-style":
-          "solid",
-
-        color:
-          graphTheme.edgeLabel,
-
-        opacity:
-          0.8,
+        "line-color": graphTheme.edge,
+        "target-arrow-color": graphTheme.edgeArrow,
+        "target-arrow-shape": "triangle",
+        "line-style": "solid",
+        color: graphTheme.edgeLabel,
+        opacity: 0.8,
       })
-
 
       // =====================================================
       // CUSTOM EDGE APPEARANCE
@@ -1617,28 +1492,23 @@ useEffect(() => {
 
       .selector("edge[edgeColor]")
       .style({
-        "line-color":
-          "data(edgeColor)",
+        "line-color": "data(edgeColor)",
       })
 
       .selector("edge[arrowColor]")
       .style({
-        "target-arrow-color":
-          "data(arrowColor)",
+        "target-arrow-color": "data(arrowColor)",
       })
 
       .selector("edge[arrowShape]")
       .style({
-        "target-arrow-shape":
-          "data(arrowShape)",
+        "target-arrow-shape": "data(arrowShape)",
       })
 
       .selector("edge[lineStyle]")
       .style({
-        "line-style":
-          "data(lineStyle)",
+        "line-style": "data(lineStyle)",
       })
-
 
       // =====================================================
       // SELECTED EDGE
@@ -1647,34 +1517,10 @@ useEffect(() => {
 
       .selector("edge:selected")
       .style({
-        width: 4,
-
-        "line-color":
-          graphTheme.selectedEdge,
-
-        "target-arrow-color":
-          graphTheme.selectedEdge,
-
-        opacity:
-          1,
+        "underlay-color": graphTheme.selectedEdge,
+        "underlay-opacity": 0.32,
+        "underlay-padding": 6,
       })
-
-      .selector(
-        "edge:selected[edgeColor]"
-      )
-      .style({
-        "line-color":
-          graphTheme.selectedEdge,
-      })
-
-      .selector(
-        "edge:selected[arrowColor]"
-      )
-      .style({
-        "target-arrow-color":
-          graphTheme.selectedEdge,
-      })
-
 
       .update();
   }
@@ -2529,12 +2375,22 @@ useEffect(() => {
         {
           selector: "node:selected",
           style: {
-            "border-width": 4,
-            "border-style": "solid",
-            "border-color": graphTheme.selectedBorder,
             "underlay-color": graphTheme.selectedBorder,
-            "underlay-opacity": 0.18,
-            "underlay-padding": 8,
+            "underlay-opacity": 0.28,
+            "underlay-padding": 10,
+          },
+        },
+
+        /* =========================================================
+          LINKED RAW NOTES HOVER
+          ========================================================= */
+
+        {
+          selector: "node.linked-text-hover",
+          style: {
+            "underlay-color": "data(linkColor)",
+            "underlay-opacity": 0.38,
+            "underlay-padding": 20,
           },
         },
 
@@ -2734,34 +2590,11 @@ useEffect(() => {
         {
           selector: "edge:selected",
           style: {
-            width: 4,
-            "line-style": "solid",
-            "line-color": graphTheme.selectedEdge,
-            "target-arrow-color": graphTheme.selectedEdge,
-            opacity: 1,
+            "underlay-color": graphTheme.selectedEdge,
+            "underlay-opacity": 0.32,
+            "underlay-padding": 6,
           },
         },
-
-        {
-          selector:
-            "edge:selected[edgeColor]",
-
-          style: {
-            "line-color":
-              graphTheme.selectedEdge,
-          },
-        },
-
-        {
-          selector:
-            "edge:selected[arrowColor]",
-
-          style: {
-            "target-arrow-color":
-              graphTheme.selectedEdge,
-          },
-        },
-
       ],
     });
     cyRef.current = cy;
@@ -3986,22 +3819,16 @@ function setLinkedNodeHover(
       color
     );
 
-    node.style({
-      "underlay-color": color,
-      "underlay-opacity": 0.38,
-      "underlay-padding": 20,
-    });
-  } else {
     /*
-      Only turn off our halo.
+      Use a class instead of direct style overrides.
 
-      Don't call removeStyle() here because that could
-      remove the user's custom node colour/shape too.
+      This allows normal selected styling to return
+      automatically after hover ends.
     */
-    node.style(
-      "underlay-opacity",
-      0
-    );
+    node.addClass("linked-text-hover");
+  } else {
+
+    node.removeClass("linked-text-hover");
   }
 }
 
@@ -4029,12 +3856,11 @@ function setLinkedNodeColor(
   );
 
   /*
-    Also update an existing hover halo immediately.
+    If the node is currently being hovered,
+    Cytoscape automatically refreshes the
+    linked-text-hover halo from data(linkColor).
   */
-  node.style(
-    "underlay-color",
-    color
-  );
+  node.updateStyle();
 }
 
 function getSelectedCyNode() {
