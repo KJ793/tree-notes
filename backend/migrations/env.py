@@ -1,8 +1,10 @@
+import sys
 import os
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
-
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 # Load .env file if present
 from dotenv import load_dotenv
 load_dotenv()
@@ -21,7 +23,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Import models for autogenerate support
-from models import Base
+from backend.models import Base
 target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
