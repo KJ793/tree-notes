@@ -1,0 +1,64 @@
+DRAFT SETUP FOR ASR VOSK
+
+after a rebuild, make sure you have updated the docker-compose.override.yml if we're using ollama whisper so it can run on the gpu
+
+update the /tree-notes/nginx.conf and include the following location:
+
+    location /asr/ {
+        proxy_pass http://asr:8000/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade            $http_upgrade;
+        proxy_set_header Connection         "upgrade";
+        proxy_set_header Host               $host;
+        proxy_set_header X-Real-IP          $remote_addr;
+        proxy_set_header X-Forwarded-For    $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto  $scheme;
+
+        # streaming mic audio sits open longer than nginx 60 sec default
+        # read/send timeout especially through pauses in speech
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+add the follow service to the docker-compose.yml:
+
+  asr:
+    build:
+      context: .
+      dockerfile: backend/asr/Dockerfile
+    container_name: asr
+    ports:
+      - "8001:8000"
+    env_file:
+      - .env
+    volumes:
+      - asr_models:/models
+    # GPU CONFIG MOVED TO docker-compose.override.yml
+
+and add the "asr_models" to the volumes for persistence between builds:
+
+volumes:
+  postgres_data:
+  ollama:
+  asr_models:
+
+next, we need to install some models into the asr container. currently the container crashes on launch, so instead we run it "lightweight" mode:
+
+docker compose run --rm --entrypoint bash asr
+
+this will give us the internal docker bash terminal. run:
+
+cd /models
+curl -LO https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+unzip vosk-model-small-en-us-0.15.zip
+mv vosk-model-small-en-us-0.15 en-us
+rm vosk-model-small-en-us-0.15.zip
+exit
+
+this will install the simple small vosk model in en-us language.
+
+now you can run
+docker compose build
+docker compose up
+
+and everything should work.
