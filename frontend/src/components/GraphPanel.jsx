@@ -501,176 +501,6 @@ function calculateNodeSize(
   };
 }
 
-function resizeNodeToLabel(
-  node
-) {
-
-  if (
-    !node ||
-    node.empty()
-  ) {
-    return;
-  }
-
-
-  const label =
-    node.data("label") ||
-    "New Node";
-
-  const shape =
-    node.data("shape") ||
-    "round-rectangle";
-
-
-  const {
-    width,
-    height,
-    textMaxWidth,
-    textMarginY,
-  } =
-    calculateNodeSize(
-      label,
-      shape
-    );
-
-
-  /*
-    Keep these as node data so the Cytoscape
-    stylesheet can consume them automatically.
-  */
-  node.data({
-    nodeWidth:
-      width,
-
-    nodeHeight:
-      height,
-
-    nodeTextMaxWidth:
-      textMaxWidth,
-
-    nodeTextMarginY:
-      textMarginY,
-  });
-
-  refreshConnectedEdgeLabels(
-    node
-  );
-}
-
-function refreshConnectedEdgeLabels(
-  node
-) {
-
-  if (
-    !node ||
-    node.empty()
-  ) {
-    return;
-  }
-
-
-  const cy =
-    node.cy();
-
-
-  const connectedEdges =
-    node.connectedEdges()
-      .filter(
-        edge =>
-          String(
-            edge.data(
-              "relationship"
-            ) || ""
-          ).trim()
-      );
-
-
-  if (
-    connectedEdges.length === 0
-  ) {
-    return;
-  }
-
-  /*
-    First allow Cytoscape to finish applying
-    the node's new width / height.
-  */
-  requestAnimationFrame(() => {
-
-    /*
-      Then give the renderer one more frame to
-      recalculate the new edge endpoints.
-    */
-    requestAnimationFrame(() => {
-
-      connectedEdges.forEach(
-        edge => {
-
-          const relationship =
-            edge.data(
-              "relationship"
-            ) || "";
-
-          /*
-            Force Cytoscape to rebuild the label's
-            rendered bounding box.
-
-            The zero-width character changes the
-            underlying label value without creating
-            any visible change on screen.
-          */
-          edge.style(
-            "label",
-            `${relationship}\u200B`
-          );
-
-        }
-      );
-
-      /*
-        On the following frame, remove the temporary
-        style override so the edge returns to using:
-
-          label: data(relationship)
-
-        from the normal Cytoscape stylesheet.
-      */
-      requestAnimationFrame(() => {
-
-        connectedEdges.forEach(
-          edge => {
-
-            edge.removeStyle(
-              "label"
-            );
-
-            if (
-              edge.id() !==
-              editingEdgeIdRef.current
-            ) {
-
-              edge.style(
-                "text-opacity",
-                1
-              );
-
-            }
-
-          }
-        );
-
-
-        cy.style()
-          .update();
-
-      });
-
-    });
-
-  });
-
-}
-
 function getThemeToken(
   tokenName,
   fallback
@@ -806,7 +636,41 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   // Stores the Cytoscape instance so other functions can access it //
   const cyRef = useRef(null);
-// STORES SELECTED EDGES STATE
+
+  // =========================================================
+  // AI GRAPH STREAMING
+  // =========================================================
+
+  // Holds streamed edges whose source/target nodes
+  // have not arrived yet.
+  const pendingStreamEdgesRef = useRef([]);
+
+  // =========================================================
+  // STREAM VISUAL POSITIONING
+  // =========================================================
+
+  // Temporary centre around which streamed nodes are placed.
+  // The final COSE layout will replace these positions.
+  const streamAnchorRef = useRef(null);
+
+  // Counts nodes as they arrive so temporary positions
+  // can be distributed around the graph canvas.
+  const streamNodeIndexRef = useRef(0);
+
+  // =========================================================
+  // GRAPH STREAM REQUEST
+  // =========================================================
+
+  // Stores the currently active graph-generation request.
+  // Allows us to cancel it if the note changes or the
+  // component disappears.
+  const graphStreamAbortRef = useRef(null);
+
+  // =========================================================
+  // EDGE LINKING
+  // =========================================================
+
+  // STORES SELECTED EDGES STATE
   const [selectedEdge, setSelectedEdge] = useState(null);
 
   const linkModeRef = useRef(false);
@@ -924,6 +788,180 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   const [relationshipZoom, setRelationshipZoom] = useState(1);
 
+  // =========================================================
+  // Node Auto-Sizing / Edge Label Refresh
+  // =========================================================
+
+  function resizeNodeToLabel(
+    node
+  ) {
+
+    if (
+      !node ||
+      node.empty()
+    ) {
+      return;
+    }
+
+
+    const label =
+      node.data("label") ||
+      "New Node";
+
+    const shape =
+      node.data("shape") ||
+      "round-rectangle";
+
+
+    const {
+      width,
+      height,
+      textMaxWidth,
+      textMarginY,
+    } =
+      calculateNodeSize(
+        label,
+        shape
+      );
+
+
+    /*
+      Keep these as node data so the Cytoscape
+      stylesheet can consume them automatically.
+    */
+    node.data({
+      nodeWidth:
+        width,
+
+      nodeHeight:
+        height,
+
+      nodeTextMaxWidth:
+        textMaxWidth,
+
+      nodeTextMarginY:
+        textMarginY,
+    });
+
+    refreshConnectedEdgeLabels(
+      node
+    );
+  }
+
+  function refreshConnectedEdgeLabels(
+    node
+  ) {
+
+    if (
+      !node ||
+      node.empty()
+    ) {
+      return;
+    }
+
+
+    const cy =
+      node.cy();
+
+
+    const connectedEdges =
+      node.connectedEdges()
+        .filter(
+          edge =>
+            String(
+              edge.data(
+                "relationship"
+              ) || ""
+            ).trim()
+        );
+
+
+    if (
+      connectedEdges.length === 0
+    ) {
+      return;
+    }
+
+    /*
+      First allow Cytoscape to finish applying
+      the node's new width / height.
+    */
+    requestAnimationFrame(() => {
+
+      /*
+        Then give the renderer one more frame to
+        recalculate the new edge endpoints.
+      */
+      requestAnimationFrame(() => {
+
+        connectedEdges.forEach(
+          edge => {
+
+            const relationship =
+              edge.data(
+                "relationship"
+              ) || "";
+
+            /*
+              Force Cytoscape to rebuild the label's
+              rendered bounding box.
+
+              The zero-width character changes the
+              underlying label value without creating
+              any visible change on screen.
+            */
+            edge.style(
+              "label",
+              `${relationship}\u200B`
+            );
+
+          }
+        );
+
+        /*
+          On the following frame, remove the temporary
+          style override so the edge returns to using:
+
+            label: data(relationship)
+
+          from the normal Cytoscape stylesheet.
+        */
+        requestAnimationFrame(() => {
+
+          connectedEdges.forEach(
+            edge => {
+
+              edge.removeStyle(
+                "label"
+              );
+
+              if (
+                edge.id() !==
+                editingEdgeIdRef.current
+              ) {
+
+                edge.style(
+                  "text-opacity",
+                  1
+                );
+
+              }
+
+            }
+          );
+
+
+          cy.style()
+            .update();
+
+        });
+
+      });
+
+    });
+
+  }
+
   /*
     Keep GraphPanel synced with the graph_json belonging to the
     currently selected note.
@@ -984,82 +1022,366 @@ const GraphPanel = forwardRef(function GraphPanel(
     setRelationshipValue("");
   }, [noteId, initialGraph]);
 
+  /* =========================================================
+   CANCEL AI GRAPH STREAM WHEN NOTE CHANGES / PANEL UNMOUNTS
+   ========================================================= */
+
+useEffect(() => {
+
+  /*
+    This cleanup runs:
+
+      - before noteId changes
+      - when GraphPanel is unmounted
+
+    If an AI graph is still being streamed, abort that
+    HTTP request so it cannot continue feeding graph data
+    into a different note.
+  */
+
+  return () => {
+
+    if (graphStreamAbortRef.current) {
+      graphStreamAbortRef.current.abort();
+    }
+
+  };
+
+}, [noteId]);
+
   async function generateGraph() {
-    if (!rawNotes || rawNotes.trim() === "") {
+
+    // =======================================================
+    // VALIDATE NOTES
+    // =======================================================
+
+    const notes = rawNotes?.trim();
+
+    if (!notes) {
       setError("Please write some notes before generating a graph.");
       return;
     }
 
+    // =======================================================
+    // CANCEL ANY PREVIOUS STREAM
+    // =======================================================
+
+    if (graphStreamAbortRef.current) {
+      graphStreamAbortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+
+    graphStreamAbortRef.current = controller;
+
     setLoading(true);
+
     setError("");
 
     try {
-      // << BACKEND CONNECTION >> //
-      const response = await fetch("/api/graph", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          rawNotes: rawNotes,
-        }),
-      });
 
-      let data = {};
+      // =====================================================
+      // START STREAMING REQUEST
+      // =====================================================
 
-      try {
-        data = await response.json();
-      } catch {
-        // Keep the fallback error message below when there is no JSON body.
-      }
+      const response =
+        await fetch(
+          "/api/graph/stream",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            credentials:
+              "include",
+
+            signal:
+              controller.signal,
+
+            body:
+              JSON.stringify({
+                noteId:
+                  noteId ?? null,
+
+                /*
+                  IMPORTANT:
+
+                  rawNotes should already be the plain-text
+                  representation supplied by NoteWorkspace.
+
+                  Do not send notes_section_html here.
+                */
+                rawNotes:
+                  notes,
+              }),
+          }
+        );
+
+      // =====================================================
+      // HTTP-LEVEL ERRORS
+      // =====================================================
 
       if (!response.ok) {
-        let message =
-          "Graph generation failed. Please try again.";
 
-        if (typeof data?.detail === "string") {
-          message = data.detail;
-        } else if (Array.isArray(data?.detail)) {
-          message = data.detail
-            .map((item) =>
-              String(item.msg)
-                .replace(/^Value error, /, "")
+        let message = "Graph generation failed. Please try again.";
+
+        try {
+
+          const contentType =
+            response.headers.get(
+              "content-type"
+            ) || "";
+
+          if (
+            contentType.includes(
+              "application/json"
             )
-            .join(" ");
+          ) {
+
+            const data = await response.json();
+
+            if (typeof data?.detail === "string") {
+              message = data.detail;
+            } else if (
+              Array.isArray(data?.detail)
+            ) {
+
+              message =
+                data.detail
+                  .map(
+                    (item) =>
+                      String(
+                        item.msg
+                      )
+                        .replace(
+                          /^Value error, /,
+                          ""
+                        )
+                  )
+                  .join(" ");
+
+            } else if (
+              typeof data?.message === "string"
+            ) {
+              message = data.message;
+            }
+
+          } else {
+
+            const text = await response.text();
+
+            if (text.trim()) {
+              message = text.trim();
+            }
+
+          }
+
+        } catch {
+
+          /*
+            Keep the normal fallback error message
+            if the server response cannot be parsed.
+          */
+
         }
 
-        throw new Error(message);
+        throw new Error(
+          message
+        );
+
       }
 
+      // =====================================================
+      // MAKE SURE THE BROWSER GAVE US A STREAM
+      // =====================================================
+
+      if (!response.body) {
+        throw new Error("Graph streaming is not available in this browser.");
+      }
+
+      // =====================================================
+      // CREATE STREAM READER
+      // =====================================================
+
+      const reader = response.body.getReader();
+
+      const decoder =
+        new TextDecoder(
+          "utf-8"
+        );
+
       /*
-        The generated graph becomes the current live graph.
-        It will be persisted with the rest of the note when
-        NoteWorkspace.saveEverything() performs its single PATCH.
+        Network chunks do NOT necessarily line up with
+        JSON objects.
+
+        For example, one chunk could contain:
+
+          {"type":"no
+
+        and the next:
+
+          de","data":...}\n
+
+        So we keep incomplete text here until a newline
+        tells us that one complete NDJSON event exists.
       */
-      setGraphData({
-        nodes: Array.isArray(data?.nodes)
-          ? data.nodes
-          : [],
-        edges: Array.isArray(data?.edges)
-          ? data.edges
-          : [],
-      });
+
+      let buffer = "";
+
+      // =====================================================
+      // READ STREAM
+      // =====================================================
+
+      while (true) {
+
+        const {value, done,} = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        /*
+          Convert the Uint8Array network chunk into text.
+
+          stream: true tells TextDecoder that the next
+          chunk may continue a character from this one.
+        */
+
+        buffer +=
+          decoder.decode(
+            value,
+            {
+              stream: true,
+            }
+          );
+
+        /*
+          One chunk may contain:
+
+            one event
+            several events
+            part of an event
+
+          Split only on newline boundaries.
+        */
+
+        const lines = buffer.split("\n");
+
+        /*
+          The final item might be incomplete.
+
+          Keep it in the buffer for the next read.
+        */
+
+        buffer = lines.pop() ?? "";
+
+        for (const rawLine of lines) {
+
+          const line = rawLine.trim();
+
+          if (!line) {
+            continue;
+          }
+
+          try {
+
+            const event =
+              JSON.parse(
+                line
+              );
+
+            /*
+              This is the function we already tested
+              using testGraphStreaming().
+            */
+
+            handleGraphStreamEvent(event);
+
+          } catch (
+            parseError
+          ) {
+            console.error("Unable to parse graph stream event:", line, parseError);
+          }
+
+        }
+
+      }
+
+      // =====================================================
+      // FLUSH TEXTDECODER
+      // =====================================================
+
+      buffer += decoder.decode();
+
+      /*
+        Usually every backend event ends in \\n.
+
+        This fallback lets us safely process a final JSON
+        event even if the final newline was omitted.
+      */
+
+      const finalLine = buffer.trim();
+
+      if (finalLine) {
+
+        try {
+
+          const finalEvent =
+            JSON.parse(
+              finalLine
+            );
+
+          handleGraphStreamEvent(finalEvent);
+
+        } catch (
+          parseError
+        ) {
+          console.error("Unable to parse final graph stream event:", finalLine, parseError);
+        }
+
+      }
 
     } catch (error) {
-      console.error(
-        "Graph generation error:",
-        error
-      );
 
-      setError(
-        error.message ||
-        "Unable to generate graph. Please try again."
-      );
+      // =====================================================
+      // REQUEST CANCELLED
+      // =====================================================
+
+      if (
+        error?.name === "AbortError"
+      ) {
+        console.log("Graph generation stream cancelled.");
+        return;
+      }
+
+      // =====================================================
+      // REQUEST FAILED
+      // =====================================================
+
+      console.error("Graph generation error:", error);
+
+      setError(error?.message || "Unable to generate graph. Please try again.");
 
     } finally {
-      setTimeout(() => setLoading(false), 4000);
+
+      /*
+        Only clear the ref if this is still the
+        currently active request.
+
+        This matters if another request was started
+        while an older request was shutting down.
+      */
+
+      if (graphStreamAbortRef.current === controller) {
+        graphStreamAbortRef.current = null;
+        setLoading(false);
+      }
+
     }
+
   }
 
   function applyActiveGraphTheme(cy) {
@@ -1357,6 +1679,719 @@ const GraphPanel = forwardRef(function GraphPanel(
       .update();
   }
 
+
+
+  function addStreamEdge(edgeData)
+  {
+
+    const cy = cyRef.current;
+
+    if (
+      !cy ||
+      !edgeData
+    ) {
+      return false;
+    }
+
+    const sourceId =
+      String(
+        edgeData.source ?? ""
+      );
+
+
+    const targetId =
+      String(
+        edgeData.target ?? ""
+      );
+
+    if (
+      !sourceId ||
+      !targetId
+    ) {
+
+      console.warn(
+        "Streamed edge is missing source/target:",
+        edgeData
+      );
+
+      return false;
+    }
+
+    const sourceNode =
+      cy.getElementById(
+        sourceId
+      );
+
+    const targetNode =
+      cy.getElementById(
+        targetId
+      );
+
+    /*
+      An edge cannot safely be added until both
+      of its nodes exist.
+    */
+
+    if (
+      sourceNode.empty() ||
+      targetNode.empty()
+    ) {
+      return false;
+    }
+
+    /*
+      Hans should ideally provide edge IDs.
+
+      This fallback gives us something usable
+      during development if he doesn't yet.
+    */
+
+    const edgeId =
+      String(
+        edgeData.id ||
+        `ai-edge-${sourceId}-${targetId}-${edgeData.relationship || "link"}`
+      );
+
+    const existing =
+      cy.getElementById(
+        edgeId
+      );
+
+    /*
+      If this edge already exists, update it
+      instead of creating a duplicate.
+    */
+
+    if (!existing.empty()) {
+
+      existing.data({
+        ...existing.data(),
+        ...edgeData,
+        id: edgeId,
+        source: sourceId,
+        target: targetId,
+      });
+
+      return true;
+    }
+
+    cy.add({
+      group: "edges",
+
+      data: {
+        ...edgeData,
+
+        id:
+          edgeId,
+
+        source:
+          sourceId,
+
+        target:
+          targetId,
+      },
+    });
+
+    return true;
+  }
+
+  function getStreamNodePosition()
+  {
+
+    const cy = cyRef.current;
+
+    if (!cy) {
+      return {
+        x: 0,
+        y: 0,
+      };
+    }
+
+    /*
+      On the first streamed node, capture the centre
+      of the currently visible Cytoscape viewport.
+
+      All subsequent temporary positions are based
+      around this point.
+    */
+
+    if (!streamAnchorRef.current) {
+
+      const extent = cy.extent();
+
+      streamAnchorRef.current = {
+        x:
+          (extent.x1 + extent.x2) / 2,
+        y:
+          (extent.y1 + extent.y2) / 2,
+      };
+
+    }
+
+    const anchor = streamAnchorRef.current;
+
+    const index = streamNodeIndexRef.current++;
+
+    /*
+      First node goes directly into the centre.
+    */
+
+    if (index === 0) {
+      return {
+        ...anchor,
+      };
+
+    }
+
+    /*
+      Place later nodes in a loose spiral.
+
+      These are ONLY temporary positions while
+      generation is underway.
+    */
+
+    const goldenAngle = 137.508 * (Math.PI / 180);
+    const angle = index * goldenAngle;
+    const radius = 90 + Math.sqrt(index) * 65;
+
+    return {
+      x:
+        anchor.x +
+        Math.cos(angle) * radius,
+      y:
+        anchor.y +
+        Math.sin(angle) * radius,
+    };
+  }
+
+  function focusStreamElements(elements)
+  {
+
+    const cy = cyRef.current;
+
+    if (!cy || !elements || elements.empty())
+    {
+      return;
+    }
+
+    /*
+      Stop any previous viewport animation so a newly
+      streamed element immediately becomes the focus.
+    */
+
+    cy.stop();
+
+    /*
+      Keep a fairly stable viewing zoom during streaming.
+
+      We don't want every individual node to fill the
+      entire Graph View.
+    */
+
+    const focusZoom =
+      Math.min(
+        Math.max(
+          cy.zoom(),
+          0.95
+        ),
+        1.15
+      );
+
+    cy.animate(
+
+      {
+        center: {
+          eles: elements,
+        },
+
+        zoom:
+          focusZoom,
+      },
+
+      {
+        duration: 350,
+        easing: "ease-in-out-cubic",
+      }
+
+    );
+  }
+
+  function flushPendingStreamEdges()
+  {
+
+    const cy = cyRef.current;
+
+    if (!cy || pendingStreamEdgesRef.current.length === 0) {
+      return;
+    }
+
+    const stillPending = [];
+
+    for (const edgeData of pendingStreamEdgesRef.current) {
+
+      const added = addStreamEdge(edgeData);
+
+      if (!added) {
+        stillPending.push(edgeData);
+      }
+
+    }
+
+    pendingStreamEdgesRef.current = stillPending;
+  }
+
+  function handleGraphStreamEvent(event)
+  {
+
+    const cy = cyRef.current;
+
+    if (!cy || !event) {
+      return;
+    }
+
+    console.log("Graph stream event:", event);
+
+    switch (event.type) {
+
+      // =====================================================
+      // STREAM STARTED
+      // =====================================================
+
+      case "start": {
+
+        /*
+          Generate Graph currently replaces the existing
+          generated graph, so preserve that behaviour.
+
+          We clear the graph once when the stream begins,
+          NOT every time an element arrives.
+        */
+
+        cy.elements().remove();
+
+        pendingStreamEdgesRef.current = [];
+
+        streamAnchorRef.current = null;
+
+        streamNodeIndexRef.current = 0;
+
+        cy.elements().unselect();
+
+
+        setSelectedNode(null);
+        setSelectedEdge(null);
+
+        setShapeMenuOpen(false);
+        setNodeBorderStyleMenuOpen(false);
+        setEdgeStyleMenuOpen(false);
+        setArrowShapeMenuOpen(false);
+        setGraphFeedback(null);
+
+        console.log("AI graph stream started.");
+
+        break;
+      }
+
+      // =====================================================
+      // STREAMED NODE
+      // =====================================================
+
+      case "node": {
+
+        const nodeData = event.data;
+
+        if (!nodeData?.id) {
+          console.warn("Streamed node has no id:", event);
+          break;
+        }
+
+        const nodeId =String(nodeData.id);
+        const existingNode = cy.getElementById(nodeId);
+
+        let node;
+
+        /*
+          Update existing node if the backend repeats
+          or enriches it later in the stream.
+        */
+
+        if (!existingNode.empty()) {
+
+          existingNode.data({
+            ...existingNode.data(),
+            ...nodeData,
+            id: nodeId,
+          });
+
+          node = existingNode;
+
+        } else {
+
+          node =
+            cy.add({
+              group: "nodes",
+
+              data: {
+                ...nodeData,
+
+                id:
+                  nodeId,
+
+                label:
+                  nodeData.label ||
+                  nodeId,
+              },
+
+              /*
+                Give the new node a temporary stable position.
+
+                Existing streamed nodes are NOT rearranged.
+              */
+
+              position:
+                getStreamNodePosition(),
+            });
+
+        }
+
+        /*
+          Apply TreeNotes' existing automatic node sizing.
+        */
+
+        resizeNodeToLabel(node);
+
+        /*
+          A newly arrived node might unlock an edge that
+          had to wait for this endpoint.
+        */
+        flushPendingStreamEdges();
+
+        cy.style().update();
+
+        /*
+          Smoothly move the viewport to the node
+          that has just appeared.
+        */
+        focusStreamElements(node);
+
+        break;
+      }
+
+
+      // =====================================================
+      // STREAMED EDGE
+      // =====================================================
+
+      case "edge": {
+
+        const edgeData = event.data;
+
+        if (!edgeData) {
+          break;
+        }
+
+        const added = addStreamEdge(edgeData);
+
+        /*
+          If the required nodes have not arrived yet,
+          hold this edge temporarily.
+        */
+
+        if (!added) {
+
+          const pendingId = edgeData.id;
+
+          const alreadyWaiting =
+            pendingStreamEdgesRef.current
+              .some(
+                (edge) =>
+                  pendingId &&
+                  edge.id === pendingId
+              );
+
+          if (!alreadyWaiting) {
+            pendingStreamEdgesRef.current.push(edgeData);
+          }
+
+        } else {
+          const sourceNode =
+            cy.getElementById(
+              String(
+                edgeData.source
+              )
+            );
+
+          const targetNode =
+            cy.getElementById(
+              String(
+                edgeData.target
+              )
+            );
+
+          if (
+            !sourceNode.empty() &&
+            !targetNode.empty()
+          ) {
+
+            /*
+              A Cytoscape collection containing both
+              endpoints lets the camera centre between them.
+            */
+
+            const connectedNodes =
+              sourceNode.union(
+                targetNode
+              );
+
+            focusStreamElements(
+              connectedNodes
+            );
+
+          }
+        }
+
+        break;
+      }
+
+      // =====================================================
+      // OPTIONAL STATUS MESSAGE
+      // =====================================================
+
+      case "status": {
+
+        console.log(
+          "AI graph status:",
+          event.message
+        );
+
+        /*
+          We can later display this beside the
+          Generate Graph button.
+        */
+
+        break;
+      }
+
+      // =====================================================
+      // STREAM COMPLETE
+      // =====================================================
+
+      case "done": {
+
+        flushPendingStreamEdges();
+
+        if (pendingStreamEdgesRef.current.length > 0) {
+
+          console.warn(
+            "Graph stream finished with unresolved edges:",
+            pendingStreamEdgesRef.current
+          );
+
+        }
+
+        /*
+          Final layout now that the complete graph
+          has arrived.
+        */
+
+        if (!cy.elements().empty()) {
+
+          const finalLayout =
+            cy.layout({
+              name: "cose",
+              animate: true,
+              fit: true,
+              padding: 50,
+              randomize: false,
+            });
+
+          finalLayout.one(
+            "layoutstop",
+            () => {
+
+              cy.resize();
+
+              const elements = cy.elements();
+
+              if (elements.empty()) {
+                return;
+              }
+
+              cy.fit(elements, 50);
+
+              /*
+                Keep the same maximum automatic zoom
+                you've already been using.
+              */
+
+              if (cy.zoom() > 1.35) {
+                cy.zoom(1.35);
+                cy.center(elements);
+              }
+
+            }
+          );
+          finalLayout.run();
+        }
+
+        showGraphFeedback(
+          `Graph generated: ${cy.nodes().length} nodes, ${cy.edges().length} links`,
+          "success"
+        );
+
+        console.log(
+          "AI graph stream complete."
+        );
+
+        break;
+      }
+
+      // =====================================================
+      // STREAM ERROR
+      // =====================================================
+
+      case "error": {
+
+        const message =
+          event.message ||
+          "Unable to generate graph.";
+
+        setError(message);
+
+        console.error(
+          "AI graph stream error:",
+          message
+        );
+
+        break;
+      }
+
+      default: {
+
+        console.warn(
+          "Unknown graph stream event:",
+          event
+        );
+
+      }
+
+    }
+  }
+
+  async function testGraphStreaming() {
+
+    const wait =
+      (milliseconds) =>
+        new Promise(
+          (resolve) =>
+            setTimeout(
+              resolve,
+              milliseconds
+            )
+        );
+
+
+    handleGraphStreamEvent({
+      type: "start",
+    });
+
+
+    await wait(400);
+
+
+    handleGraphStreamEvent({
+      type: "node",
+
+      data: {
+        id: "stream-programming",
+        label: "Programming",
+      },
+    });
+
+
+    await wait(400);
+
+
+    /*
+      Deliberately send this edge BEFORE Java exists.
+
+      This tests our pending-edge system.
+    */
+
+    handleGraphStreamEvent({
+      type: "edge",
+
+      data: {
+        id: "stream-programming-java",
+
+        source:
+          "stream-programming",
+
+        target:
+          "stream-java",
+
+        relationship:
+          "includes",
+      },
+    });
+
+
+    await wait(400);
+
+
+    handleGraphStreamEvent({
+      type: "node",
+
+      data: {
+        id: "stream-java",
+        label: "Java",
+      },
+    });
+
+
+    await wait(400);
+
+
+    handleGraphStreamEvent({
+      type: "node",
+
+      data: {
+        id: "stream-csharp",
+        label: "C#",
+      },
+    });
+
+
+    await wait(400);
+
+
+    handleGraphStreamEvent({
+      type: "edge",
+
+      data: {
+        id: "stream-programming-csharp",
+
+        source:
+          "stream-programming",
+
+        target:
+          "stream-csharp",
+
+        relationship:
+          "includes",
+      },
+    });
+
+
+    await wait(400);
+
+
+    handleGraphStreamEvent({
+      type: "done",
+    });
+
+  }
+
   // =========================================================
   // CYTOSCAPE INITIALISATION
   // Create Cytoscape once and keep the instance alive.
@@ -1364,68 +2399,40 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   useEffect(() => {
 
-    if (!graphContainerRef.current) {
+    if (
+      !graphContainerRef.current ||
+      cyRef.current
+    ) {
       return;
     }
-
-    /*
-      Treat missing graph data as an empty graph.
-
-      Cytoscape should exist even before the AI
-      has generated anything.
-    */
-    const nodes =
-      Array.isArray(graphData?.nodes)
-        ? graphData.nodes
-        : [];
-
-    const edges =
-      Array.isArray(graphData?.edges)
-        ? graphData.edges
-        : [];
-
-    /*
-      A graph reopened from the database contains the positions
-      captured by getEditedGraphData(). Use Cytoscape's preset
-      layout so those coordinates survive the round trip.
-
-      Fresh AI graphs normally have no positions, so they still
-      receive the normal cose layout.
-    */
-    const hasSavedPositions =
-      nodes.length > 0 &&
-      nodes.every(
-        (node) =>
-          Number.isFinite(node?.position?.x) &&
-          Number.isFinite(node?.position?.y)
-      );
 
     const graphTheme =
       getGraphThemeTokens();
 
     const cy = cytoscape({
+
       container: graphContainerRef.current,
 
-      elements: [
-        ...nodes,
-        ...edges,
-      ],
+      /*
+        Start with an empty graph.
+
+        Saved graphs, AI graphs and streamed graph
+        elements will be inserted separately.
+      */
+      elements: [],
 
       minZoom: 0.25,
       maxZoom: 1.5,
 
-      layout: hasSavedPositions
-        ? {
-            name: "preset",
-            fit: true,
-            padding: 50,
-          }
-        : {
-            name: "cose",
-            animate: true,
-            fit: true,
-            padding: 50,
-          },
+      /*
+        There is nothing to arrange yet.
+
+        A layout will be run after graph elements
+        are loaded or streamed.
+      */
+      layout: {
+        name: "preset",
+      },
 
       style: [
         /* =====================================================
@@ -2500,42 +3507,182 @@ cy.on(
   }
 );
 
-cy.one("layoutstop", () => {
-  cy.resize();
-  const elements = cy.elements();
-
-  if (elements.empty()) {
-    return;
-  }
-
-  /*
-    Fit the graph, but never allow a tiny graph
-    such as one node to consume the whole canvas.
-  */
-  cy.fit(
-    elements,
-    50
-  );
-
-  if (cy.zoom() > 1.35) {
-
-    cy.zoom(
-      1.35
-    );
-
-    cy.center(
-      elements
-    );
-
-  }
-});
-
 return () => {
   themeObserver.disconnect();
 
   cy.destroy();
   cyRef.current = null;
 };
+
+}, []);
+
+// =========================================================
+// LOAD GRAPH DATA INTO EXISTING CYTOSCAPE INSTANCE
+// =========================================================
+
+useEffect(() => {
+
+  const cy = cyRef.current;
+
+
+  if (!cy) {
+    return;
+  }
+
+
+  const nodes =
+    Array.isArray(graphData?.nodes)
+      ? graphData.nodes
+      : [];
+
+
+  const edges =
+    Array.isArray(graphData?.edges)
+      ? graphData.edges
+      : [];
+
+
+  /*
+    Determine whether this graph came from the database
+    with saved node positions.
+  */
+
+  const hasSavedPositions =
+    nodes.length > 0 &&
+    nodes.every(
+      (node) =>
+        Number.isFinite(
+          node?.position?.x
+        ) &&
+        Number.isFinite(
+          node?.position?.y
+        )
+    );
+
+
+  /*
+    Replace the currently displayed graph without
+    destroying Cytoscape itself.
+  */
+
+  cy.batch(() => {
+
+    cy.elements().remove();
+
+
+    if (
+      nodes.length > 0 ||
+      edges.length > 0
+    ) {
+
+      cy.add([
+        ...nodes,
+        ...edges,
+      ]);
+
+    }
+
+  });
+
+
+  /*
+    Apply TreeNotes node auto-sizing to newly
+    inserted nodes.
+  */
+
+  cy.nodes().forEach(
+    (node) => {
+
+      resizeNodeToLabel(
+        node
+      );
+
+    }
+  );
+
+
+  applyGraphTheme(cy);
+
+  cy.style().update();
+
+
+  /*
+    Nothing else needs doing for an empty graph.
+  */
+
+  if (cy.elements().empty()) {
+    return;
+  }
+
+
+  /*
+    Saved graphs retain their positions.
+
+    Fresh AI graphs get automatically arranged.
+  */
+
+  const layout =
+    cy.layout(
+      hasSavedPositions
+        ? {
+            name: "preset",
+            fit: true,
+            padding: 50,
+          }
+        : {
+            name: "cose",
+            animate: true,
+            fit: true,
+            padding: 50,
+          }
+    );
+
+
+  layout.one(
+    "layoutstop",
+    () => {
+
+      cy.resize();
+
+
+      const elements =
+        cy.elements();
+
+
+      if (elements.empty()) {
+        return;
+      }
+
+
+      cy.fit(
+        elements,
+        50
+      );
+
+
+      /*
+        Preserve your existing protection against
+        tiny graphs being zoomed ridiculously large.
+      */
+
+      if (cy.zoom() > 1.35) {
+
+        cy.zoom(
+          1.35
+        );
+
+        cy.center(
+          elements
+        );
+
+      }
+
+    }
+  );
+
+
+  layout.run();
+
 
 }, [graphData]);
 
