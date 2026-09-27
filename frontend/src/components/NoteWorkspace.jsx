@@ -9,6 +9,7 @@ import usePageTitle from "../hooks/usePageTitle";
 import { updateNote } from "../api/notesApi";
 import GraphPanel from "./GraphPanel";
 import SummaryPanel from "./SummaryPanel";
+import TreeNotesColorPicker from "./TreeNotesColorPicker";
 import {
   Bold,
   Italic,
@@ -16,7 +17,7 @@ import {
   List,
   ListOrdered,
   Link,
-  Info,
+  Notebook,
   CirclePlus,
   Type,
   Highlighter,
@@ -28,7 +29,9 @@ import {
   AlignJustify,
   IndentIncrease,
   IndentDecrease,
+  ChevronUp,
   ChevronDown,
+  X,
   ChevronRight,
   Replace,
 } from "lucide-react";
@@ -47,14 +50,22 @@ const graphPanelRef = useRef(null);
 // Stores the current text selection while using colour pickers
 const savedSelectionRef = useRef(null);
 
-// Hidden colour picker references
-const textColorInputRef = useRef(null);
-const highlightColorInputRef = useRef(null);
-const linkHighlightInputRef = useRef(null);
-
 // Current selected toolbar colours
 const [textColor, setTextColor] = useState("#eef1f7");
 const [highlightColor, setHighlightColor] = useState("#625df0");
+
+// Custom Text Colour picker
+const textColorButtonRef = useRef(null);
+const [textColorPickerOpen, setTextColorPickerOpen] = useState(false);
+
+// Custom Highlight Colour picker
+const highlightColorButtonRef = useRef(null);
+const [highlightColorPickerOpen, setHighlightColorPickerOpen] = useState(false);
+const [highlightNoneDisabled, setHighlightNoneDisabled] = useState(false);
+
+// Custom Link Highlight Colour picker
+const linkHighlightButtonRef = useRef(null);
+const [linkHighlightPickerOpen, setLinkHighlightPickerOpen] = useState(false);
 
 // Current formatting colours at the editor cursor
 const [activeTextColor, setActiveTextColor] = useState("#eef1f7");
@@ -71,6 +82,8 @@ const [activeAlignment, setActiveAlignment] = useState("left");
 
 const selectedRangeRef = useRef(null);
 const graphLinkColourIndexRef = useRef(0);
+
+const [linkedTextNavigator, setLinkedTextNavigator] = useState(null);
 
 /*
   =========================================================
@@ -1174,6 +1187,8 @@ function inferGraphLinkPaletteSlot(
 
   function toggleGraphNodeMenu() {
 
+    setLinkHighlightPickerOpen(false);
+
     if (graphNodeMenuOpen) {
       setGraphNodeMenuOpen(false);
       return;
@@ -2122,6 +2137,207 @@ function inferGraphLinkPaletteSlot(
     updateRawNotes();
   }
 
+  function getLinkedTextReferences(nodeId) {
+    if (!editorRef.current) {
+      return [];
+    }
+
+    return Array.from(
+      editorRef.current.querySelectorAll(
+        ".graph-linked-text"
+      )
+    ).filter(
+      (span) =>
+        span.dataset.graphNodeId ===
+        String(nodeId)
+    );
+  }
+
+
+  function clearLinkedTextNavigatorFocus() {
+    if (!editorRef.current) {
+      return;
+    }
+
+    editorRef.current
+      .querySelectorAll(
+        ".graph-linked-text-navigation-current"
+      )
+      .forEach((span) => {
+        span.classList.remove(
+          "graph-linked-text-navigation-current"
+        );
+      });
+  }
+
+
+  function focusLinkedTextReference(
+    nodeId,
+    nodeLabel,
+    requestedIndex
+  ) {
+    const editor = editorRef.current;
+
+    if (!editor) {
+      return;
+    }
+
+    const references =
+      getLinkedTextReferences(nodeId);
+
+    clearLinkedTextNavigatorFocus();
+
+
+    // Node exists, but has no Raw Notes references.
+    if (references.length === 0) {
+      setLinkedTextNavigator({
+        nodeId: String(nodeId),
+        nodeLabel:
+          nodeLabel || "Selected node",
+        currentIndex: 0,
+        total: 0,
+      });
+
+      return;
+    }
+
+
+    /*
+      Wrap navigation around:
+      previous from 0 -> final result
+      next from final -> 0
+    */
+    const normalizedIndex =
+      (
+        requestedIndex %
+        references.length +
+        references.length
+      ) %
+      references.length;
+
+
+    const reference =
+      references[normalizedIndex];
+
+
+    reference.classList.add(
+      "graph-linked-text-navigation-current"
+    );
+
+
+    setLinkedTextNavigator({
+      nodeId: String(nodeId),
+      nodeLabel:
+        nodeLabel || "Selected node",
+      currentIndex: normalizedIndex,
+      total: references.length,
+    });
+
+
+    /*
+      Scroll only the Raw Notes content area.
+
+      We calculate the reference position relative
+      to the current editor scroll position so that
+      even references far below the visible area
+      can be brought into view.
+    */
+
+    const editorRect =
+      editor.getBoundingClientRect();
+
+    const referenceRect =
+      reference.getBoundingClientRect();
+
+
+    const targetScrollTop =
+      editor.scrollTop +
+      (
+        referenceRect.top -
+        editorRect.top
+      ) -
+      (
+        editor.clientHeight / 2
+      ) +
+      (
+        referenceRect.height / 2
+      );
+
+
+    editor.scrollTo({
+      top: Math.max(
+        0,
+        targetScrollTop
+      ),
+
+      behavior: "smooth",
+    });
+  }
+
+
+  function openLinkedTextNavigator(
+    nodeId,
+    nodeLabel
+  ) {
+    focusLinkedTextReference(
+      nodeId,
+      nodeLabel,
+      0
+    );
+  }
+
+
+  function moveLinkedTextNavigator(direction) {
+    if (!linkedTextNavigator) {
+      return;
+    }
+
+
+    const references =
+      getLinkedTextReferences(
+        linkedTextNavigator.nodeId
+      );
+
+
+    /*
+      Re-read references every time rather than
+      trusting the old total.
+
+      This means navigation still works if the
+      user edits/removes linked text while the
+      navigator is open.
+    */
+
+    if (references.length === 0) {
+      focusLinkedTextReference(
+        linkedTextNavigator.nodeId,
+        linkedTextNavigator.nodeLabel,
+        0
+      );
+
+      return;
+    }
+
+
+    const nextIndex =
+      linkedTextNavigator.currentIndex +
+      direction;
+
+
+    focusLinkedTextReference(
+      linkedTextNavigator.nodeId,
+      linkedTextNavigator.nodeLabel,
+      nextIndex
+    );
+  }
+
+
+  function closeLinkedTextNavigator() {
+    clearLinkedTextNavigatorFocus();
+
+    setLinkedTextNavigator(null);
+  }
+
   // =========================================================
   // Load Raw Notes content
   // =========================================================
@@ -2320,6 +2536,7 @@ function inferGraphLinkPaletteSlot(
       onClick={() => {
         setContextMenu(null);
         setGraphNodeMenuOpen(false);
+        setLinkHighlightPickerOpen(false);
       }}
     >
 
@@ -2341,7 +2558,7 @@ function inferGraphLinkPaletteSlot(
             <div className="raw-notes-heading-title">
               <h2>Raw Notes</h2>
 
-              <Info
+              <Notebook
                 size={21}
                 strokeWidth={2}
                 aria-hidden="true"
@@ -2465,21 +2682,53 @@ function inferGraphLinkPaletteSlot(
               <div className="toolbar-color-wrapper">
 
                 <button
+                  ref={textColorButtonRef}
+
                   type="button"
-                  className="toolbar-icon-button toolbar-color-button"
+
+                  className={`
+                    toolbar-icon-button
+                    toolbar-color-button
+                    ${
+                      textColorPickerOpen
+                        ? "toolbar-button-active"
+                        : ""
+                    }
+                  `}
 
                   onMouseDown={(event) => {
+
+                    /*
+                      Preserve the current Raw Notes
+                      selection before focus moves to
+                      the colour picker.
+                    */
+
                     saveEditorSelection();
+
                     event.preventDefault();
+
                   }}
 
-                  onClick={() =>
-                    textColorInputRef.current?.click()
-                  }
+                  onClick={() => {
+
+                    setTextColorPickerOpen(
+                      (current) => !current
+                    );
+
+                  }}
 
                   data-tooltip="Text colour"
+
                   aria-label="Text colour"
+
+                  aria-expanded={
+                    textColorPickerOpen
+                  }
+
+                  aria-haspopup="dialog"
                 >
+
                   <Type
                     size={18}
                     strokeWidth={1.9}
@@ -2487,53 +2736,136 @@ function inferGraphLinkPaletteSlot(
 
                   <span
                     className="toolbar-color-indicator"
+
                     style={{
-                      backgroundColor: activeTextColor,
+                      backgroundColor:
+                        activeTextColor,
                     }}
                   />
+
                 </button>
 
 
-                <input
-                  ref={textColorInputRef}
-                  className="toolbar-hidden-color-input"
-                  type="color"
-                  value={textColor}
+                <TreeNotesColorPicker
+                  open={
+                    textColorPickerOpen
+                  }
 
-                  onChange={(event) => {
-                    const color = event.target.value;
+                  anchorRef={
+                    textColorButtonRef
+                  }
 
-                    setTextColor(color);
+                  value={
+                    textColor ||
+                    activeTextColor ||
+                    "#eef1f7"
+                  }
+
+                  onChange={(color) => {
+
+                    /*
+                      Store the selected colour so the
+                      picker and toolbar remain synced.
+                    */
+
+                    setTextColor(
+                      color
+                    );
+
+                    setActiveTextColor(
+                      color
+                    );
+
+
+                    /*
+                      Apply it to the Raw Notes selection.
+
+                      applyEditorColor already restores the
+                      saved editor selection, so interacting
+                      with the floating picker won't lose
+                      the selected text.
+                    */
 
                     applyEditorColor(
                       "foreColor",
                       color
                     );
+
+                  }}
+
+                  onClose={() => {
+
+                    setTextColorPickerOpen(
+                      false
+                    );
+
                   }}
                 />
 
               </div>
-
 
               {/* Highlight Colour */}
 
               <div className="toolbar-color-wrapper">
 
                 <button
+                  ref={highlightColorButtonRef}
+
                   type="button"
-                  className="toolbar-icon-button toolbar-color-button"
+
+                  className={`
+                    toolbar-icon-button
+                    toolbar-color-button
+                    ${
+                      highlightColorPickerOpen
+                        ? "toolbar-button-active"
+                        : ""
+                    }
+                  `}
 
                   onMouseDown={(event) => {
+
                     saveEditorSelection();
+
                     event.preventDefault();
+
                   }}
 
-                  onClick={() =>
-                    highlightColorInputRef.current?.click()
-                  }
+                  onClick={() => {
+
+                    /*
+                      Check whether the saved Raw Notes selection
+                      contains graph-linked text.
+
+                      Graph-linked text may be recoloured, but its
+                      highlight cannot be removed because that
+                      colour is part of the visual graph connection.
+                    */
+
+                    const containsGraphLink =
+                      getGraphLinksInSelection()
+                        .length > 0;
+
+                    setHighlightNoneDisabled(
+                      containsGraphLink
+                    );
+
+
+                    setHighlightColorPickerOpen(
+                      (current) => !current
+                    );
+
+                  }}
 
                   data-tooltip="Highlight colour"
+
                   aria-label="Highlight colour"
+
+                  aria-expanded={
+                    highlightColorPickerOpen
+                  }
+
+                  aria-haspopup="dialog"
                 >
                   <Highlighter
                     size={18}
@@ -2542,56 +2874,92 @@ function inferGraphLinkPaletteSlot(
 
                   <span
                     className="toolbar-color-indicator"
+
                     style={{
                       backgroundColor:
-                        activeHighlightColor,
+                        activeHighlightColor ||
+                        "transparent",
                     }}
                   />
+
                 </button>
 
 
-                <input
-                  ref={highlightColorInputRef}
-                  className="toolbar-hidden-color-input"
-                  type="color"
-                  value={highlightColor}
+                <TreeNotesColorPicker
+                  open={
+                    highlightColorPickerOpen
+                  }
 
-                  onChange={(event) => {
-                    const color = event.target.value;
+                  anchorRef={
+                    highlightColorButtonRef
+                  }
+
+                  value={
+                    highlightColor ||
+                    activeHighlightColor ||
+                    "#625DF0"
+                  }
+
+                  showNone
+
+                  noneSelected={
+                    !activeHighlightColor
+                  }
+
+                  noneDisabled={
+                    highlightNoneDisabled
+                  }
+
+                  onChange={(color) => {
+
+                    setHighlightColor(
+                      color
+                    );
+
+                    setActiveHighlightColor(
+                      color
+                    );
+
+
+                    /*
+                      applyHighlightColor already handles both:
+                        normal text -> normal highlight
+                        graph-linked text -> graph-link recolour
+                    */
 
                     applyHighlightColor(
                       color
                     );
 
                   }}
+
+                  onNone={() => {
+
+                    /*
+                      removeManualHighlight already contains a
+                      second safety check preventing linked text
+                      from losing its structural highlight.
+                    */
+
+                    removeManualHighlight();
+
+
+                    setHighlightColorPickerOpen(
+                      false
+                    );
+
+                  }}
+
+                  onClose={() => {
+
+                    setHighlightColorPickerOpen(
+                      false
+                    );
+
+                  }}
                 />
 
               </div>
-
-              {/* Remove Highlight */}
-
-              <button
-                type="button"
-
-                className="toolbar-icon-button"
-
-                onMouseDown={(event) => {
-                  saveEditorSelection();
-
-                  event.preventDefault();
-                }}
-
-                onClick={removeManualHighlight}
-
-                data-tooltip="Remove highlight"
-
-                aria-label="Remove highlight"
-              >
-                <Eraser
-                  size={18}
-                  strokeWidth={1.9}
-                />
-              </button>
 
               <span className="toolbar-divider" />
               
@@ -2912,6 +3280,106 @@ function inferGraphLinkPaletteSlot(
               </button>
               
             </div>
+
+            {linkedTextNavigator && (
+              <div
+                className="linked-text-navigator"
+                role="group"
+                aria-label="Linked text navigation"
+              >
+
+                <div className="linked-text-navigator-info">
+
+                  <strong
+                    title={
+                      linkedTextNavigator.nodeLabel
+                    }
+                  >
+                    {linkedTextNavigator.nodeLabel}
+                  </strong>
+
+
+                  <span aria-live="polite">
+
+                    {linkedTextNavigator.total > 0
+                      ? `${
+                          linkedTextNavigator.currentIndex +
+                          1
+                        } / ${
+                          linkedTextNavigator.total
+                        }`
+                      : "No linked text"}
+
+                  </span>
+
+                </div>
+
+
+                <div className="linked-text-navigator-actions">
+
+                  <button
+                    type="button"
+                    disabled={
+                      linkedTextNavigator.total <= 1
+                    }
+                    onMouseDown={(event) =>
+                      event.preventDefault()
+                    }
+                    onClick={() =>
+                      moveLinkedTextNavigator(-1)
+                    }
+                    data-tooltip="Previous reference"
+                    aria-label="Previous linked text"
+                  >
+                    <ChevronUp
+                      size={17}
+                      strokeWidth={1.9}
+                    />
+                  </button>
+
+
+                  <button
+                    type="button"
+                    disabled={
+                      linkedTextNavigator.total <= 1
+                    }
+                    onMouseDown={(event) =>
+                      event.preventDefault()
+                    }
+                    onClick={() =>
+                      moveLinkedTextNavigator(1)
+                    }
+                    data-tooltip="Next reference"
+                    aria-label="Next linked text"
+                  >
+                    <ChevronDown
+                      size={17}
+                      strokeWidth={1.9}
+                    />
+                  </button>
+
+
+                  <button
+                    type="button"
+                    onMouseDown={(event) =>
+                      event.preventDefault()
+                    }
+                    onClick={
+                      closeLinkedTextNavigator
+                    }
+                    data-tooltip="Close"
+                    aria-label="Close linked text navigation"
+                  >
+                    <X
+                      size={16}
+                      strokeWidth={1.9}
+                    />
+                  </button>
+
+                </div>
+
+              </div>
+            )}
             
             <div
               ref={editorRef}
@@ -2956,6 +3424,8 @@ function inferGraphLinkPaletteSlot(
                   selectedRangeRef.current = null;
 
                   setGraphNodeMenuOpen(false);
+
+                  setLinkHighlightPickerOpen(false);
 
                   setContextMenu({
                     type: "linked",
@@ -3042,6 +3512,8 @@ function inferGraphLinkPaletteSlot(
                 selectedRangeRef.current = range.cloneRange();
 
                 setGraphNodeMenuOpen(false);
+
+                setLinkHighlightPickerOpen(false);
 
                 setContextMenu({
                   type: "new",
@@ -3373,14 +3845,19 @@ function inferGraphLinkPaletteSlot(
                       <div className="notes-context-color-wrapper">
 
                         <button
+                          ref={linkHighlightButtonRef}
                           type="button"
-                          className="notes-context-menu-item"
+
+                          className={`notes-context-menu-item ${
+                            linkHighlightPickerOpen
+                              ? "notes-context-menu-item-active"
+                              : ""
+                          }`}
+
+                          aria-haspopup="dialog"
+                          aria-expanded={linkHighlightPickerOpen}
 
                           onMouseDown={(event) => {
-                            /*
-                              Keep the Raw Notes editor from trying
-                              to change its selection.
-                            */
                             event.preventDefault();
                             event.stopPropagation();
                           }}
@@ -3388,7 +3865,11 @@ function inferGraphLinkPaletteSlot(
                           onClick={(event) => {
                             event.stopPropagation();
 
-                            linkHighlightInputRef.current?.click();
+                            setGraphNodeMenuOpen(false);
+
+                            setLinkHighlightPickerOpen(
+                              current => !current
+                            );
                           }}
                         >
 
@@ -3410,34 +3891,48 @@ function inferGraphLinkPaletteSlot(
 
                           </span>
 
-
                           <span>
                             Link highlight
                           </span>
 
+                          <ChevronRight
+                            size={15}
+                            strokeWidth={1.8}
+
+                            className={`notes-context-submenu-chevron ${
+                              linkHighlightPickerOpen
+                                ? "notes-context-submenu-chevron-open"
+                                : ""
+                            }`}
+                          />
+
                         </button>
 
+                        <TreeNotesColorPicker
+                          open={linkHighlightPickerOpen}
+                          anchorRef={linkHighlightButtonRef}
 
-                        <input
-                          ref={linkHighlightInputRef}
-                          className="notes-context-hidden-color-input"
-
-                          type="color"
+                          placement="right-start"
 
                           value={
                             contextMenu.color ||
                             getDefaultGraphLinkColor()
                           }
 
-                          onChange={(event) => {
-
+                          onChange={(color) => {
                             handleGraphLinkColorChange(
                               contextMenu.nodeId,
                               contextMenu.linkId,
-                              event.target.value
+                              color
                             );
-
                           }}
+
+                          onClose={() => {
+                            setLinkHighlightPickerOpen(false);
+                          }}
+
+                          showNone
+                          noneDisabled
                         />
 
                       </div>
@@ -3646,6 +4141,7 @@ function inferGraphLinkPaletteSlot(
         noteId={note.id}
         initialGraph={note.graph_json}
         ref={graphPanelRef}
+        onNavigateLinkedText={openLinkedTextNavigator}
         />
       </div>
 

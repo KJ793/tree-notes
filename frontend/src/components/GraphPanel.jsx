@@ -28,7 +28,6 @@ import {
   MoveUpRight,
   Minus,
   ArrowRight,
-  MousePointer2,
   CircleX,
 } from "lucide-react";
 import SquareDottedIcon from "./icons/SquareDottedIcon";
@@ -36,6 +35,7 @@ import VeeIcon from "./icons/VeeIcon";
 import VeeNodeIcon from "./icons/VeeNodeIcon";
 import cytoscape from "cytoscape";
 import { semanticSearchGraph,} from "../api/graphApi";
+import TreeNotesColorPicker from "./TreeNotesColorPicker";
 
 /* =========================================================
    GRAPH THEME HELPERS
@@ -501,176 +501,6 @@ function calculateNodeSize(
   };
 }
 
-function resizeNodeToLabel(
-  node
-) {
-
-  if (
-    !node ||
-    node.empty()
-  ) {
-    return;
-  }
-
-
-  const label =
-    node.data("label") ||
-    "New Node";
-
-  const shape =
-    node.data("shape") ||
-    "round-rectangle";
-
-
-  const {
-    width,
-    height,
-    textMaxWidth,
-    textMarginY,
-  } =
-    calculateNodeSize(
-      label,
-      shape
-    );
-
-
-  /*
-    Keep these as node data so the Cytoscape
-    stylesheet can consume them automatically.
-  */
-  node.data({
-    nodeWidth:
-      width,
-
-    nodeHeight:
-      height,
-
-    nodeTextMaxWidth:
-      textMaxWidth,
-
-    nodeTextMarginY:
-      textMarginY,
-  });
-
-  refreshConnectedEdgeLabels(
-    node
-  );
-}
-
-function refreshConnectedEdgeLabels(
-  node
-) {
-
-  if (
-    !node ||
-    node.empty()
-  ) {
-    return;
-  }
-
-
-  const cy =
-    node.cy();
-
-
-  const connectedEdges =
-    node.connectedEdges()
-      .filter(
-        edge =>
-          String(
-            edge.data(
-              "relationship"
-            ) || ""
-          ).trim()
-      );
-
-
-  if (
-    connectedEdges.length === 0
-  ) {
-    return;
-  }
-
-  /*
-    First allow Cytoscape to finish applying
-    the node's new width / height.
-  */
-  requestAnimationFrame(() => {
-
-    /*
-      Then give the renderer one more frame to
-      recalculate the new edge endpoints.
-    */
-    requestAnimationFrame(() => {
-
-      connectedEdges.forEach(
-        edge => {
-
-          const relationship =
-            edge.data(
-              "relationship"
-            ) || "";
-
-          /*
-            Force Cytoscape to rebuild the label's
-            rendered bounding box.
-
-            The zero-width character changes the
-            underlying label value without creating
-            any visible change on screen.
-          */
-          edge.style(
-            "label",
-            `${relationship}\u200B`
-          );
-
-        }
-      );
-
-      /*
-        On the following frame, remove the temporary
-        style override so the edge returns to using:
-
-          label: data(relationship)
-
-        from the normal Cytoscape stylesheet.
-      */
-      requestAnimationFrame(() => {
-
-        connectedEdges.forEach(
-          edge => {
-
-            edge.removeStyle(
-              "label"
-            );
-
-            if (
-              edge.id() !==
-              editingEdgeIdRef.current
-            ) {
-
-              edge.style(
-                "text-opacity",
-                1
-              );
-
-            }
-
-          }
-        );
-
-
-        cy.style()
-          .update();
-
-      });
-
-    });
-
-  });
-
-}
-
 function getThemeToken(
   tokenName,
   fallback
@@ -747,6 +577,12 @@ function getGraphThemeTokens() {
         "--graph-edge-arrow",
         "#7772ff"
       ),
+
+    edgeLabel:
+      getThemeToken(
+        "--graph-edge-label",
+        "#cbd5e1"
+      ),
   };
 }
 
@@ -757,6 +593,7 @@ const GraphPanel = forwardRef(function GraphPanel(
     addNodeTrigger,
     noteId,
     initialGraph,
+    onNavigateLinkedText,
   },
   ref
 ) {
@@ -799,7 +636,41 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   // Stores the Cytoscape instance so other functions can access it //
   const cyRef = useRef(null);
-// STORES SELECTED EDGES STATE
+
+  // =========================================================
+  // AI GRAPH STREAMING
+  // =========================================================
+
+  // Holds streamed edges whose source/target nodes
+  // have not arrived yet.
+  const pendingStreamEdgesRef = useRef([]);
+
+  // =========================================================
+  // STREAM VISUAL POSITIONING
+  // =========================================================
+
+  // Temporary centre around which streamed nodes are placed.
+  // The final COSE layout will replace these positions.
+  const streamAnchorRef = useRef(null);
+
+  // Counts nodes as they arrive so temporary positions
+  // can be distributed around the graph canvas.
+  const streamNodeIndexRef = useRef(0);
+
+  // =========================================================
+  // GRAPH STREAM REQUEST
+  // =========================================================
+
+  // Stores the currently active graph-generation request.
+  // Allows us to cancel it if the note changes or the
+  // component disappears.
+  const graphStreamAbortRef = useRef(null);
+
+  // =========================================================
+  // EDGE LINKING
+  // =========================================================
+
+  // Stores selected edge states
   const [selectedEdge, setSelectedEdge] = useState(null);
 
   const linkModeRef = useRef(false);
@@ -807,6 +678,13 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   // Stores currently selected node //
   const [selectedNode, setSelectedNode] = useState(null);
+
+  // Stores an array of selected nodes/edges for multi-selection //
+  const [selectionSummary, setSelectionSummary,] =
+    useState({
+      nodes: [],
+      edges: [],
+    });
 
   // To link nodes// 
   const [linkMode, setLinkMode] = useState(false);
@@ -820,13 +698,13 @@ const GraphPanel = forwardRef(function GraphPanel(
   // =========================================================
 
   // Hidden native colour picker
-  const nodeColorInputRef = useRef(null);
+  // const nodeColorInputRef = useRef(null);
 
   // color picker for node text 
-  const nodeTextColorInputRef = useRef(null);
+  // const nodeTextColorInputRef = useRef(null);
 
   // Node border colour picker
-  const nodeBorderColorInputRef = useRef(null);
+  // const nodeBorderColorInputRef = useRef(null);
 
   // Node border style popover
   const nodeBorderStyleMenuRef = useRef(null);
@@ -836,9 +714,28 @@ const GraphPanel = forwardRef(function GraphPanel(
   const shapeMenuRef = useRef(null);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
 
-  // Edge and Arrow colour picker
-  const edgeColorInputRef = useRef(null);
-  const arrowColorInputRef = useRef(null);
+  // Custom graph colour pickers
+  const nodeColorButtonRef = useRef(null);
+  const nodeTextColorButtonRef = useRef(null);
+  const nodeBorderColorButtonRef = useRef(null);
+  const edgeColorButtonRef = useRef(null);
+  const arrowColorButtonRef = useRef(null);
+
+  const [graphColorPicker, setGraphColorPicker] = useState(null);
+
+  function toggleGraphColorPicker(type) {
+    setShapeMenuOpen(false);
+    setNodeBorderStyleMenuOpen(false);
+    setEdgeStyleMenuOpen(false);
+    setArrowShapeMenuOpen(false);
+
+    setGraphColorPicker(
+      current =>
+        current === type
+          ? null
+          : type
+    );
+  }
 
   // Edge style selector popover
   const edgeStyleMenuRef = useRef(null);
@@ -898,6 +795,180 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   const [relationshipZoom, setRelationshipZoom] = useState(1);
 
+  // =========================================================
+  // Node Auto-Sizing / Edge Label Refresh
+  // =========================================================
+
+  function resizeNodeToLabel(
+    node
+  ) {
+
+    if (
+      !node ||
+      node.empty()
+    ) {
+      return;
+    }
+
+
+    const label =
+      node.data("label") ||
+      "New Node";
+
+    const shape =
+      node.data("shape") ||
+      "round-rectangle";
+
+
+    const {
+      width,
+      height,
+      textMaxWidth,
+      textMarginY,
+    } =
+      calculateNodeSize(
+        label,
+        shape
+      );
+
+
+    /*
+      Keep these as node data so the Cytoscape
+      stylesheet can consume them automatically.
+    */
+    node.data({
+      nodeWidth:
+        width,
+
+      nodeHeight:
+        height,
+
+      nodeTextMaxWidth:
+        textMaxWidth,
+
+      nodeTextMarginY:
+        textMarginY,
+    });
+
+    refreshConnectedEdgeLabels(
+      node
+    );
+  }
+
+  function refreshConnectedEdgeLabels(
+    node
+  ) {
+
+    if (
+      !node ||
+      node.empty()
+    ) {
+      return;
+    }
+
+
+    const cy =
+      node.cy();
+
+
+    const connectedEdges =
+      node.connectedEdges()
+        .filter(
+          edge =>
+            String(
+              edge.data(
+                "relationship"
+              ) || ""
+            ).trim()
+        );
+
+
+    if (
+      connectedEdges.length === 0
+    ) {
+      return;
+    }
+
+    /*
+      First allow Cytoscape to finish applying
+      the node's new width / height.
+    */
+    requestAnimationFrame(() => {
+
+      /*
+        Then give the renderer one more frame to
+        recalculate the new edge endpoints.
+      */
+      requestAnimationFrame(() => {
+
+        connectedEdges.forEach(
+          edge => {
+
+            const relationship =
+              edge.data(
+                "relationship"
+              ) || "";
+
+            /*
+              Force Cytoscape to rebuild the label's
+              rendered bounding box.
+
+              The zero-width character changes the
+              underlying label value without creating
+              any visible change on screen.
+            */
+            edge.style(
+              "label",
+              `${relationship}\u200B`
+            );
+
+          }
+        );
+
+        /*
+          On the following frame, remove the temporary
+          style override so the edge returns to using:
+
+            label: data(relationship)
+
+          from the normal Cytoscape stylesheet.
+        */
+        requestAnimationFrame(() => {
+
+          connectedEdges.forEach(
+            edge => {
+
+              edge.removeStyle(
+                "label"
+              );
+
+              if (
+                edge.id() !==
+                editingEdgeIdRef.current
+              ) {
+
+                edge.style(
+                  "text-opacity",
+                  1
+                );
+
+              }
+
+            }
+          );
+
+
+          cy.style()
+            .update();
+
+        });
+
+      });
+
+    });
+
+  }
+
   /*
     Keep GraphPanel synced with the graph_json belonging to the
     currently selected note.
@@ -937,10 +1008,15 @@ const GraphPanel = forwardRef(function GraphPanel(
     // Clear UI state that belonged to the previously open note.
     setSelectedNode(null);
     setSelectedEdge(null);
+    setSelectionSummary({
+      nodes: [],
+      edges: [],
+    });
     setShapeMenuOpen(false);
     setNodeBorderStyleMenuOpen(false);
     setEdgeStyleMenuOpen(false);
     setArrowShapeMenuOpen(false);
+    setGraphColorPicker(null);
     setGraphFeedback(null);
 
     // Clear UI state and references belonging to linking mode.
@@ -957,166 +1033,366 @@ const GraphPanel = forwardRef(function GraphPanel(
     setRelationshipValue("");
   }, [noteId, initialGraph]);
 
+  /* =========================================================
+   CANCEL AI GRAPH STREAM WHEN NOTE CHANGES / PANEL UNMOUNTS
+   ========================================================= */
+
+useEffect(() => {
+
+  /*
+    This cleanup runs:
+
+      - before noteId changes
+      - when GraphPanel is unmounted
+
+    If an AI graph is still being streamed, abort that
+    HTTP request so it cannot continue feeding graph data
+    into a different note.
+  */
+
+  return () => {
+
+    if (graphStreamAbortRef.current) {
+      graphStreamAbortRef.current.abort();
+    }
+
+  };
+
+}, [noteId]);
+
   async function generateGraph() {
-    if (!rawNotes || rawNotes.trim() === "") {
+
+    // =======================================================
+    // VALIDATE NOTES
+    // =======================================================
+
+    const notes = rawNotes?.trim();
+
+    if (!notes) {
       setError("Please write some notes before generating a graph.");
       return;
     }
 
+    // =======================================================
+    // CANCEL ANY PREVIOUS STREAM
+    // =======================================================
+
+    if (graphStreamAbortRef.current) {
+      graphStreamAbortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+
+    graphStreamAbortRef.current = controller;
+
     setLoading(true);
+
     setError("");
 
     try {
-      // << BACKEND CONNECTION >> //
-      const response = await fetch("/api/graph", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          rawNotes: rawNotes,
-        }),
-      });
 
-      let data = {};
+      // =====================================================
+      // START STREAMING REQUEST
+      // =====================================================
 
-      try {
-        data = await response.json();
-      } catch {
-        // Keep the fallback error message below when there is no JSON body.
-      }
+      const response =
+        await fetch(
+          "/api/graph/stream",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            credentials:
+              "include",
+
+            signal:
+              controller.signal,
+
+            body:
+              JSON.stringify({
+                noteId:
+                  noteId ?? null,
+
+                /*
+                  IMPORTANT:
+
+                  rawNotes should already be the plain-text
+                  representation supplied by NoteWorkspace.
+
+                  Do not send notes_section_html here.
+                */
+                rawNotes:
+                  notes,
+              }),
+          }
+        );
+
+      // =====================================================
+      // HTTP-LEVEL ERRORS
+      // =====================================================
 
       if (!response.ok) {
-        let message =
-          "Graph generation failed. Please try again.";
 
-        if (typeof data?.detail === "string") {
-          message = data.detail;
-        } else if (Array.isArray(data?.detail)) {
-          message = data.detail
-            .map((item) =>
-              String(item.msg)
-                .replace(/^Value error, /, "")
+        let message = "Graph generation failed. Please try again.";
+
+        try {
+
+          const contentType =
+            response.headers.get(
+              "content-type"
+            ) || "";
+
+          if (
+            contentType.includes(
+              "application/json"
             )
-            .join(" ");
+          ) {
+
+            const data = await response.json();
+
+            if (typeof data?.detail === "string") {
+              message = data.detail;
+            } else if (
+              Array.isArray(data?.detail)
+            ) {
+
+              message =
+                data.detail
+                  .map(
+                    (item) =>
+                      String(
+                        item.msg
+                      )
+                        .replace(
+                          /^Value error, /,
+                          ""
+                        )
+                  )
+                  .join(" ");
+
+            } else if (
+              typeof data?.message === "string"
+            ) {
+              message = data.message;
+            }
+
+          } else {
+
+            const text = await response.text();
+
+            if (text.trim()) {
+              message = text.trim();
+            }
+
+          }
+
+        } catch {
+
+          /*
+            Keep the normal fallback error message
+            if the server response cannot be parsed.
+          */
+
         }
 
-        throw new Error(message);
+        throw new Error(
+          message
+        );
+
       }
 
+      // =====================================================
+      // MAKE SURE THE BROWSER GAVE US A STREAM
+      // =====================================================
+
+      if (!response.body) {
+        throw new Error("Graph streaming is not available in this browser.");
+      }
+
+      // =====================================================
+      // CREATE STREAM READER
+      // =====================================================
+
+      const reader = response.body.getReader();
+
+      const decoder =
+        new TextDecoder(
+          "utf-8"
+        );
+
       /*
-        The generated graph becomes the current live graph.
-        It will be persisted with the rest of the note when
-        NoteWorkspace.saveEverything() performs its single PATCH.
+        Network chunks do NOT necessarily line up with
+        JSON objects.
+
+        For example, one chunk could contain:
+
+          {"type":"no
+
+        and the next:
+
+          de","data":...}\n
+
+        So we keep incomplete text here until a newline
+        tells us that one complete NDJSON event exists.
       */
-      setGraphData({
-        nodes: Array.isArray(data?.nodes)
-          ? data.nodes
-          : [],
-        edges: Array.isArray(data?.edges)
-          ? data.edges
-          : [],
-      });
+
+      let buffer = "";
+
+      // =====================================================
+      // READ STREAM
+      // =====================================================
+
+      while (true) {
+
+        const {value, done,} = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        /*
+          Convert the Uint8Array network chunk into text.
+
+          stream: true tells TextDecoder that the next
+          chunk may continue a character from this one.
+        */
+
+        buffer +=
+          decoder.decode(
+            value,
+            {
+              stream: true,
+            }
+          );
+
+        /*
+          One chunk may contain:
+
+            one event
+            several events
+            part of an event
+
+          Split only on newline boundaries.
+        */
+
+        const lines = buffer.split("\n");
+
+        /*
+          The final item might be incomplete.
+
+          Keep it in the buffer for the next read.
+        */
+
+        buffer = lines.pop() ?? "";
+
+        for (const rawLine of lines) {
+
+          const line = rawLine.trim();
+
+          if (!line) {
+            continue;
+          }
+
+          try {
+
+            const event =
+              JSON.parse(
+                line
+              );
+
+            /*
+              This is the function we already tested
+              using testGraphStreaming().
+            */
+
+            handleGraphStreamEvent(event);
+
+          } catch (
+            parseError
+          ) {
+            console.error("Unable to parse graph stream event:", line, parseError);
+          }
+
+        }
+
+      }
+
+      // =====================================================
+      // FLUSH TEXTDECODER
+      // =====================================================
+
+      buffer += decoder.decode();
+
+      /*
+        Usually every backend event ends in \\n.
+
+        This fallback lets us safely process a final JSON
+        event even if the final newline was omitted.
+      */
+
+      const finalLine = buffer.trim();
+
+      if (finalLine) {
+
+        try {
+
+          const finalEvent =
+            JSON.parse(
+              finalLine
+            );
+
+          handleGraphStreamEvent(finalEvent);
+
+        } catch (
+          parseError
+        ) {
+          console.error("Unable to parse final graph stream event:", finalLine, parseError);
+        }
+
+      }
 
     } catch (error) {
-      console.error(
-        "Graph generation error:",
-        error
-      );
 
-      setError(
-        error.message ||
-        "Unable to generate graph. Please try again."
-      );
+      // =====================================================
+      // REQUEST CANCELLED
+      // =====================================================
+
+      if (
+        error?.name === "AbortError"
+      ) {
+        console.log("Graph generation stream cancelled.");
+        return;
+      }
+
+      // =====================================================
+      // REQUEST FAILED
+      // =====================================================
+
+      console.error("Graph generation error:", error);
+
+      setError(error?.message || "Unable to generate graph. Please try again.");
 
     } finally {
-      setLoading(false);
+
+      /*
+        Only clear the ref if this is still the
+        currently active request.
+
+        This matters if another request was started
+        while an older request was shutting down.
+      */
+
+      if (graphStreamAbortRef.current === controller) {
+        graphStreamAbortRef.current = null;
+        setLoading(false);
+      }
+
     }
-  }
 
-  function applyActiveGraphTheme(cy) {
-
-    if (!cy) {
-      return;
-    }
-
-
-    const graphTheme =
-      getGraphThemeColours();
-
-
-    cy.style()
-
-      /* Normal nodes */
-
-      .selector("node")
-
-      .style({
-        "background-color":
-          graphTheme.nodeBackground,
-
-        "border-color":
-          graphTheme.nodeBorder,
-
-        color:
-          graphTheme.nodeText,
-      })
-
-
-      /* Selected node */
-
-      .selector("node:selected")
-
-      .style({
-        "border-color":
-          graphTheme.selectedBorder,
-
-        "underlay-color":
-          graphTheme.selectedBorder,
-      })
-
-
-      /* First node in link mode */
-
-      .selector("node.link-source")
-
-      .style({
-        "border-color":
-          graphTheme.linkSource,
-
-        "overlay-color":
-          graphTheme.linkSource,
-      })
-
-
-      /* Normal edges */
-
-      .selector("edge")
-
-      .style({
-        "line-color":
-          graphTheme.edge,
-
-        "target-arrow-color":
-          graphTheme.nodeBorder,
-      })
-
-
-      /* Selected edges */
-
-      .selector("edge:selected")
-
-      .style({
-        "line-color":
-          graphTheme.selectedBorder,
-
-        "target-arrow-color":
-          graphTheme.selectedBorder,
-      })
-
-
-      .update();
   }
 
   function applyGraphTheme(
@@ -1126,210 +1402,901 @@ const GraphPanel = forwardRef(function GraphPanel(
       return;
     }
 
-
-    const graphTheme =
-      getGraphThemeTokens();
-
+    const graphTheme = getGraphThemeTokens();
 
     cy.style()
 
-      /*
-        Default nodes
-      */
+      // =====================================================
+      // DEFAULT NODE
+      // =====================================================
+
       .selector("node")
       .style({
-        "background-color":
-          graphTheme.nodeBg,
+        "background-color": graphTheme.nodeBg,
+        "border-color": graphTheme.nodeBorder,
+        color: graphTheme.nodeText,
+      })
 
-        "border-color":
-          graphTheme.nodeBorder,
+      // =====================================================
+      // CUSTOM NODE APPEARANCE
+      // =====================================================
 
-        color:
-          graphTheme.nodeText,
+      .selector("node[color]")
+      .style({
+        "background-color": "data(color)",
+      })
+
+      .selector("node[textColor]")
+      .style({
+        color: "data(textColor)",
+      })
+
+      .selector("node[shape]")
+      .style({
+        shape: "data(shape)",
       })
 
       .selector("node[borderColor]")
       .style({
-        "border-color":
-          "data(borderColor)",
+        "border-color": "data(borderColor)",
       })
 
       .selector("node[borderStyle]")
       .style({
-        "border-style":
-          "data(borderStyle)",
+        "border-style": "data(borderStyle)",
       })
 
-      /*
-        Normal selected node.
+      // =====================================================
+      // SELECTED NODE
+      // =====================================================
 
-        Solid ring = selected.
-        Colour comes from the current
-        accessibility palette.
-      */
       .selector("node:selected")
       .style({
-        "border-width": 4,
-
-        "border-style":
-          "solid",
-
-        "border-color":
-          graphTheme.selectedBorder,
-
-        "underlay-color":
-          graphTheme.selectedBorder,
-
-        "underlay-opacity":
-          0.18,
-
-        "underlay-padding":
-          8,
+        "underlay-color": graphTheme.selectedBorder,
+        "underlay-opacity": 0.28,
+        "underlay-padding": 10,
       })
 
-      /*
-        First node selected while
-        creating a graph link.
+      // =====================================================
+      // LINKED RAW NOTES HOVER
+      // =====================================================
 
-        IMPORTANT:
-        Dashed ring distinguishes this
-        from normal selection even if the
-        colours appear similar.
-      */
+      .selector("node.linked-text-hover")
+      .style({
+        "underlay-color": "data(linkColor)",
+        "underlay-opacity": 0.38,
+        "underlay-padding": 20,
+      })
+
+      // =====================================================
+      // LINK SOURCE
+      // =====================================================
+
       .selector("node.link-source")
       .style({
         "border-width": 4,
-
-        "border-style":
-          "dashed",
-
-        "border-color":
-          graphTheme.linkSource,
-
-        "underlay-color":
-          graphTheme.linkSource,
-
-        "underlay-opacity":
-          0.22,
-
-        "underlay-padding":
-          8,
+        "border-style": "dashed",
+        "border-color": graphTheme.linkSource,
+        "underlay-color": graphTheme.linkSource,
+        "underlay-opacity": 0.22,
+        "underlay-padding": 8,
       })
 
+      // =====================================================
+      // DEFAULT EDGE
+      // =====================================================
 
-      /*
-        Default edges
-      */
       .selector("edge")
       .style({
         width: 2,
-
-        "line-color":
-          graphTheme.edge,
-
-        "target-arrow-color":
-          graphTheme.edgeArrow,
-
-        "line-style":
-          "solid",
-
-        opacity:
-          0.8,
+        "line-color": graphTheme.edge,
+        "target-arrow-color": graphTheme.edgeArrow,
+        "target-arrow-shape": "triangle",
+        "line-style": "solid",
+        color: graphTheme.edgeLabel,
+        opacity: 0.8,
       })
 
+      // =====================================================
+      // CUSTOM EDGE APPEARANCE
+      // =====================================================
 
-      /*
-        Selected edge.
+      .selector("edge[edgeColor]")
+      .style({
+        "line-color": "data(edgeColor)",
+      })
 
-        Extra thickness means selection
-        does not depend on colour alone.
-      */
+      .selector("edge[arrowColor]")
+      .style({
+        "target-arrow-color": "data(arrowColor)",
+      })
+
+      .selector("edge[arrowShape]")
+      .style({
+        "target-arrow-shape": "data(arrowShape)",
+      })
+
+      .selector("edge[lineStyle]")
+      .style({
+        "line-style": "data(lineStyle)",
+      })
+
+      // =====================================================
+      // SELECTED EDGE
+      // Must come AFTER custom edge styles.
+      // =====================================================
+
       .selector("edge:selected")
       .style({
-        width: 4,
-
-        "line-style":
-          "solid",
-
-        "line-color":
-          graphTheme.selectedEdge,
-
-        "target-arrow-color":
-          graphTheme.selectedEdge,
-
-        opacity:
-          1,
+        "underlay-color": graphTheme.selectedEdge,
+        "underlay-opacity": 0.32,
+        "underlay-padding": 6,
       })
-
 
       .update();
   }
 
-  // << CYTOSCAPE FRONTEND >> //
-  useEffect(() => {
 
-    if (!graphContainerRef.current) {
+
+  function addStreamEdge(edgeData)
+  {
+
+    const cy = cyRef.current;
+
+    if (
+      !cy ||
+      !edgeData
+    ) {
+      return false;
+    }
+
+    const sourceId =
+      String(
+        edgeData.source ?? ""
+      );
+
+
+    const targetId =
+      String(
+        edgeData.target ?? ""
+      );
+
+    if (
+      !sourceId ||
+      !targetId
+    ) {
+
+      console.warn(
+        "Streamed edge is missing source/target:",
+        edgeData
+      );
+
+      return false;
+    }
+
+    const sourceNode =
+      cy.getElementById(
+        sourceId
+      );
+
+    const targetNode =
+      cy.getElementById(
+        targetId
+      );
+
+    /*
+      An edge cannot safely be added until both
+      of its nodes exist.
+    */
+
+    if (
+      sourceNode.empty() ||
+      targetNode.empty()
+    ) {
+      return false;
+    }
+
+    /*
+      Hans should ideally provide edge IDs.
+
+      This fallback gives us something usable
+      during development if he doesn't yet.
+    */
+
+    const edgeId =
+      String(
+        edgeData.id ||
+        `ai-edge-${sourceId}-${targetId}-${edgeData.relationship || "link"}`
+      );
+
+    const existing =
+      cy.getElementById(
+        edgeId
+      );
+
+    /*
+      If this edge already exists, update it
+      instead of creating a duplicate.
+    */
+
+    if (!existing.empty()) {
+
+      existing.data({
+        ...existing.data(),
+        ...edgeData,
+        id: edgeId,
+        source: sourceId,
+        target: targetId,
+      });
+
+      return true;
+    }
+
+    cy.add({
+      group: "edges",
+
+      data: {
+        ...edgeData,
+
+        id:
+          edgeId,
+
+        source:
+          sourceId,
+
+        target:
+          targetId,
+      },
+    });
+
+    return true;
+  }
+
+  function getStreamNodePosition()
+  {
+
+    const cy = cyRef.current;
+
+    if (!cy) {
+      return {
+        x: 0,
+        y: 0,
+      };
+    }
+
+    /*
+      On the first streamed node, capture the centre
+      of the currently visible Cytoscape viewport.
+
+      All subsequent temporary positions are based
+      around this point.
+    */
+
+    if (!streamAnchorRef.current) {
+
+      const extent = cy.extent();
+
+      streamAnchorRef.current = {
+        x:
+          (extent.x1 + extent.x2) / 2,
+        y:
+          (extent.y1 + extent.y2) / 2,
+      };
+
+    }
+
+    const anchor = streamAnchorRef.current;
+
+    const index = streamNodeIndexRef.current++;
+
+    /*
+      First node goes directly into the centre.
+    */
+
+    if (index === 0) {
+      return {
+        ...anchor,
+      };
+
+    }
+
+    /*
+      Place later nodes in a loose spiral.
+
+      These are ONLY temporary positions while
+      generation is underway.
+    */
+
+    const goldenAngle = 137.508 * (Math.PI / 180);
+    const angle = index * goldenAngle;
+    const radius = 90 + Math.sqrt(index) * 65;
+
+    return {
+      x:
+        anchor.x +
+        Math.cos(angle) * radius,
+      y:
+        anchor.y +
+        Math.sin(angle) * radius,
+    };
+  }
+
+  function focusStreamElements(elements)
+  {
+
+    const cy = cyRef.current;
+
+    if (!cy || !elements || elements.empty())
+    {
       return;
     }
 
     /*
-      Treat missing graph data as an empty graph.
-
-      Cytoscape should exist even before the AI
-      has generated anything.
+      Stop any previous viewport animation so a newly
+      streamed element immediately becomes the focus.
     */
-    const nodes =
-      Array.isArray(graphData?.nodes)
-        ? graphData.nodes
-        : [];
 
-    const edges =
-      Array.isArray(graphData?.edges)
-        ? graphData.edges
-        : [];
+    cy.stop();
 
     /*
-      A graph reopened from the database contains the positions
-      captured by getEditedGraphData(). Use Cytoscape's preset
-      layout so those coordinates survive the round trip.
+      Keep a fairly stable viewing zoom during streaming.
 
-      Fresh AI graphs normally have no positions, so they still
-      receive the normal cose layout.
+      We don't want every individual node to fill the
+      entire Graph View.
     */
-    const hasSavedPositions =
-      nodes.length > 0 &&
-      nodes.every(
-        (node) =>
-          Number.isFinite(node?.position?.x) &&
-          Number.isFinite(node?.position?.y)
+
+    const focusZoom =
+      Math.min(
+        Math.max(
+          cy.zoom(),
+          0.95
+        ),
+        1.15
       );
+
+    cy.animate(
+
+      {
+        center: {
+          eles: elements,
+        },
+
+        zoom:
+          focusZoom,
+      },
+
+      {
+        duration: 350,
+        easing: "ease-in-out-cubic",
+      }
+
+    );
+  }
+
+  function flushPendingStreamEdges()
+  {
+
+    const cy = cyRef.current;
+
+    if (!cy || pendingStreamEdgesRef.current.length === 0) {
+      return;
+    }
+
+    const stillPending = [];
+
+    for (const edgeData of pendingStreamEdgesRef.current) {
+
+      const added = addStreamEdge(edgeData);
+
+      if (!added) {
+        stillPending.push(edgeData);
+      }
+
+    }
+
+    pendingStreamEdgesRef.current = stillPending;
+  }
+
+  function handleGraphStreamEvent(event)
+  {
+
+    const cy = cyRef.current;
+
+    if (!cy || !event) {
+      return;
+    }
+
+    console.log("Graph stream event:", event);
+
+    switch (event.type) {
+
+      // =====================================================
+      // STREAM STARTED
+      // =====================================================
+
+      case "start": {
+
+        /*
+          Generate Graph currently replaces the existing
+          generated graph, so preserve that behaviour.
+
+          We clear the graph once when the stream begins,
+          NOT every time an element arrives.
+        */
+
+        cy.elements().remove();
+
+        pendingStreamEdgesRef.current = [];
+
+        streamAnchorRef.current = null;
+
+        streamNodeIndexRef.current = 0;
+
+        cy.elements().unselect();
+
+
+        setSelectedNode(null);
+        setSelectedEdge(null);
+        setSelectionSummary({
+          nodes: [],
+          edges: [],
+        });
+
+        setShapeMenuOpen(false);
+        setNodeBorderStyleMenuOpen(false);
+        setEdgeStyleMenuOpen(false);
+        setArrowShapeMenuOpen(false);
+        setGraphFeedback(null);
+
+        console.log("AI graph stream started.");
+
+        break;
+      }
+
+      // =====================================================
+      // STREAMED NODE
+      // =====================================================
+
+      case "node": {
+
+        const nodeData = event.data;
+
+        if (!nodeData?.id) {
+          console.warn("Streamed node has no id:", event);
+          break;
+        }
+
+        const nodeId =String(nodeData.id);
+        const existingNode = cy.getElementById(nodeId);
+
+        let node;
+
+        /*
+          Update existing node if the backend repeats
+          or enriches it later in the stream.
+        */
+
+        if (!existingNode.empty()) {
+
+          existingNode.data({
+            ...existingNode.data(),
+            ...nodeData,
+            id: nodeId,
+          });
+
+          node = existingNode;
+
+        } else {
+
+          node =
+            cy.add({
+              group: "nodes",
+
+              data: {
+                ...nodeData,
+
+                id:
+                  nodeId,
+
+                label:
+                  nodeData.label ||
+                  nodeId,
+              },
+
+              /*
+                Give the new node a temporary stable position.
+
+                Existing streamed nodes are NOT rearranged.
+              */
+
+              position:
+                getStreamNodePosition(),
+            });
+
+        }
+
+        /*
+          Apply TreeNotes' existing automatic node sizing.
+        */
+
+        resizeNodeToLabel(node);
+
+        /*
+          A newly arrived node might unlock an edge that
+          had to wait for this endpoint.
+        */
+        flushPendingStreamEdges();
+
+        cy.style().update();
+
+        /*
+          Smoothly move the viewport to the node
+          that has just appeared.
+        */
+        focusStreamElements(node);
+
+        break;
+      }
+
+
+      // =====================================================
+      // STREAMED EDGE
+      // =====================================================
+
+      case "edge": {
+
+        const edgeData = event.data;
+
+        if (!edgeData) {
+          break;
+        }
+
+        const added = addStreamEdge(edgeData);
+
+        /*
+          If the required nodes have not arrived yet,
+          hold this edge temporarily.
+        */
+
+        if (!added) {
+
+          const pendingId = edgeData.id;
+
+          const alreadyWaiting =
+            pendingStreamEdgesRef.current
+              .some(
+                (edge) =>
+                  pendingId &&
+                  edge.id === pendingId
+              );
+
+          if (!alreadyWaiting) {
+            pendingStreamEdgesRef.current.push(edgeData);
+          }
+
+        } else {
+          const sourceNode =
+            cy.getElementById(
+              String(
+                edgeData.source
+              )
+            );
+
+          const targetNode =
+            cy.getElementById(
+              String(
+                edgeData.target
+              )
+            );
+
+          if (
+            !sourceNode.empty() &&
+            !targetNode.empty()
+          ) {
+
+            /*
+              A Cytoscape collection containing both
+              endpoints lets the camera centre between them.
+            */
+
+            const connectedNodes =
+              sourceNode.union(
+                targetNode
+              );
+
+            focusStreamElements(
+              connectedNodes
+            );
+
+          }
+        }
+
+        break;
+      }
+
+      // =====================================================
+      // OPTIONAL STATUS MESSAGE
+      // =====================================================
+
+      case "status": {
+
+        console.log(
+          "AI graph status:",
+          event.message
+        );
+
+        /*
+          We can later display this beside the
+          Generate Graph button.
+        */
+
+        break;
+      }
+
+      // =====================================================
+      // STREAM COMPLETE
+      // =====================================================
+
+      case "done": {
+
+        flushPendingStreamEdges();
+
+        if (pendingStreamEdgesRef.current.length > 0) {
+
+          console.warn(
+            "Graph stream finished with unresolved edges:",
+            pendingStreamEdgesRef.current
+          );
+
+        }
+
+        /*
+          Final layout now that the complete graph
+          has arrived.
+        */
+
+        if (!cy.elements().empty()) {
+
+          const finalLayout =
+            cy.layout({
+              name: "cose",
+              animate: true,
+              fit: true,
+              padding: 50,
+              randomize: false,
+            });
+
+          finalLayout.one(
+            "layoutstop",
+            () => {
+
+              cy.resize();
+
+              const elements = cy.elements();
+
+              if (elements.empty()) {
+                return;
+              }
+
+              cy.fit(elements, 50);
+
+              /*
+                Keep the same maximum automatic zoom
+                you've already been using.
+              */
+
+              if (cy.zoom() > 1.35) {
+                cy.zoom(1.35);
+                cy.center(elements);
+              }
+
+            }
+          );
+          finalLayout.run();
+        }
+
+        showGraphFeedback(
+          `Graph generated: ${cy.nodes().length} nodes, ${cy.edges().length} links`,
+          "success"
+        );
+
+        console.log(
+          "AI graph stream complete."
+        );
+
+        break;
+      }
+
+      // =====================================================
+      // STREAM ERROR
+      // =====================================================
+
+      case "error": {
+
+        const message =
+          event.message ||
+          "Unable to generate graph.";
+
+        setError(message);
+
+        console.error(
+          "AI graph stream error:",
+          message
+        );
+
+        break;
+      }
+
+      default: {
+
+        console.warn(
+          "Unknown graph stream event:",
+          event
+        );
+
+      }
+
+    }
+  }
+
+  async function testGraphStreaming() {
+
+    const wait =
+      (milliseconds) =>
+        new Promise(
+          (resolve) =>
+            setTimeout(
+              resolve,
+              milliseconds
+            )
+        );
+
+
+    handleGraphStreamEvent({
+      type: "start",
+    });
+
+
+    await wait(400);
+
+
+    handleGraphStreamEvent({
+      type: "node",
+
+      data: {
+        id: "stream-programming",
+        label: "Programming",
+      },
+    });
+
+
+    await wait(400);
+
+
+    /*
+      Deliberately send this edge BEFORE Java exists.
+
+      This tests our pending-edge system.
+    */
+
+    handleGraphStreamEvent({
+      type: "edge",
+
+      data: {
+        id: "stream-programming-java",
+
+        source:
+          "stream-programming",
+
+        target:
+          "stream-java",
+
+        relationship:
+          "includes",
+      },
+    });
+
+
+    await wait(400);
+
+
+    handleGraphStreamEvent({
+      type: "node",
+
+      data: {
+        id: "stream-java",
+        label: "Java",
+      },
+    });
+
+
+    await wait(400);
+
+
+    handleGraphStreamEvent({
+      type: "node",
+
+      data: {
+        id: "stream-csharp",
+        label: "C#",
+      },
+    });
+
+
+    await wait(400);
+
+
+    handleGraphStreamEvent({
+      type: "edge",
+
+      data: {
+        id: "stream-programming-csharp",
+
+        source:
+          "stream-programming",
+
+        target:
+          "stream-csharp",
+
+        relationship:
+          "includes",
+      },
+    });
+
+
+    await wait(400);
+
+
+    handleGraphStreamEvent({
+      type: "done",
+    });
+
+  }
+
+  // =========================================================
+  // CYTOSCAPE INITIALISATION
+  // Create Cytoscape once and keep the instance alive.
+  // =========================================================
+
+  useEffect(() => {
+
+    if (
+      !graphContainerRef.current ||
+      cyRef.current
+    ) {
+      return;
+    }
 
     const graphTheme =
       getGraphThemeTokens();
 
     const cy = cytoscape({
+
       container: graphContainerRef.current,
 
-      elements: [
-        ...nodes,
-        ...edges,
-      ],
+      elements: [],
+
+      /*
+        Start with an empty graph.
+
+        Saved graphs, AI graphs and streamed graph
+        elements will be inserted separately.
+      */
+
+      selectionType: "additive",
 
       minZoom: 0.25,
       maxZoom: 1.5,
 
-      layout: hasSavedPositions
-        ? {
-            name: "preset",
-            fit: true,
-            padding: 50,
-          }
-        : {
-            name: "cose",
-            animate: true,
-            fit: true,
-            padding: 50,
-          },
+      /*
+        There is nothing to arrange yet.
+
+        A layout will be run after graph elements
+        are loaded or streamed.
+      */
+      layout: {
+        name: "preset",
+      },
 
       style: [
         /* =====================================================
@@ -1426,12 +2393,22 @@ const GraphPanel = forwardRef(function GraphPanel(
         {
           selector: "node:selected",
           style: {
-            "border-width": 4,
-            "border-style": "solid",
-            "border-color": graphTheme.selectedBorder,
             "underlay-color": graphTheme.selectedBorder,
-            "underlay-opacity": 0.18,
-            "underlay-padding": 8,
+            "underlay-opacity": 0.28,
+            "underlay-padding": 10,
+          },
+        },
+
+        /* =========================================================
+          LINKED RAW NOTES HOVER
+          ========================================================= */
+
+        {
+          selector: "node.linked-text-hover",
+          style: {
+            "underlay-color": "data(linkColor)",
+            "underlay-opacity": 0.38,
+            "underlay-padding": 20,
           },
         },
 
@@ -1513,7 +2490,7 @@ const GraphPanel = forwardRef(function GraphPanel(
               "data(relationship)",
 
             color:
-              graphTheme.nodeText,
+              graphTheme.edgeLabel,
 
             "font-size":
               "12px",
@@ -1631,34 +2608,11 @@ const GraphPanel = forwardRef(function GraphPanel(
         {
           selector: "edge:selected",
           style: {
-            width: 4,
-            "line-style": "solid",
-            "line-color": graphTheme.selectedEdge,
-            "target-arrow-color": graphTheme.selectedEdge,
-            opacity: 1,
+            "underlay-color": graphTheme.selectedEdge,
+            "underlay-opacity": 0.32,
+            "underlay-padding": 6,
           },
         },
-
-        {
-          selector:
-            "edge:selected[edgeColor]",
-
-          style: {
-            "line-color":
-              graphTheme.selectedEdge,
-          },
-        },
-
-        {
-          selector:
-            "edge:selected[arrowColor]",
-
-          style: {
-            "target-arrow-color":
-              graphTheme.selectedEdge,
-          },
-        },
-
       ],
     });
     cyRef.current = cy;
@@ -1700,9 +2654,7 @@ const GraphPanel = forwardRef(function GraphPanel(
             return;
           }
 
-
           applyGraphTheme(cy);
-
 
           /*
             Keep the Selected Node toolbar colour
@@ -1888,34 +2840,24 @@ const GraphPanel = forwardRef(function GraphPanel(
         return;
       }
 
+      const edge = event.target;
 
-      const edge =
-        event.target;
+      const sourceNode = edge.source();
 
+      const targetNode = edge.target();
 
-      const sourceNode =
-        edge.source();
-
-      const targetNode =
-        edge.target();
-
-
-      const midpoint =
-        edge.renderedMidpoint();
-
+      const midpoint = edge.renderedMidpoint();
 
       const currentRelationship =
         edge.data("relationship") ||
         "";
-
-
+      
       /*
         Keep normal graph selection synchronised.
       */
       cy.elements().unselect();
 
       edge.select();
-
 
       setSelectedEdge({
         ...edge.data(),
@@ -1929,28 +2871,20 @@ const GraphPanel = forwardRef(function GraphPanel(
           targetNode.id(),
       });
 
-
       setSelectedNode(null);
-
-
       setShapeMenuOpen(false);
       setNodeBorderStyleMenuOpen(false);
       setEdgeStyleMenuOpen(false);
       setArrowShapeMenuOpen(false);
-
+      setGraphColorPicker(null);
 
       /*
         Store existing value so Escape can
         effectively leave it unchanged.
       */
-      relationshipOriginalValueRef.current =
-        currentRelationship;
+      relationshipOriginalValueRef.current = currentRelationship;
 
-
-      setRelationshipValue(
-        currentRelationship
-      );
-
+      setRelationshipValue(currentRelationship);
 
       setRelationshipPosition({
         x:
@@ -1960,11 +2894,7 @@ const GraphPanel = forwardRef(function GraphPanel(
           midpoint.y,
       });
 
-
-      setRelationshipZoom(
-        cy.zoom()
-      );
-
+      setRelationshipZoom(cy.zoom());
 
       /*
         Hide Cytoscape's normal painted label
@@ -1975,14 +2905,9 @@ const GraphPanel = forwardRef(function GraphPanel(
         0
       );
 
+      editingEdgeIdRef.current = edge.id();
 
-      editingEdgeIdRef.current =
-        edge.id();
-
-
-      setEditingEdgeId(
-        edge.id()
-      );
+      setEditingEdgeId(edge.id());
 
     }
   );
@@ -1993,41 +2918,93 @@ const GraphPanel = forwardRef(function GraphPanel(
 
     cy.on("tap", "node", (event) => {
 
-      const clickedNode =
-        event.target;
+      const clickedNode = event.target;
 
-
-      const clickedNodeData = {
-        ...clickedNode.data(),
-
-        color:
-          clickedNode.data("color") ||
-          getThemeColour(
-            "--graph-node-bg",
-            "#6366F1"
-          ),
-
-        shape:
-          clickedNode.data("shape") ||
-          "round-rectangle",
-      };
-
+      const shiftPressed =
+        Boolean(
+          event.originalEvent?.shiftKey
+        );
 
       /*
-        Keep Cytoscape and React selection
-        state synchronised.
+        SHIFT + click toggles this node while preserving
+        the rest of the current selection.
+
+        Normal click returns to single-selection behaviour.
       */
 
-      cy.elements().unselect();
+      if (
+        shiftPressed &&
+        !linkModeRef.current
+      ) {
 
-      clickedNode.select();
+        /*
+          selectionType: "additive" has already toggled
+          the Cytoscape selection for us.
 
+          Wait until Cytoscape has fully settled the
+          selection, then synchronise React state.
+        */
 
-      setSelectedNode(
-        clickedNodeData
+        requestAnimationFrame(
+          () => {
+
+            syncGraphSelectionState(clickedNode);
+
+            console.log(
+              "Graph multi-selection:",
+              cy.$(":selected").length,
+              "elements"
+            );
+
+          }
+        );
+
+        setShapeMenuOpen(false);
+
+        setNodeBorderStyleMenuOpen(false);
+
+        setEdgeStyleMenuOpen(false);
+
+        setArrowShapeMenuOpen(false);
+
+        setGraphColorPicker(null);
+
+        return;
+      }
+
+      /*
+        Cytoscape now uses additive selection.
+
+        Wait until its own click handling has completed,
+        then deliberately normalise a plain click back to
+        exactly one selected element.
+      */
+
+      requestAnimationFrame(
+        () => {
+
+          /*
+            The element might theoretically have disappeared
+            before this frame, so guard against that.
+          */
+
+          if (!cyRef.current || clickedNode.removed()) {
+            return;
+          }
+
+          cy.elements().unselect();
+
+          clickedNode.select();
+
+          /*
+            React state + selectionSummary are now built
+            from Cytoscape's final selection state.
+          */
+
+          syncGraphSelectionState(clickedNode);
+
+        }
       );
-
-      setSelectedEdge(null);
 
       setShapeMenuOpen(false);
 
@@ -2037,6 +3014,7 @@ const GraphPanel = forwardRef(function GraphPanel(
 
       setArrowShapeMenuOpen(false);
 
+      setGraphColorPicker(null);
 
       // =====================================================
       // NORMAL NODE SELECTION
@@ -2171,40 +3149,62 @@ const GraphPanel = forwardRef(function GraphPanel(
 
     cy.on("tap", "edge", (event) => {
 
-      const clickedEdge =
-        event.target;
+      const clickedEdge = event.target;
 
-
-      const sourceNode =
-        clickedEdge.source();
-
-      const targetNode =
-        clickedEdge.target();
-
+      const shiftPressed =
+      Boolean(
+        event.originalEvent?.shiftKey
+      );
 
       /*
-        Explicitly select only this edge.
+        SHIFT + click toggles this edge without
+        disturbing nodes or other selected edges.
       */
 
-      cy.elements().unselect();
+      if (shiftPressed) {
 
-      clickedEdge.select();
+        requestAnimationFrame(
+          () => {
 
+            syncGraphSelectionState(clickedEdge);
 
-      setSelectedEdge({
-        ...clickedEdge.data(),
+            console.log(
+              "Graph multi-selection:",
+              cy.$(":selected").length,
+              "elements"
+            );
 
-        sourceLabel:
-          sourceNode.data("label") ||
-          sourceNode.id(),
+          }
+        );
 
-        targetLabel:
-          targetNode.data("label") ||
-          targetNode.id(),
-      });
+        setShapeMenuOpen(false);
 
+        setNodeBorderStyleMenuOpen(false);
 
-      setSelectedNode(null);
+        setEdgeStyleMenuOpen(false);
+
+        setArrowShapeMenuOpen(false);
+
+        setGraphColorPicker(null);
+
+        return;
+      }
+
+      requestAnimationFrame(
+        () => {
+
+          if (!cyRef.current || clickedEdge.removed()) {
+            return;
+          }
+
+          cy.elements().unselect();
+
+          clickedEdge.select();
+
+          syncGraphSelectionState(clickedEdge);
+
+        }
+      );
 
       setShapeMenuOpen(false);
 
@@ -2214,6 +3214,7 @@ const GraphPanel = forwardRef(function GraphPanel(
 
       setArrowShapeMenuOpen(false);
 
+      setGraphColorPicker(null);
 
       console.log(
         "Selected edge:",
@@ -2249,6 +3250,11 @@ const GraphPanel = forwardRef(function GraphPanel(
 
       setSelectedEdge(null);
 
+      setSelectionSummary({
+        nodes: [],
+        edges: [],
+      });
+
       setShapeMenuOpen(false);
 
       setNodeBorderStyleMenuOpen(false);
@@ -2257,6 +3263,7 @@ const GraphPanel = forwardRef(function GraphPanel(
 
       setArrowShapeMenuOpen(false);
 
+      setGraphColorPicker(null);
 
       console.log(
         "Graph selection cleared"
@@ -2404,36 +3411,6 @@ cy.on(
   }
 );
 
-cy.one("layoutstop", () => {
-  cy.resize();
-  const elements = cy.elements();
-
-  if (elements.empty()) {
-    return;
-  }
-
-  /*
-    Fit the graph, but never allow a tiny graph
-    such as one node to consume the whole canvas.
-  */
-  cy.fit(
-    elements,
-    50
-  );
-
-  if (cy.zoom() > 1.35) {
-
-    cy.zoom(
-      1.35
-    );
-
-    cy.center(
-      elements
-    );
-
-  }
-});
-
 return () => {
   themeObserver.disconnect();
 
@@ -2441,59 +3418,177 @@ return () => {
   cyRef.current = null;
 };
 
-}, [graphData]);
+}, []);
+
+// =========================================================
+// LOAD GRAPH DATA INTO EXISTING CYTOSCAPE INSTANCE
+// =========================================================
 
 useEffect(() => {
 
-  const root =
-    document.documentElement;
+  const cy = cyRef.current;
 
 
-  const observer =
-    new MutationObserver(
-      (mutations) => {
-
-        const themeChanged =
-          mutations.some(
-            (mutation) =>
-              mutation.attributeName ===
-                "data-theme" ||
-              mutation.attributeName ===
-                "data-color-vision"
-          );
+  if (!cy) {
+    return;
+  }
 
 
-        if (!themeChanged) {
-          return;
-        }
+  const nodes =
+    Array.isArray(graphData?.nodes)
+      ? graphData.nodes
+      : [];
 
 
-        requestAnimationFrame(() => {
-          applyGraphTheme();
-        });
+  const edges =
+    Array.isArray(graphData?.edges)
+      ? graphData.edges
+      : [];
 
-      }
+
+  /*
+    Determine whether this graph came from the database
+    with saved node positions.
+  */
+
+  const hasSavedPositions =
+    nodes.length > 0 &&
+    nodes.every(
+      (node) =>
+        Number.isFinite(
+          node?.position?.x
+        ) &&
+        Number.isFinite(
+          node?.position?.y
+        )
     );
 
 
-  observer.observe(
-    root,
-    {
-      attributes: true,
+  /*
+    Replace the currently displayed graph without
+    destroying Cytoscape itself.
+  */
 
-      attributeFilter: [
-        "data-theme",
-        "data-color-vision",
-      ],
+  cy.batch(() => {
+
+    cy.elements().remove();
+
+
+    if (
+      nodes.length > 0 ||
+      edges.length > 0
+    ) {
+
+      cy.add([
+        ...nodes,
+        ...edges,
+      ]);
+
+    }
+
+  });
+
+
+  /*
+    Apply TreeNotes node auto-sizing to newly
+    inserted nodes.
+  */
+
+  cy.nodes().forEach(
+    (node) => {
+
+      resizeNodeToLabel(
+        node
+      );
+
     }
   );
 
 
-  return () => {
-    observer.disconnect();
-  };
+  applyGraphTheme(cy);
 
-}, []);
+  cy.style().update();
+
+
+  /*
+    Nothing else needs doing for an empty graph.
+  */
+
+  if (cy.elements().empty()) {
+    return;
+  }
+
+
+  /*
+    Saved graphs retain their positions.
+
+    Fresh AI graphs get automatically arranged.
+  */
+
+  const layout =
+    cy.layout(
+      hasSavedPositions
+        ? {
+            name: "preset",
+            fit: true,
+            padding: 50,
+          }
+        : {
+            name: "cose",
+            animate: true,
+            fit: true,
+            padding: 50,
+          }
+    );
+
+
+  layout.one(
+    "layoutstop",
+    () => {
+
+      cy.resize();
+
+
+      const elements =
+        cy.elements();
+
+
+      if (elements.empty()) {
+        return;
+      }
+
+
+      cy.fit(
+        elements,
+        50
+      );
+
+
+      /*
+        Preserve your existing protection against
+        tiny graphs being zoomed ridiculously large.
+      */
+
+      if (cy.zoom() > 1.35) {
+
+        cy.zoom(
+          1.35
+        );
+
+        cy.center(
+          elements
+        );
+
+      }
+
+    }
+  );
+
+
+  layout.run();
+
+
+}, [graphData]);
 
 function addSelectedTextNode() {
   if (!cyRef.current || !selectedText) {
@@ -2747,6 +3842,7 @@ function focusNode(nodeId) {
 
   setArrowShapeMenuOpen(false);
 
+  setGraphColorPicker(null);
 
   cy.animate(
     {
@@ -2794,22 +3890,16 @@ function setLinkedNodeHover(
       color
     );
 
-    node.style({
-      "underlay-color": color,
-      "underlay-opacity": 0.38,
-      "underlay-padding": 20,
-    });
-  } else {
     /*
-      Only turn off our halo.
+      Use a class instead of direct style overrides.
 
-      Don't call removeStyle() here because that could
-      remove the user's custom node colour/shape too.
+      This allows normal selected styling to return
+      automatically after hover ends.
     */
-    node.style(
-      "underlay-opacity",
-      0
-    );
+    node.addClass("linked-text-hover");
+  } else {
+
+    node.removeClass("linked-text-hover");
   }
 }
 
@@ -2837,92 +3927,300 @@ function setLinkedNodeColor(
   );
 
   /*
-    Also update an existing hover halo immediately.
+    If the node is currently being hovered,
+    Cytoscape automatically refreshes the
+    linked-text-hover halo from data(linkColor).
   */
-  node.style(
-    "underlay-color",
-    color
-  );
+  node.updateStyle();
 }
 
-function getSelectedCyNode() {
-  if (
-    !cyRef.current ||
-    !selectedNode?.id
-  ) {
+function getSelectedCyNodes() {
+
+  if (!cyRef.current) {
     return null;
   }
 
-  const node =
-    cyRef.current.getElementById(
-      selectedNode.id
+
+  const nodes =
+    cyRef.current.nodes(
+      ":selected"
     );
+
+
+  return (
+    nodes.length > 0
+      ? nodes
+      : null
+  );
+}
+
+
+function getSelectedCyEdges() {
+
+  if (!cyRef.current) {
+    return null;
+  }
+
+
+  const edges =
+    cyRef.current.edges(
+      ":selected"
+    );
+
+
+  return (
+    edges.length > 0
+      ? edges
+      : null
+  );
+}
+
+function buildSelectedNodeData(node) {
 
   if (!node || node.empty()) {
     return null;
   }
 
-  return node;
+
+  return {
+
+    ...node.data(),
+
+    color:
+      node.data("color") ||
+      getThemeColour(
+        "--graph-node-bg",
+        "#6366F1"
+      ),
+
+    textColor:
+      node.data("textColor") ||
+      getThemeColour(
+        "--graph-node-text",
+        "#ffffff"
+      ),
+
+    shape:
+      node.data("shape") ||
+      "round-rectangle",
+
+  };
+}
+
+function buildSelectedEdgeData(edge) {
+
+  if (!edge || edge.empty()) {
+    return null;
+  }
+
+  const sourceNode = edge.source();
+  const targetNode = edge.target();
+
+  return {
+    ...edge.data(),
+
+    sourceLabel: sourceNode.data("label") || sourceNode.id(),
+    targetLabel: targetNode.data("label") || targetNode.id(),
+  };
+}
+
+function syncGraphSelectionState(preferredElement = null) {
+
+  const cy = cyRef.current;
+
+  if (!cy) {
+    return;
+  }
+
+  const selectedNodes = cy.nodes(":selected");
+  const selectedEdges = cy.edges(":selected");
+
+  /*
+    Keep a React-friendly summary of the entire
+    Cytoscape selection.
+
+    selectedNode / selectedEdge remain representative
+    items for toolbar controls.
+  */
+
+  setSelectionSummary({
+
+    nodes:
+      selectedNodes.map(
+        node => ({
+          id:
+            node.id(),
+
+          label:
+            node.data("label") ||
+            node.id(),
+        })
+      ),
+
+    edges:
+      selectedEdges.map(
+        edge => ({
+          id:
+            edge.id(),
+
+          sourceLabel:
+            edge.source().data("label") ||
+            edge.source().id(),
+
+          targetLabel:
+            edge.target().data("label") ||
+            edge.target().id(),
+
+          relationship:
+            edge.data("relationship") ||
+            "",
+        })
+      ),
+
+  });
+
+  /*
+    For toolbar indicators, use the element most
+    recently clicked when possible.
+
+    Otherwise use the final selected element.
+  */
+
+  let representativeNode = null;
+
+  if (
+    preferredElement?.isNode?.() &&
+    preferredElement.selected()
+  ) {
+
+    representativeNode =
+      preferredElement;
+
+  } else if (
+    selectedNodes.length > 0
+  ) {
+
+    representativeNode =
+      selectedNodes[
+        selectedNodes.length - 1
+      ];
+
+  }
+
+  let representativeEdge = null;
+
+  if (
+    preferredElement?.isEdge?.() &&
+    preferredElement.selected()
+  ) {
+
+    representativeEdge =
+      preferredElement;
+
+  } else if (
+    selectedEdges.length > 0
+  ) {
+
+    representativeEdge =
+      selectedEdges[
+        selectedEdges.length - 1
+      ];
+
+  }
+
+  setSelectedNode(
+    representativeNode
+      ? buildSelectedNodeData(
+          representativeNode
+        )
+      : null
+  );
+
+  setSelectedEdge(
+    representativeEdge
+      ? buildSelectedEdgeData(
+          representativeEdge
+        )
+      : null
+  );
+
 }
 
 function changeSelectedNodeColor(newColor) {
-  const node = getSelectedCyNode();
 
-  if (!node) {
+  const nodes = getSelectedCyNodes();
+
+  if (!nodes) {
     return;
   }
 
-  // Change visually
-  node.style(
-    "background-color",
-    newColor
-  );
+  nodes.forEach(
+    node => {
 
-  // Preserve for saving
-  node.data(
-    "color",
-    newColor
-  );
+      node.data(
+        "color",
+        newColor
+      );
 
-  // Update toolbar indicator
-  setSelectedNode((current) => ({
-    ...current,
-    color: newColor,
-  }));
-}
-
-function changeSelectedNodeShape(newShape) {
-  const node = getSelectedCyNode();
-
-  if (!node) {
-    return;
-  }
-
-  // Change visually
-  node.style(
-    "shape",
-    newShape
-  );
-
-  // Preserve for saving
-  node.data(
-    "shape",
-    newShape
+      node.updateStyle();
+    }
   );
 
   /*
-    The amount of usable internal space
-    changes with the shape, so recalculate.
+    Keep the toolbar representative in sync.
   */
-  resizeNodeToLabel(
-    node
+
+  setSelectedNode(
+    current =>
+      current
+        ? {
+            ...current,
+            color:
+              newColor,
+          }
+        : current
   );
 
-  // Update toolbar/popover
-  setSelectedNode((current) => ({
-    ...current,
-    shape: newShape,
-  }));
+}
+
+function changeSelectedNodeShape(newShape) {
+
+  const nodes = getSelectedCyNodes();
+
+  if (!nodes) {
+    return;
+  }
+
+  nodes.forEach(
+    node => {
+
+      node.data(
+        "shape",
+        newShape
+      );
+
+      node.updateStyle();
+
+      /*
+        Different shapes require different dimensions.
+      */
+
+      resizeNodeToLabel(node);
+
+    }
+  );
+
+  setSelectedNode(
+    current =>
+      current
+        ? {
+            ...current,
+            shape:
+              newShape,
+          }
+        : current
+  );
+
 
   setShapeMenuOpen(false);
 
@@ -2931,232 +4229,232 @@ function changeSelectedNodeShape(newShape) {
   setEdgeStyleMenuOpen(false);
 
   setArrowShapeMenuOpen(false);
+
+  setGraphColorPicker(null);
+
 }
 
-function changeSelectedNodeBorderColor(
-  newColor
-) {
-  const node =
-    getSelectedCyNode();
+function changeSelectedNodeBorderColor(newColor) {
 
-  if (!node) {
+  const nodes = getSelectedCyNodes();
+
+  if (!nodes) {
     return;
   }
 
-  node.data(
-    "borderColor",
-    newColor
+  nodes.forEach(
+    node => {
+
+      node.data(
+        "borderColor",
+        newColor
+      );
+
+      node.updateStyle();
+
+    }
   );
 
   setSelectedNode(
-    current => ({
-      ...current,
-      borderColor:
-        newColor,
-    })
+    current =>
+      current
+        ? {
+            ...current,
+            borderColor:
+              newColor,
+          }
+        : current
   );
-}
 
+}
 
 function changeSelectedNodeBorderStyle(
   newStyle
 ) {
-  const node =
-    getSelectedCyNode();
 
-  if (!node) {
+  const nodes =
+    getSelectedCyNodes();
+
+
+  if (!nodes) {
     return;
   }
 
-  node.data(
-    "borderStyle",
-    newStyle
+
+  nodes.forEach(
+    node => {
+
+      node.data(
+        "borderStyle",
+        newStyle
+      );
+
+      node.updateStyle();
+
+    }
   );
+
 
   setSelectedNode(
-    current => ({
-      ...current,
-      borderStyle:
-        newStyle,
-    })
+    current =>
+      current
+        ? {
+            ...current,
+            borderStyle:
+              newStyle,
+          }
+        : current
   );
 
-  setNodeBorderStyleMenuOpen(
-    false
-  );
+  setNodeBorderStyleMenuOpen(false);
+
 }
 
-function changeSelectedEdgeColor(
-  colour
-) {
+function changeSelectedEdgeColor(colour) {
 
-  if (
-    !cyRef.current ||
-    !selectedEdge?.id
-  ) {
+  const edges = getSelectedCyEdges();
+
+  if (!edges) {
     return;
   }
 
+  edges.forEach(
+    edge => {
 
-  const edge =
-    cyRef.current.getElementById(
-      selectedEdge.id
-    );
+      edge.data(
+        "edgeColor",
+        colour
+      );
 
+      edge.updateStyle();
 
-  if (
-    !edge ||
-    edge.empty()
-  ) {
-    return;
-  }
-
-
-  edge.data(
-    "edgeColor",
-    colour
+    }
   );
-
 
   setSelectedEdge(
-    current => ({
-      ...current,
-      edgeColor:
-        colour,
-    })
+    current =>
+      current
+        ? {
+            ...current,
+            edgeColor:
+              colour,
+          }
+        : current
   );
+
 }
 
-function changeSelectedArrowColor(
-  colour
-) {
+function changeSelectedEdgeStyle(lineStyle) {
 
-  if (
-    !cyRef.current ||
-    !selectedEdge?.id
-  ) {
+  const edges = getSelectedCyEdges();
+
+  if (!edges) {
     return;
   }
 
+  edges.forEach(
+    edge => {
 
-  const edge =
-    cyRef.current.getElementById(
-      selectedEdge.id
-    );
+      edge.data(
+        "lineStyle",
+        lineStyle
+      );
 
+      edge.updateStyle();
 
-  if (
-    !edge ||
-    edge.empty()
-  ) {
-    return;
-  }
-
-
-  edge.data(
-    "arrowColor",
-    colour
+    }
   );
-
 
   setSelectedEdge(
-    current => ({
-      ...current,
-      arrowColor:
-        colour,
-    })
+    current =>
+      current
+        ? {
+            ...current,
+            lineStyle,
+          }
+        : current
   );
+
+  setEdgeStyleMenuOpen(false);
+
 }
 
-function changeSelectedArrowShape(
-  shape
-) {
+function changeSelectedArrowColor(colour) {
 
-  if (
-    !cyRef.current ||
-    !selectedEdge?.id
-  ) {
+  const edges = getSelectedCyEdges();
+
+
+  if (!edges) {
     return;
   }
 
+  edges.forEach(
+    edge => {
 
-  const edge =
-    cyRef.current.getElementById(
-      selectedEdge.id
-    );
+      edge.data(
+        "arrowColor",
+        colour
+      );
 
+      edge.updateStyle();
 
-  if (
-    !edge ||
-    edge.empty()
-  ) {
-    return;
-  }
-
-
-  edge.data(
-    "arrowShape",
-    shape
+    }
   );
 
+  /*
+    Keep the toolbar indicator synced with
+    the most recently selected / representative edge.
+  */
 
   setSelectedEdge(
-    current => ({
-      ...current,
-      arrowShape:
-        shape,
-    })
+    current =>
+      current
+        ? {
+            ...current,
+            arrowColor:
+              colour,
+          }
+        : current
   );
 
+}
+
+function changeSelectedArrowShape(shape) {
+
+  const edges = getSelectedCyEdges();
+
+  if (!edges) {
+    return;
+  }
+
+  edges.forEach(
+    edge => {
+
+      edge.data(
+        "arrowShape",
+        shape
+      );
+
+      edge.updateStyle();
+
+    }
+  );
+
+  setSelectedEdge(
+    current =>
+      current
+        ? {
+            ...current,
+            arrowShape:
+              shape,
+          }
+        : current
+  );
 
   setArrowShapeMenuOpen(
     false
   );
-}
 
-function changeSelectedEdgeStyle(
-  lineStyle
-) {
-
-  if (
-    !cyRef.current ||
-    !selectedEdge?.id
-  ) {
-    return;
-  }
-
-
-  const edge =
-    cyRef.current.getElementById(
-      selectedEdge.id
-    );
-
-
-  if (
-    !edge ||
-    edge.empty()
-  ) {
-    return;
-  }
-
-
-  edge.data(
-    "lineStyle",
-    lineStyle
-  );
-
-
-  setSelectedEdge(
-    current => ({
-      ...current,
-      lineStyle,
-    })
-  );
-
-
-  setEdgeStyleMenuOpen(
-    false
-  );
 }
 
 function showGraphFeedback(
@@ -3181,117 +4479,127 @@ function showGraphFeedback(
 }
 
 function deleteSelectedElement() {
-  if (!cyRef.current) {
+
+  const cy = cyRef.current;
+
+  if (!cy) {
     return;
   }
 
-  // Delete selected node
-  if (selectedNode?.id) {
-    const node =
-      cyRef.current.getElementById(
-        selectedNode.id
-      );
+  const selected = cy.$(":selected");
 
-    if (node && !node.empty()) {
-      const nodeLabel =
-        node.data("label") ||
-        node.id();
-
-      node.remove();
-
-      setSelectedNode(null);
-      setSelectedEdge(null);
-
-      showGraphFeedback(
-        `Deleted node: ${nodeLabel}`,
-        "success"
-      );
-    }
-
+  if (selected.empty()) {
     return;
   }
 
+  const nodeCount = selected.nodes().length;
 
-  // Delete selected edge
-  if (selectedEdge?.id) {
-    const edge =
-      cyRef.current.getElementById(
-        selectedEdge.id
-      );
+  const edgeCount = selected.edges().length;
 
-    if (edge && !edge.empty()) {
-      const sourceLabel =
-        edge.source().data("label") ||
-        edge.source().id();
+  /*
+    Removing selected nodes also removes their connected
+    Cytoscape edges automatically.
+  */
 
-      const targetLabel =
-        edge.target().data("label") ||
-        edge.target().id();
+  selected.remove();
 
-      edge.remove();
+  setSelectedNode(null);
 
-      setSelectedEdge(null);
-      setSelectedNode(null);
+  setSelectedEdge(null);
 
-      showGraphFeedback(
-        `Deleted link: ${sourceLabel} → ${targetLabel}`,
-        "success"
-      );
-    }
-  }
-}
+  setSelectionSummary({
+    nodes: [],
+    edges: [],
+  });
 
-  function createManualNode() {
-    const cy = cyRef.current;
-
-    if (!cy) return;
-
-    const nodeId = `manual-node-${Date.now()}`;
-
-    const extent = cy.extent();
-
-    const newNode = cy.add({
-      group: "nodes",
-      data: {
-        id: nodeId,
-        label: "New Node",
-        color: 
-          getThemeColour(
-            "--graph-node-bg",
-            "#6366F1"
-          ),
-        textColor:
-        getThemeColour(
-          "--graph-node-text",
-          "#ffffff"
-        ),
-        shape: "round-rectangle",
-      },
-      position: {
-        x: (extent.x1 + extent.x2) / 2,
-        y: (extent.y1 + extent.y2) / 2,
-      },
-    });
-
-    resizeNodeToLabel(
-      newNode
-    );
-
-    cy.elements().unselect();
-    newNode.select();
-
-    setSelectedEdge(null);
-
-    setSelectedNode({
-      ...newNode.data(),
-    });
+  if (
+    nodeCount > 0 &&
+    edgeCount > 0
+  ) {
 
     showGraphFeedback(
-      "New node created",
+      `Deleted ${nodeCount} node${
+        nodeCount === 1 ? "" : "s"
+      } and ${edgeCount} selected link${
+        edgeCount === 1 ? "" : "s"
+      }`,
       "success"
     );
+
+  } else if (
+    nodeCount > 0
+  ) {
+
+    showGraphFeedback(
+      `Deleted ${nodeCount} node${
+        nodeCount === 1 ? "" : "s"
+      }`,
+      "success"
+    );
+
+  } else {
+
+    showGraphFeedback(
+      `Deleted ${edgeCount} link${
+        edgeCount === 1 ? "" : "s"
+      }`,
+      "success"
+    );
+
   }
 
+}
+
+function createManualNode() {
+  const cy = cyRef.current;
+
+  if (!cy) return;
+
+  const nodeId = `manual-node-${Date.now()}`;
+
+  const extent = cy.extent();
+
+  const newNode = cy.add({
+    group: "nodes",
+    data: {
+      id: nodeId,
+      label: "New Node",
+      color: 
+        getThemeColour(
+          "--graph-node-bg",
+          "#6366F1"
+        ),
+      textColor:
+      getThemeColour(
+        "--graph-node-text",
+        "#ffffff"
+      ),
+      shape: "round-rectangle",
+    },
+    position: {
+      x: (extent.x1 + extent.x2) / 2,
+      y: (extent.y1 + extent.y2) / 2,
+    },
+  });
+
+  resizeNodeToLabel(
+    newNode
+  );
+
+  cy.elements().unselect();
+  newNode.select();
+
+  setSelectedEdge(null);
+
+  setSelectedNode({
+    ...newNode.data(),
+  });
+
+  showGraphFeedback(
+    "New node created",
+    "success"
+  );
+}
 
 function finishNodeRename({
   cancel = false,
@@ -3310,11 +4618,7 @@ function finishNodeRename({
       editingNodeId
     );
 
-
-  if (
-    !node ||
-    node.empty()
-  ) {
+  if (!node || node.empty()) {
 
     editingNodeIdRef.current = null;
 
@@ -3323,15 +4627,11 @@ function finishNodeRename({
     return;
   }
 
-
   if (!cancel) {
 
-    const cleanLabel =
-      renameValue.trim();
-
+    const cleanLabel = renameValue.trim();
 
     if (cleanLabel) {
-
       node.data(
         "label",
         cleanLabel
@@ -3340,9 +4640,7 @@ function finishNodeRename({
       /*
         Label changed, so recompute the node body.
       */
-      resizeNodeToLabel(
-        node
-      );
+      resizeNodeToLabel(node);
 
       setSelectedNode(
         (current) => {
@@ -3355,7 +4653,6 @@ function finishNodeRename({
             return current;
           }
 
-
           return {
             ...current,
             label:
@@ -3364,7 +4661,6 @@ function finishNodeRename({
 
         }
       );
-
 
       showGraphFeedback(
         `Renamed node to: ${cleanLabel}`,
@@ -3375,19 +4671,14 @@ function finishNodeRename({
 
   }
 
-
   /*
     Restore Cytoscape's own label.
   */
   node.style(
-    "text-opacity",
-    1
+    "text-opacity", 1
   );
 
-
-  setEditingNodeId(
-    null
-  );
+  setEditingNodeId(null);
 
 }
 
@@ -3399,37 +4690,24 @@ function finishEdgeRelationship({
     return;
   }
 
-
-  const edgeId =
-    editingEdgeIdRef.current;
-
+  const edgeId = editingEdgeIdRef.current;
 
   if (!edgeId) {
     return;
   }
-
 
   const edge =
     cyRef.current.getElementById(
       edgeId
     );
 
+  if (!edge || edge.empty()) {
+    editingEdgeIdRef.current = null;
 
-  if (
-    !edge ||
-    edge.empty()
-  ) {
-
-    editingEdgeIdRef.current =
-      null;
-
-    setEditingEdgeId(
-      null
-    );
+    setEditingEdgeId(null);
 
     return;
   }
-
 
   /*
     ESCAPE:
@@ -3438,38 +4716,25 @@ function finishEdgeRelationship({
   */
   if (cancel) {
 
-    setRelationshipValue(
-      relationshipOriginalValueRef.current
-    );
-
+    setRelationshipValue(relationshipOriginalValueRef.current);
 
     edge.style(
       "text-opacity",
       1
     );
 
+    editingEdgeIdRef.current = null;
 
-    editingEdgeIdRef.current =
-      null;
-
-
-    setEditingEdgeId(
-      null
-    );
-
+    setEditingEdgeId(null);
 
     return;
   }
 
-
-  const cleanRelationship =
-    relationshipValue.trim();
-
+  const cleanRelationship = relationshipValue.trim();
 
   const oldRelationship =
     relationshipOriginalValueRef.current
       .trim();
-
 
   /*
     Empty value means remove the relationship.
@@ -3494,31 +4759,25 @@ function finishEdgeRelationship({
 
   }
 
-
   /*
     Keep React's Selected Edge card in sync.
   */
   setSelectedEdge(
     current => {
 
-      if (
-        !current ||
-        current.id !== edgeId
+      if (!current || current.id !== edgeId
       ) {
         return current;
       }
 
-
       return {
         ...current,
 
-        relationship:
-          cleanRelationship,
+        relationship: cleanRelationship,
       };
 
     }
   );
-
 
   edge.style(
     "text-opacity",
@@ -3527,22 +4786,14 @@ function finishEdgeRelationship({
 
   relationshipOriginalValueRef.current = cleanRelationship;
 
-  editingEdgeIdRef.current =
-    null;
+  editingEdgeIdRef.current = null;
 
-
-  setEditingEdgeId(
-    null
-  );
-
+  setEditingEdgeId(null);
 
   /*
     Avoid firing feedback if nothing actually changed.
   */
-  if (
-    cleanRelationship !==
-    oldRelationship
-  ) {
+  if (cleanRelationship !== oldRelationship) {
 
     showGraphFeedback(
       cleanRelationship
@@ -3555,30 +4806,41 @@ function finishEdgeRelationship({
 
 }
 
-// text color for node label
 function changeSelectedNodeTextColor(newColor) {
-  const node = getSelectedCyNode();
 
-  if (!node) return;
+  const nodes = getSelectedCyNodes();
 
-  node.style(
-    "color",
-    newColor
+
+  if (!nodes) {
+    return;
+  }
+
+  nodes.forEach(
+    node => {
+
+      node.data(
+        "textColor",
+        newColor
+      );
+
+      node.updateStyle();
+
+    }
   );
 
-  node.data(
-    "textColor",
-    newColor
+  setSelectedNode(
+    current =>
+      current
+        ? {
+            ...current,
+            textColor:
+              newColor,
+          }
+        : current
   );
 
-  setSelectedNode((current) => ({
-    ...current,
-    textColor: newColor,
-  }));
 }
 
-
-    
 async function handleSemanticSearch() {
   const query =
     semanticSearchQuery.trim();
@@ -3709,6 +4971,109 @@ useEffect(() => {
     );
   };
 }, []);
+
+/* =========================================================
+   KEYBOARD DELETE
+   Delete the currently selected graph node / edge.
+   ========================================================= */
+
+useEffect(() => {
+
+  function handleGraphDeleteKey(
+    event
+  ) {
+
+    /*
+      Only respond while the Graph Editor is active.
+      This prevents Delete from affecting the graph
+      while the user is working in Raw Notes, Summary,
+      or somewhere else on the page.
+    */
+
+    if (!graphEditorActive) {
+      return;
+    }
+
+    /*
+      For now we use the physical Delete key only.
+
+      Backspace is deliberately excluded because it is
+      commonly used while editing text.
+    */
+
+    if (event.key !== "Delete") {
+      return;
+    }
+
+    /*
+      Never delete a graph element while the user is
+      typing into an input, textarea, select, or
+      contentEditable element.
+    */
+
+    const target = event.target;
+
+    const isTypingTarget =
+      target instanceof HTMLElement &&
+      (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      );
+
+    if (isTypingTarget) {
+      return;
+    }
+
+    /*
+      Also protect Cytoscape's inline editing modes.
+
+      These checks are useful even if focus handling
+      changes later.
+    */
+
+    if (editingNodeId || editingEdgeId) {
+      return;
+    }
+
+    /*
+      Nothing selected, nothing to delete.
+    */
+
+    if (!selectedNode && !selectedEdge) {
+      return;
+    }
+
+    /*
+      Stop the browser / another handler from
+      interpreting this Delete press.
+    */
+
+    event.preventDefault();
+
+    /*
+      Use the SAME deletion logic as the toolbar
+      trash button.
+    */
+
+    deleteSelectedElement();
+
+  }
+
+  document.addEventListener("keydown",handleGraphDeleteKey);
+
+  return () => {
+    document.removeEventListener("keydown", handleGraphDeleteKey);
+  };
+
+}, [
+  graphEditorActive,
+  selectedNode,
+  selectedEdge,
+  editingNodeId,
+  editingEdgeId,
+]);
 
 useEffect(() => {
 
@@ -3980,6 +5345,8 @@ const CurrentArrowShapeIcon =
             </span>
           )}
 
+          
+
 
           <button
             type="button"
@@ -4183,18 +5550,34 @@ const CurrentArrowShapeIcon =
           <div className="graph-toolbar-popover-wrapper">
 
             <button
+              ref={nodeColorButtonRef}
               type="button"
-              className="graph-toolbar-button tooltip-align-left"
+
+              className={`graph-toolbar-button tooltip-align-left ${
+                graphColorPicker === "node-fill"
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
+
               disabled={!selectedNode}
+
               onClick={() =>
-                nodeColorInputRef.current?.click()
+                toggleGraphColorPicker(
+                  "node-fill"
+                )
               }
+
               data-tooltip={
                 selectedNode
                   ? "Node colour"
                   : "Select a node first"
               }
+
               aria-label="Node colour"
+              aria-haspopup="dialog"
+              aria-expanded={
+                graphColorPicker === "node-fill"
+              }
             >
               <span className="graph-toolbar-color-icon">
 
@@ -4218,19 +5601,29 @@ const CurrentArrowShapeIcon =
               </span>
             </button>
 
+            <TreeNotesColorPicker
+              open={
+                graphColorPicker === "node-fill"
+              }
 
-            <input
-              ref={nodeColorInputRef}
-              className="graph-hidden-color-input"
-              type="color"
+              anchorRef={
+                nodeColorButtonRef
+              }
+
               value={
                 selectedNode?.color ||
-                "#6366F1"
-              }
-              onChange={(event) =>
-                changeSelectedNodeColor(
-                  event.target.value
+                getThemeColour(
+                  "--graph-node-bg",
+                  "#6366F1"
                 )
+              }
+
+              onChange={
+                changeSelectedNodeColor
+              }
+
+              onClose={() =>
+                setGraphColorPicker(null)
               }
             />
 
@@ -4239,716 +5632,809 @@ const CurrentArrowShapeIcon =
           {/* NODE TEXT COLOUR */}
 
           <div className="graph-toolbar-popover-wrapper">
-          <button
-            type="button"
-            className="graph-toolbar-button"
-            disabled={!selectedNode}
-            onClick={() =>
-              nodeTextColorInputRef.current?.click()
-            }
-            data-tooltip={
-              selectedNode
-                ? "Text colour"
-                : "Select a node first"
-            }
-            aria-label="Text colour"
-          >
-            <span className="graph-toolbar-color-icon">
 
-              <Type
-                size={19}
-                strokeWidth={1.8}
-              />
+            <button
+              ref={nodeTextColorButtonRef}
+              type="button"
 
-              <span
-                className="graph-toolbar-color-indicator"
-                style={{
-                  backgroundColor:
-                    selectedNode?.textColor ||
-                    getThemeColour(
-                      "--graph-node-text",
-                      "#ffffff"
-                    ),
-                }}
-              />
+              className={`graph-toolbar-button ${
+                graphColorPicker === "node-text"
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
 
-            </span>
-          </button>
+              disabled={!selectedNode}
 
-          <input
-            ref={nodeTextColorInputRef}
-            className="graph-hidden-color-input"
-            type="color"
-            value={
-              selectedNode?.textColor ||
-              getThemeColour(
-                "--graph-node-text",
-                "#ffffff"
-              )
-            }
-            onChange={(event) =>
-              changeSelectedNodeTextColor(
-                event.target.value
-              )
-            }
-          />
-        </div>
-
-        {/* NODE BORDER STYLE */}
-
-        <div
-          className="graph-toolbar-popover-wrapper"
-          ref={nodeBorderStyleMenuRef}
-        >
-          <button
-            type="button"
-
-            className={`graph-toolbar-button ${
-              nodeBorderStyleMenuOpen
-                ? "graph-toolbar-button-active"
-                : ""
-            }`}
-
-            disabled={!selectedNode}
-
-            onClick={() => {
-              setNodeBorderStyleMenuOpen(
-                current => !current
-              );
-
-              setShapeMenuOpen(false);
-              setEdgeStyleMenuOpen(false);
-              setArrowShapeMenuOpen(false);
-            }}
-
-            data-tooltip={
-              selectedNode
-                ? "Node border style"
-                : "Select a node first"
-            }
-
-            aria-label="Node border style"
-            aria-haspopup="true"
-            aria-expanded={
-              nodeBorderStyleMenuOpen
-            }
-          >
-            <CurrentNodeBorderStyleIcon
-              size={19}
-              strokeWidth={1.8}
-            />
-
-            <ChevronDown
-              size={11}
-              strokeWidth={1.8}
-            />
-          </button>
-
-
-          {nodeBorderStyleMenuOpen && (
-            <div className="graph-shape-popover">
-
-              {NODE_BORDER_STYLES.map(
-                ({
-                  value,
-                  label,
-                  Icon,
-                }) => (
-
-                  <button
-                    key={value}
-                    type="button"
-
-                    className={`graph-shape-option ${
-                      (
-                        selectedNode
-                          ?.borderStyle ||
-                        "solid"
-                      ) === value
-                        ? "graph-shape-option-active"
-                        : ""
-                    }`}
-
-                    onClick={() =>
-                      changeSelectedNodeBorderStyle(
-                        value
-                      )
-                    }
-
-                    data-tooltip={label}
-                    aria-label={label}
-                  >
-                    <Icon
-                      size={18}
-                      strokeWidth={1.8}
-                    />
-                  </button>
-
+              onClick={() =>
+                toggleGraphColorPicker(
+                  "node-text"
                 )
-              )}
+              }
 
-            </div>
-          )}
-        </div>
+              data-tooltip={
+                selectedNode
+                  ? "Text colour"
+                  : "Select a node first"
+              }
 
+              aria-label="Text colour"
+              aria-haspopup="dialog"
+              aria-expanded={
+                graphColorPicker === "node-text"
+              }
+            >
+              <span className="graph-toolbar-color-icon">
 
-        {/* NODE BORDER COLOUR */}
+                <Type
+                  size={19}
+                  strokeWidth={1.8}
+                />
 
-        <div className="graph-toolbar-popover-wrapper">
+                <span
+                  className="graph-toolbar-color-indicator"
+                  style={{
+                    backgroundColor:
+                      selectedNode?.textColor ||
+                      getThemeColour(
+                        "--graph-node-text",
+                        "#ffffff"
+                      ),
+                  }}
+                />
 
-          <button
-            type="button"
+              </span>
+            </button>
 
-            className="graph-toolbar-button"
+            <TreeNotesColorPicker
+              open={
+                graphColorPicker === "node-text"
+              }
 
-            disabled={!selectedNode}
+              anchorRef={
+                nodeTextColorButtonRef
+              }
 
-            onClick={() =>
-              nodeBorderColorInputRef
-                .current
-                ?.click()
-            }
-
-            data-tooltip={
-              selectedNode
-                ? "Node border colour"
-                : "Select a node first"
-            }
-
-            aria-label="Node border colour"
-          >
-            <span className="graph-toolbar-color-icon">
-
-              <SquareDashed
-                size={19}
-                strokeWidth={1.8}
-              />
-
-              <span
-                className="graph-toolbar-color-indicator"
-                style={{
-                  backgroundColor:
-                    selectedNode
-                      ?.borderColor ||
-                    getThemeColour(
-                      "--graph-node-border",
-                      "#818CF8"
-                    ),
-                }}
-              />
-
-            </span>
-          </button>
-
-
-          <input
-            ref={nodeBorderColorInputRef}
-
-            className="graph-hidden-color-input"
-
-            type="color"
-
-            value={
-              selectedNode
-                ?.borderColor ||
-              getThemeColour(
-                "--graph-node-border",
-                "#818CF8"
-              )
-            }
-
-            onChange={(event) =>
-              changeSelectedNodeBorderColor(
-                event.target.value
-              )
-            }
-          />
-
-        </div>
-
-        <span className="graph-toolbar-divider" />
-
-        {/* ================================================= */}
-        {/* EDGE / RELATIONSHIP TOOLS                         */}
-        {/* ================================================= */}
-
-        {/* LINK NODES */}
-
-        <button
-          type="button"
-
-          className={`graph-toolbar-button ${
-            linkMode
-              ? "graph-toolbar-button-active"
-              : ""
-          }`}
-
-          onClick={startLinkMode}
-
-          data-tooltip={
-            linkMode
-              ? "Cancel linking"
-              : "Create link"
-          }
-
-          aria-label={
-            linkMode
-              ? "Cancel linking"
-              : "Create link"
-          }
-          aria-pressed={linkMode}
-        >
-          <span className="graph-create-action-icon">
-
-            <MoveUpRight
-              size={18}
-              strokeWidth={1.8}
-            />
-
-            <Plus
-              className="graph-create-action-plus"
-              size={9}
-              strokeWidth={2.5}
-            />
-
-          </span>
-        </button>
-
-        {/* EDGE STYLE */}
-
-        <div
-          className="graph-toolbar-popover-wrapper"
-          ref={edgeStyleMenuRef}
-        >
-
-          <button
-            type="button"
-
-            className={`graph-toolbar-button ${
-              edgeStyleMenuOpen
-                ? "graph-toolbar-button-active"
-                : ""
-            }`}
-
-            disabled={
-              !selectedEdge
-            }
-
-            onClick={() => {
-              setEdgeStyleMenuOpen(
-                current => !current
-              );
-              setShapeMenuOpen(
-                false
-              );
-              setArrowShapeMenuOpen(
-                false
-              );
-            }}
-
-            data-tooltip={
-              selectedEdge
-                ? "Edge style"
-                : "Select an edge first"
-            }
-
-            aria-label="Edge style"
-          >
-
-            <span
-              className={`
-                graph-edge-style-preview
-                graph-edge-style-${
-                  selectedEdge?.lineStyle ||
-                  "solid"
-                }
-              `}
-            />
-
-            <ChevronDown
-              size={11}
-              strokeWidth={1.8}
-            />
-
-          </button>
-
-
-          {edgeStyleMenuOpen && (
-
-            <div className="graph-shape-popover">
-
-              {EDGE_STYLES.map(
-                ({ value, label }) => (
-
-                  <button
-                    key={value}
-                    type="button"
-
-                    className={`graph-shape-option ${
-                      (
-                        selectedEdge?.lineStyle ||
-                        "solid"
-                      ) === value
-                        ? "graph-shape-option-active"
-                        : ""
-                    }`}
-
-                    onClick={() =>
-                      changeSelectedEdgeStyle(
-                        value
-                      )
-                    }
-
-                    data-tooltip={label}
-                    aria-label={label}
-                  >
-
-                    <span
-                      className={`
-                        graph-edge-style-preview
-                        graph-edge-style-${value}
-                      `}
-                    />
-
-                  </button>
-
+              value={
+                selectedNode?.textColor ||
+                getThemeColour(
+                  "--graph-node-text",
+                  "#ffffff"
                 )
-              )}
+              }
 
-            </div>
+              onChange={
+                changeSelectedNodeTextColor
+              }
 
-          )}
-
-        </div>
-
-        {/* EDGE COLOUR */}
-
-        <div className="graph-toolbar-popover-wrapper">
-
-          <button
-            type="button"
-
-            className="graph-toolbar-button"
-
-            disabled={
-              !selectedEdge
-            }
-
-            onClick={() =>
-              edgeColorInputRef
-                .current
-                ?.click()
-            }
-
-            data-tooltip={
-              selectedEdge
-                ? "Edge colour"
-                : "Select an edge first"
-            }
-
-            aria-label="Edge colour"
-          >
-
-            <span className="graph-toolbar-color-icon">
-
-              <Minus
-                size={20}
-                strokeWidth={2}
-              />
-
-              <span
-                className="graph-toolbar-color-indicator"
-
-                style={{
-                  backgroundColor:
-                    selectedEdge?.edgeColor ||
-                    getThemeColour(
-                      "--graph-edge",
-                      "#465873"
-                    ),
-                }}
-              />
-
-            </span>
-
-          </button>
-
-
-          <input
-            ref={
-              edgeColorInputRef
-            }
-
-            className="graph-hidden-color-input"
-
-            type="color"
-
-            value={
-              selectedEdge?.edgeColor ||
-              getThemeColour(
-                "--graph-edge",
-                "#465873"
-              )
-            }
-
-            onChange={
-              event =>
-                changeSelectedEdgeColor(
-                  event.target.value
-                )
-            }
-          />
-
-        </div>
-
-        {/* ARROW SHAPE */}
-
-        <div
-          className="graph-toolbar-popover-wrapper"
-          ref={arrowShapeMenuRef}
-        >
-
-          <button
-            type="button"
-
-            className={`graph-toolbar-button ${
-              arrowShapeMenuOpen
-                ? "graph-toolbar-button-active"
-                : ""
-            }`}
-
-            disabled={
-              !selectedEdge
-            }
-
-            onClick={() => {
-              setArrowShapeMenuOpen(
-                current => !current
-              );
-              setShapeMenuOpen(
-                false
-              );
-              setEdgeStyleMenuOpen(
-                false
-              );
-            }}
-
-            data-tooltip={
-              selectedEdge
-                ? "Arrow shape"
-                : "Select an edge first"
-            }
-
-            aria-label="Arrow shape"
-          >
-
-            <CurrentArrowShapeIcon
-              size={19}
-              strokeWidth={1.8}
-
-              style={
-                currentArrowShape?.rotation
-                  ? {
-                      transform:
-                        `rotate(${currentArrowShape.rotation}deg)`,
-                    }
-                  : undefined
+              onClose={() =>
+                setGraphColorPicker(null)
               }
             />
 
-            <ChevronDown
-              size={11}
-              strokeWidth={1.8}
-            />
+          </div>
 
-          </button>
+          {/* NODE BORDER STYLE */}
 
-          {arrowShapeMenuOpen && (
-
-            <div
-              className="
-                graph-shape-popover
-                graph-icon-grid-popover
-              "
-            >
-
-              {ARROW_SHAPES.map(
-                ({
-                  value,
-                  label,
-                  Icon,
-                  rotation,
-                }) => (
-
-                  <button
-                    key={value}
-                    type="button"
-
-                    className={`graph-shape-option ${
-                      (
-                        selectedEdge?.arrowShape ||
-                        "triangle"
-                      ) === value
-                        ? "graph-shape-option-active"
-                        : ""
-                    }`}
-
-                    onClick={() =>
-                      changeSelectedArrowShape(
-                        value
-                      )
-                    }
-
-                    data-tooltip={label}
-                    aria-label={label}
-                  >
-
-                    <Icon
-                      size={18}
-                      strokeWidth={1.8}
-
-                      style={
-                        rotation
-                          ? {
-                              transform:
-                                `rotate(${rotation}deg)`,
-                            }
-                          : undefined
-                      }
-                    />
-
-                  </button>
-
-                )
-              )}
-
-            </div>
-
-          )}
-
-        </div>
-
-        {/* ARROW COLOUR */}
-
-        <div className="graph-toolbar-popover-wrapper">
-
-          <button
-            type="button"
-
-            className="graph-toolbar-button"
-
-            disabled={
-              !selectedEdge
-            }
-
-            onClick={() =>
-              arrowColorInputRef
-                .current
-                ?.click()
-            }
-
-            data-tooltip={
-              selectedEdge
-                ? "Arrow colour"
-                : "Select an edge first"
-            }
-
-            aria-label="Arrow colour"
+          <div
+            className="graph-toolbar-popover-wrapper"
+            ref={nodeBorderStyleMenuRef}
           >
+            <button
+              type="button"
 
-            <span className="graph-toolbar-color-icon">
+              className={`graph-toolbar-button ${
+                nodeBorderStyleMenuOpen
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
 
-              <ArrowRight
+              disabled={!selectedNode}
+
+              onClick={() => {
+                setNodeBorderStyleMenuOpen(
+                  current => !current
+                );
+
+                setShapeMenuOpen(false);
+                setEdgeStyleMenuOpen(false);
+                setArrowShapeMenuOpen(false);
+              }}
+
+              data-tooltip={
+                selectedNode
+                  ? "Node border style"
+                  : "Select a node first"
+              }
+
+              aria-label="Node border style"
+              aria-haspopup="true"
+              aria-expanded={
+                nodeBorderStyleMenuOpen
+              }
+            >
+              <CurrentNodeBorderStyleIcon
                 size={19}
                 strokeWidth={1.8}
               />
 
-              <span
-                className="graph-toolbar-color-indicator"
+              <ChevronDown
+                size={11}
+                strokeWidth={1.8}
+              />
+            </button>
 
-                style={{
-                  backgroundColor:
-                    selectedEdge?.arrowColor ||
-                    getThemeColour(
-                      "--graph-edge-arrow",
-                      "#7772ff"
-                    ),
-                }}
+
+            {nodeBorderStyleMenuOpen && (
+              <div className="graph-shape-popover">
+
+                {NODE_BORDER_STYLES.map(
+                  ({
+                    value,
+                    label,
+                    Icon,
+                  }) => (
+
+                    <button
+                      key={value}
+                      type="button"
+
+                      className={`graph-shape-option ${
+                        (
+                          selectedNode
+                            ?.borderStyle ||
+                          "solid"
+                        ) === value
+                          ? "graph-shape-option-active"
+                          : ""
+                      }`}
+
+                      onClick={() =>
+                        changeSelectedNodeBorderStyle(
+                          value
+                        )
+                      }
+
+                      data-tooltip={label}
+                      aria-label={label}
+                    >
+                      <Icon
+                        size={18}
+                        strokeWidth={1.8}
+                      />
+                    </button>
+
+                  )
+                )}
+
+              </div>
+            )}
+          </div>
+
+          {/* NODE BORDER COLOUR */}
+
+          <div className="graph-toolbar-popover-wrapper">
+
+            <button
+              ref={nodeBorderColorButtonRef}
+              type="button"
+
+              className={`graph-toolbar-button ${
+                graphColorPicker === "node-border"
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
+
+              disabled={!selectedNode}
+
+              onClick={() =>
+                toggleGraphColorPicker(
+                  "node-border"
+                )
+              }
+
+              data-tooltip={
+                selectedNode
+                  ? "Node border colour"
+                  : "Select a node first"
+              }
+
+              aria-label="Node border colour"
+              aria-haspopup="dialog"
+              aria-expanded={
+                graphColorPicker === "node-border"
+              }
+            >
+              <span className="graph-toolbar-color-icon">
+
+                <SquareDashed
+                  size={19}
+                  strokeWidth={1.8}
+                />
+
+                <span
+                  className="graph-toolbar-color-indicator"
+                  style={{
+                    backgroundColor:
+                      selectedNode?.borderColor ||
+                      getThemeColour(
+                        "--graph-node-border",
+                        "#818CF8"
+                      ),
+                  }}
+                />
+
+              </span>
+            </button>
+
+            <TreeNotesColorPicker
+              open={
+                graphColorPicker === "node-border"
+              }
+
+              anchorRef={
+                nodeBorderColorButtonRef
+              }
+
+              value={
+                selectedNode?.borderColor ||
+                getThemeColour(
+                  "--graph-node-border",
+                  "#818CF8"
+                )
+              }
+
+              onChange={
+                changeSelectedNodeBorderColor
+              }
+
+              onClose={() =>
+                setGraphColorPicker(null)
+              }
+            />
+
+          </div>
+
+          <span className="graph-toolbar-divider" />
+
+          {/* ================================================= */}
+          {/* EDGE / RELATIONSHIP TOOLS                         */}
+          {/* ================================================= */}
+
+          {/* LINK NODES */}
+
+          <button
+            type="button"
+
+            className={`graph-toolbar-button ${
+              linkMode
+                ? "graph-toolbar-button-active"
+                : ""
+            }`}
+
+            onClick={startLinkMode}
+
+            data-tooltip={
+              linkMode
+                ? "Cancel linking"
+                : "Create link"
+            }
+
+            aria-label={
+              linkMode
+                ? "Cancel linking"
+                : "Create link"
+            }
+            aria-pressed={linkMode}
+          >
+            <span className="graph-create-action-icon">
+
+              <MoveUpRight
+                size={18}
+                strokeWidth={1.8}
+              />
+
+              <Plus
+                className="graph-create-action-plus"
+                size={9}
+                strokeWidth={2.5}
               />
 
             </span>
-
           </button>
 
+          {/* EDGE STYLE */}
 
-          <input
-            ref={
-              arrowColorInputRef
-            }
+          <div
+            className="graph-toolbar-popover-wrapper"
+            ref={edgeStyleMenuRef}
+          >
 
-            className="graph-hidden-color-input"
+            <button
+              type="button"
 
-            type="color"
+              className={`graph-toolbar-button ${
+                edgeStyleMenuOpen
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
 
-            value={
-              selectedEdge?.arrowColor ||
-              getThemeColour(
-                "--graph-edge-arrow",
-                "#7772ff"
-              )
-            }
+              disabled={
+                !selectedEdge
+              }
 
-            onChange={
-              event =>
-                changeSelectedArrowColor(
-                  event.target.value
+              onClick={() => {
+                setEdgeStyleMenuOpen(
+                  current => !current
+                );
+                setShapeMenuOpen(
+                  false
+                );
+                setArrowShapeMenuOpen(
+                  false
+                );
+              }}
+
+              data-tooltip={
+                selectedEdge
+                  ? "Edge style"
+                  : "Select an edge first"
+              }
+
+              aria-label="Edge style"
+            >
+
+              <span
+                className={`
+                  graph-edge-style-preview
+                  graph-edge-style-${
+                    selectedEdge?.lineStyle ||
+                    "solid"
+                  }
+                `}
+              />
+
+              <ChevronDown
+                size={11}
+                strokeWidth={1.8}
+              />
+
+            </button>
+
+
+            {edgeStyleMenuOpen && (
+
+              <div className="graph-shape-popover">
+
+                {EDGE_STYLES.map(
+                  ({ value, label }) => (
+
+                    <button
+                      key={value}
+                      type="button"
+
+                      className={`graph-shape-option ${
+                        (
+                          selectedEdge?.lineStyle ||
+                          "solid"
+                        ) === value
+                          ? "graph-shape-option-active"
+                          : ""
+                      }`}
+
+                      onClick={() =>
+                        changeSelectedEdgeStyle(
+                          value
+                        )
+                      }
+
+                      data-tooltip={label}
+                      aria-label={label}
+                    >
+
+                      <span
+                        className={`
+                          graph-edge-style-preview
+                          graph-edge-style-${value}
+                        `}
+                      />
+
+                    </button>
+
+                  )
+                )}
+
+              </div>
+
+            )}
+
+          </div>
+
+          {/* EDGE COLOUR */}
+
+          <div className="graph-toolbar-popover-wrapper">
+
+            <button
+              ref={edgeColorButtonRef}
+              type="button"
+
+              className={`graph-toolbar-button ${
+                graphColorPicker === "edge"
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
+
+              disabled={!selectedEdge}
+
+              onClick={() =>
+                toggleGraphColorPicker(
+                  "edge"
                 )
+              }
+
+              data-tooltip={
+                selectedEdge
+                  ? "Edge colour"
+                  : "Select an edge first"
+              }
+
+              aria-label="Edge colour"
+              aria-haspopup="dialog"
+              aria-expanded={
+                graphColorPicker === "edge"
+              }
+            >
+              <span className="graph-toolbar-color-icon">
+
+                <Minus
+                  size={20}
+                  strokeWidth={2}
+                />
+
+                <span
+                  className="graph-toolbar-color-indicator"
+                  style={{
+                    backgroundColor:
+                      selectedEdge?.edgeColor ||
+                      getThemeColour(
+                        "--graph-edge",
+                        "#465873"
+                      ),
+                  }}
+                />
+
+              </span>
+            </button>
+
+            <TreeNotesColorPicker
+              open={
+                graphColorPicker === "edge"
+              }
+
+              anchorRef={
+                edgeColorButtonRef
+              }
+
+              value={
+                selectedEdge?.edgeColor ||
+                getThemeColour(
+                  "--graph-edge",
+                  "#465873"
+                )
+              }
+
+              onChange={
+                changeSelectedEdgeColor
+              }
+
+              onClose={() =>
+                setGraphColorPicker(null)
+              }
+            />
+
+          </div>
+
+          {/* ARROW SHAPE */}
+
+          <div
+            className="graph-toolbar-popover-wrapper"
+            ref={arrowShapeMenuRef}
+          >
+
+            <button
+              type="button"
+
+              className={`graph-toolbar-button ${
+                arrowShapeMenuOpen
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
+
+              disabled={
+                !selectedEdge
+              }
+
+              onClick={() => {
+                setArrowShapeMenuOpen(
+                  current => !current
+                );
+                setShapeMenuOpen(
+                  false
+                );
+                setEdgeStyleMenuOpen(
+                  false
+                );
+              }}
+
+              data-tooltip={
+                selectedEdge
+                  ? "Arrow shape"
+                  : "Select an edge first"
+              }
+
+              aria-label="Arrow shape"
+            >
+
+              <CurrentArrowShapeIcon
+                size={19}
+                strokeWidth={1.8}
+
+                style={
+                  currentArrowShape?.rotation
+                    ? {
+                        transform:
+                          `rotate(${currentArrowShape.rotation}deg)`,
+                      }
+                    : undefined
+                }
+              />
+
+              <ChevronDown
+                size={11}
+                strokeWidth={1.8}
+              />
+
+            </button>
+
+            {arrowShapeMenuOpen && (
+
+              <div
+                className="
+                  graph-shape-popover
+                  graph-icon-grid-popover
+                "
+              >
+
+                {ARROW_SHAPES.map(
+                  ({
+                    value,
+                    label,
+                    Icon,
+                    rotation,
+                  }) => (
+
+                    <button
+                      key={value}
+                      type="button"
+
+                      className={`graph-shape-option ${
+                        (
+                          selectedEdge?.arrowShape ||
+                          "triangle"
+                        ) === value
+                          ? "graph-shape-option-active"
+                          : ""
+                      }`}
+
+                      onClick={() =>
+                        changeSelectedArrowShape(
+                          value
+                        )
+                      }
+
+                      data-tooltip={label}
+                      aria-label={label}
+                    >
+
+                      <Icon
+                        size={18}
+                        strokeWidth={1.8}
+
+                        style={
+                          rotation
+                            ? {
+                                transform:
+                                  `rotate(${rotation}deg)`,
+                              }
+                            : undefined
+                        }
+                      />
+
+                    </button>
+
+                  )
+                )}
+
+              </div>
+
+            )}
+
+          </div>
+
+          {/* ARROW COLOUR */}
+
+          <div className="graph-toolbar-popover-wrapper">
+
+            <button
+              ref={arrowColorButtonRef}
+              type="button"
+
+              className={`graph-toolbar-button ${
+                graphColorPicker === "arrow"
+                  ? "graph-toolbar-button-active"
+                  : ""
+              }`}
+
+              disabled={!selectedEdge}
+
+              onClick={() =>
+                toggleGraphColorPicker(
+                  "arrow"
+                )
+              }
+
+              data-tooltip={
+                selectedEdge
+                  ? "Arrow colour"
+                  : "Select an edge first"
+              }
+
+              aria-label="Arrow colour"
+              aria-haspopup="dialog"
+              aria-expanded={
+                graphColorPicker === "arrow"
+              }
+            >
+              <span className="graph-toolbar-color-icon">
+
+                <ArrowRight
+                  size={19}
+                  strokeWidth={1.8}
+                />
+
+                <span
+                  className="graph-toolbar-color-indicator"
+                  style={{
+                    backgroundColor:
+                      selectedEdge?.arrowColor ||
+                      getThemeColour(
+                        "--graph-edge-arrow",
+                        "#7772ff"
+                      ),
+                  }}
+                />
+
+              </span>
+            </button>
+
+            <TreeNotesColorPicker
+              open={
+                graphColorPicker === "arrow"
+              }
+
+              anchorRef={
+                arrowColorButtonRef
+              }
+
+              value={
+                selectedEdge?.arrowColor ||
+                getThemeColour(
+                  "--graph-edge-arrow",
+                  "#7772ff"
+                )
+              }
+
+              onChange={
+                changeSelectedArrowColor
+              }
+
+              onClose={() =>
+                setGraphColorPicker(null)
+              }
+            />
+
+          </div>
+
+          <span className="graph-toolbar-divider" />
+
+          {/* ================================================= */}
+          {/* GENERAL TOOLS                                     */}
+          {/* ================================================= */}
+
+          {/* FIND LINKED TEXT */}
+
+          <button
+            type="button"
+            className="graph-toolbar-button"
+            disabled={!selectedNode}
+            onClick={() => {
+              if (!selectedNode) {
+                return;
+              }
+
+              onNavigateLinkedText?.(
+                selectedNode.id,
+                selectedNode.label
+              );
+            }}
+            data-tooltip={
+              selectedNode
+                ? "Find linked references"
+                : "Select a node first"
             }
-          />
+            aria-label="Find linked references"
+          >
+            <Search
+              size={19}
+              strokeWidth={1.8}
+            />
+          </button>
+
+          {/* DELETE ELEMENT */}
+
+          <button
+            type="button"
+            className="graph-toolbar-button"
+            onClick={deleteSelectedElement}
+            disabled={!selectedNode && !selectedEdge}
+            data-tooltip={
+              selectedNode
+                ? "Delete node"
+                : selectedEdge
+                ? "Delete edge"
+                : "Select a node or edge first"
+            }
+            aria-label="Delete selected item"
+          >
+            <Trash2
+              size={19}
+              strokeWidth={1.8}
+            />
+          </button>
 
         </div>
-
-        <span className="graph-toolbar-divider" />
-
-        {/* ================================================= */}
-        {/* GENERAL TOOLS                                     */}
-        {/* ================================================= */}
-
-        {/* DELETE ELEMENT */}
-
-        <button
-          type="button"
-          className="graph-toolbar-button"
-          onClick={deleteSelectedElement}
-          disabled={!selectedNode && !selectedEdge}
-          data-tooltip={
-            selectedNode
-              ? "Delete node"
-              : selectedEdge
-              ? "Delete edge"
-              : "Select a node or edge first"
-          }
-          aria-label="Delete selected item"
-        >
-          <Trash2
-            size={19}
-            strokeWidth={1.8}
-          />
-        </button>
-
-      </div>
-
 
         {/* =============================================== */}
         {/* GRAPH CANVAS                                    */}
         {/* =============================================== */}
 
-        <div className="graph-canvas-shell">
+        <div
+          className={`graph-canvas-shell ${
+            loading ? "graph-generating" : ""
+          }`}
+>
 
           <div
             ref={graphContainerRef}
             className="graph-container"
           />
+
+          {loading && (
+            <div className="graph-generation-overlay">
+              <div className="graph-generation-glow" />
+
+              <div className="graph-generation-content">
+                <span className="graph-generation-label">
+                  Generating graph
+                </span>
+
+                <span className="graph-generation-dots">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              </div>
+            </div>
+          )}
 
           {editingNodeId && (
             <input
@@ -5107,31 +6593,119 @@ const CurrentArrowShapeIcon =
 
           {/* CURRENT GRAPH SELECTION */}
 
-          {(selectedNode || selectedEdge) && (
+          {(
+            selectionSummary.nodes.length > 0 ||
+            selectionSummary.edges.length > 0
+          ) && (
 
-            <div className="graph-selected-node-overlay">
+            <div 
+              className="graph-selected-node-overlay"
+              
+              /*
+                Never let wheel input over this panel reach
+                Cytoscape's zoom handling.
+              */
+              onWheel={(event) => {
+                event.stopPropagation();
+              }}
+              
+              onPointerDown={(event) => {
+                event.stopPropagation();
+              }}
+            >
 
               <span>
-                {selectedNode
-                  ? "Selected node"
-                  : "Selected edge"}
+
+                {(
+                  selectionSummary.nodes.length +
+                  selectionSummary.edges.length
+                ) === 1
+
+                  ? (
+                      selectionSummary.nodes.length === 1
+                        ? "Selected node"
+                        : "Selected edge"
+                    )
+
+                  : `Selected ${
+                      selectionSummary.nodes.length +
+                      selectionSummary.edges.length
+                    } items`
+                }
+
               </span>
 
+              {/* SELECTED NODES */}
 
-              <strong>
-                {selectedNode
-                  ? selectedNode.label
-                  : `${selectedEdge.sourceLabel} → ${selectedEdge.targetLabel}`}
-              </strong>
+              {selectionSummary.nodes.length > 0 && (
 
+                <div className="graph-selection-group">
 
-              {selectedEdge && (
+                  {selectionSummary.nodes.length > 1 && (
 
-                <div className="graph-selected-edge-relationship">
+                    <div className="graph-selection-group-title">
+                      {selectionSummary.nodes.length} nodes
+                    </div>
 
-                  {selectedEdge.relationship?.trim()
-                    ? selectedEdge.relationship
-                    : "Double-click edge to add relationship"}
+                  )}
+
+                  {selectionSummary.nodes.map(
+                    node => (
+
+                      <strong
+                        key={node.id}
+                        className="graph-selection-item"
+                      >
+                        {node.label}
+                      </strong>
+
+                    )
+                  )}
+
+                </div>
+
+              )}
+
+              {/* SELECTED EDGES */}
+
+              {selectionSummary.edges.length > 0 && (
+
+                <div className="graph-selection-group">
+
+                  {selectionSummary.edges.length > 1 && (
+
+                    <div className="graph-selection-group-title">
+                      {selectionSummary.edges.length} edges
+                    </div>
+
+                  )}
+
+                  {selectionSummary.edges.map(
+                    edge => (
+
+                      <div
+                        key={edge.id}
+                        className="graph-selection-item"
+                      >
+
+                        <strong>
+                          {edge.sourceLabel}
+                          {" → "}
+                          {edge.targetLabel}
+                        </strong>
+
+                        {edge.relationship?.trim() && (
+
+                          <span className="graph-selected-edge-relationship">
+                            {edge.relationship}
+                          </span>
+
+                        )}
+
+                      </div>
+
+                    )
+                  )}
 
                 </div>
 
@@ -5140,7 +6714,6 @@ const CurrentArrowShapeIcon =
             </div>
 
           )}
-
 
           {/* LINK MODE */}
 
