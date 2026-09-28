@@ -29,6 +29,8 @@ import {
   Minus,
   ArrowRight,
   CircleX,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import SquareDottedIcon from "./icons/SquareDottedIcon";
 import VeeIcon from "./icons/VeeIcon";
@@ -594,6 +596,8 @@ const GraphPanel = forwardRef(function GraphPanel(
     noteId,
     initialGraph,
     onNavigateLinkedText,
+    isFocused = false,
+    onToggleFocus,
   },
   ref
 ) {
@@ -5205,6 +5209,20 @@ useImperativeHandle(ref, () => ({
   },
 
 
+  resizeGraph() {
+    const cy = cyRef.current;
+
+    if (!cy) {
+      return;
+    }
+
+    // Recalculate Cytoscape's viewport for the new panel size.
+    // Do not fit() here: preserving the user's current pan/zoom
+    // keeps divider dragging visually stable.
+    cy.resize();
+  },
+
+
   createLinkedTextNode(
     label,
     linkColor
@@ -5363,6 +5381,38 @@ const CurrentArrowShapeIcon =
                 ? "Generating..."
                 : "Generate Graph"}
             </span>
+          </button>
+
+          <button
+            type="button"
+            className="panel-focus-button tooltip-align-right"
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleFocus?.();
+            }}
+            aria-label={
+              isFocused
+                ? "Exit Graph View focus mode"
+                : "Focus Graph View"
+            }
+            aria-pressed={isFocused}
+            data-tooltip={
+              isFocused
+                ? "Restore layout"
+                : "Focus Graph View"
+            }
+          >
+            {isFocused ? (
+              <Minimize2
+                size={18}
+                strokeWidth={1.9}
+              />
+            ) : (
+              <Maximize2
+                size={18}
+                strokeWidth={1.9}
+              />
+            )}
           </button>
 
         </div>
@@ -6591,186 +6641,202 @@ const CurrentArrowShapeIcon =
 
           )}
 
-          {/* CURRENT GRAPH SELECTION */}
+          {/* TOP GRAPH OVERLAYS */}
 
           {(
             selectionSummary.nodes.length > 0 ||
-            selectionSummary.edges.length > 0
+            selectionSummary.edges.length > 0 ||
+            linkMode
           ) && (
 
-            <div 
-              className="graph-selected-node-overlay"
-              
-              /*
-                Never let wheel input over this panel reach
-                Cytoscape's zoom handling.
-              */
-              onWheel={(event) => {
-                event.stopPropagation();
-              }}
-              
-              onPointerDown={(event) => {
-                event.stopPropagation();
-              }}
-            >
+            <div className="graph-top-overlay-stack">
 
-              <span>
+            {/* CURRENT GRAPH SELECTION */}
 
-                {(
-                  selectionSummary.nodes.length +
-                  selectionSummary.edges.length
-                ) === 1
+            {(
+              selectionSummary.nodes.length > 0 ||
+              selectionSummary.edges.length > 0
+            ) && (
 
-                  ? (
-                      selectionSummary.nodes.length === 1
-                        ? "Selected node"
-                        : "Selected edge"
-                    )
+              <div 
+                className="graph-selected-node-overlay"
+                
+                /*
+                  Never let wheel input over this panel reach
+                  Cytoscape's zoom handling.
+                */
+                onWheel={(event) => {
+                  event.stopPropagation();
+                }}
+                
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                }}
+              >
 
-                  : `Selected ${
-                      selectionSummary.nodes.length +
-                      selectionSummary.edges.length
-                    } items`
-                }
+                <span>
 
-              </span>
+                  {(
+                    selectionSummary.nodes.length +
+                    selectionSummary.edges.length
+                  ) === 1
 
-              {/* SELECTED NODES */}
+                    ? (
+                        selectionSummary.nodes.length === 1
+                          ? "Selected node"
+                          : "Selected edge"
+                      )
 
-              {selectionSummary.nodes.length > 0 && (
+                    : `Selected ${
+                        selectionSummary.nodes.length +
+                        selectionSummary.edges.length
+                      } items`
+                  }
 
-                <div className="graph-selection-group">
+                </span>
 
-                  {selectionSummary.nodes.length > 1 && (
+                {/* SELECTED NODES */}
 
-                    <div className="graph-selection-group-title">
-                      {selectionSummary.nodes.length} nodes
-                    </div>
+                {selectionSummary.nodes.length > 0 && (
 
-                  )}
+                  <div className="graph-selection-group">
 
-                  {selectionSummary.nodes.map(
-                    node => (
+                    {selectionSummary.nodes.length > 1 && (
 
-                      <strong
-                        key={node.id}
-                        className="graph-selection-item"
-                      >
-                        {node.label}
-                      </strong>
-
-                    )
-                  )}
-
-                </div>
-
-              )}
-
-              {/* SELECTED EDGES */}
-
-              {selectionSummary.edges.length > 0 && (
-
-                <div className="graph-selection-group">
-
-                  {selectionSummary.edges.length > 1 && (
-
-                    <div className="graph-selection-group-title">
-                      {selectionSummary.edges.length} edges
-                    </div>
-
-                  )}
-
-                  {selectionSummary.edges.map(
-                    edge => (
-
-                      <div
-                        key={edge.id}
-                        className="graph-selection-item"
-                      >
-
-                        <strong>
-                          {edge.sourceLabel}
-                          {" → "}
-                          {edge.targetLabel}
-                        </strong>
-
-                        {edge.relationship?.trim() && (
-
-                          <span className="graph-selected-edge-relationship">
-                            {edge.relationship}
-                          </span>
-
-                        )}
-
+                      <div className="graph-selection-group-title">
+                        {selectionSummary.nodes.length} nodes
                       </div>
 
-                    )
-                  )}
+                    )}
 
-                </div>
+                    {selectionSummary.nodes.map(
+                      node => (
 
-              )}
+                        <strong
+                          key={node.id}
+                          className="graph-selection-item"
+                        >
+                          {node.label}
+                        </strong>
 
-            </div>
+                      )
+                    )}
 
-          )}
+                  </div>
 
-          {/* LINK MODE */}
+                )}
 
-          {linkMode && (
-            <div className="graph-link-mode-overlay">
+                {/* SELECTED EDGES */}
 
-              <Link2
-                size={16}
-                strokeWidth={1.8}
-              />
+                {selectionSummary.edges.length > 0 && (
 
-              <div>
+                  <div className="graph-selection-group">
 
-                {!firstNodeToLink ? (
-                  <>
-                    <strong>
-                      Link nodes
-                    </strong>
+                    {selectionSummary.edges.length > 1 && (
 
-                    <span>
-                      Select the first node
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <strong>
-                      First node:{" "}
-                      {
-                        cyRef.current
-                          ?.getElementById(
-                            firstNodeToLink
-                          )
-                          .data("label")
-                      }
-                    </strong>
+                      <div className="graph-selection-group-title">
+                        {selectionSummary.edges.length} edges
+                      </div>
 
-                    <span>
-                      Select the second node
-                    </span>
-                  </>
+                    )}
+
+                    {selectionSummary.edges.map(
+                      edge => (
+
+                        <div
+                          key={edge.id}
+                          className="graph-selection-item"
+                        >
+
+                          <strong>
+                            {edge.sourceLabel}
+                            {" → "}
+                            {edge.targetLabel}
+                          </strong>
+
+                          {edge.relationship?.trim() && (
+
+                            <span className="graph-selected-edge-relationship">
+                              {edge.relationship}
+                            </span>
+
+                          )}
+
+                        </div>
+
+                      )
+                    )}
+
+                  </div>
+
                 )}
 
               </div>
 
+            )}
 
-              <button
-                type="button"
-                onClick={cancelLinkMode}
-                aria-label="Cancel linking"
-              >
-                <X
-                  size={15}
+            {/* LINK MODE */}
+
+            {linkMode && (
+              <div className="graph-link-mode-overlay">
+
+                <Link2
+                  size={16}
                   strokeWidth={1.8}
                 />
-              </button>
+
+                <div>
+
+                  {!firstNodeToLink ? (
+                    <>
+                      <strong>
+                        Link nodes
+                      </strong>
+
+                      <span>
+                        Select the first node
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <strong>
+                        First node:{" "}
+                        {
+                          cyRef.current
+                            ?.getElementById(
+                              firstNodeToLink
+                            )
+                            .data("label")
+                        }
+                      </strong>
+
+                      <span>
+                        Select the second node
+                      </span>
+                    </>
+                  )}
+
+                </div>
+
+
+                <button
+                  type="button"
+                  onClick={cancelLinkMode}
+                  aria-label="Cancel linking"
+                >
+                  <X
+                    size={15}
+                    strokeWidth={1.8}
+                  />
+                </button>
+
+              </div>
+            )}
+
+
 
             </div>
+
           )}
 
 

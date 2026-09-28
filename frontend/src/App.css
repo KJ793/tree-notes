@@ -2516,3 +2516,18 @@ body{
       scaleY(0.9);
   }
 }
+
+.dashboard-navbar {
+  position: relative;
+  z-index: 4000;
+  overflow: visible;
+}
+
+.dashboard-navbar .profile-menu-container {
+  position: relative;
+  z-index: 4100;
+}
+
+.dashboard-navbar .profile-dropdown {
+  z-index: 4200;
+}

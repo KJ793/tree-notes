@@ -22,7 +22,6 @@ import {
   Type,
   Highlighter,
   Unlink,
-  Eraser,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -34,9 +33,62 @@ import {
   X,
   ChevronRight,
   Replace,
+  Maximize2,
+  Minimize2,
+  Check,
 } from "lucide-react";
 
+import {
+  LayoutBalancedIcon,
+  LayoutNotesPriorityIcon,
+  LayoutGraphPriorityIcon,
+  LayoutSummaryPriorityIcon,
+} from "./icons/WorkspaceLayoutIcons";
+
 import "./NoteWorkspace.css";
+
+// =========================================================
+// WORKSPACE LAYOUT PRESETS
+// =========================================================
+
+// Presets only provide useful starting arrangements. The
+// user can immediately drag any resize control afterwards;
+// once a value no longer matches a preset, the menu reports
+// the current arrangement as Custom.
+const WORKSPACE_LAYOUT_PRESETS = [
+  {
+    value: "balanced",
+    label: "Balanced",
+    Icon: LayoutBalancedIcon,
+    notesGraphSplit: 50,
+    topPanelsHeight: 480,
+    summaryPanelHeight: 264,
+  },
+  {
+    value: "notes-priority",
+    label: "Notes Priority",
+    Icon: LayoutNotesPriorityIcon,
+    notesGraphSplit: 70,
+    topPanelsHeight: 650,
+    summaryPanelHeight: 264,
+  },
+  {
+    value: "graph-priority",
+    label: "Graph Priority",
+    Icon: LayoutGraphPriorityIcon,
+    notesGraphSplit: 30,
+    topPanelsHeight: 650,
+    summaryPanelHeight: 264,
+  },
+  {
+    value: "summary-priority",
+    label: "Summary Priority",
+    Icon: LayoutSummaryPriorityIcon,
+    notesGraphSplit: 50,
+    topPanelsHeight: 480,
+    summaryPanelHeight: 600,
+  },
+];
 
 const NoteWorkspace = forwardRef(function NoteWorkspace(
   { note, onNoteSaved },
@@ -46,6 +98,635 @@ const NoteWorkspace = forwardRef(function NoteWorkspace(
 const editorRef = useRef(null);
 // graph panel refrence for saving 
 const graphPanelRef = useRef(null);
+
+// =========================================================
+// WORKSPACE LAYOUT MENU
+// =========================================================
+
+const layoutDropdownRef = useRef(null);
+const [layoutDropdownOpen, setLayoutDropdownOpen] = useState(false);
+
+// Match the Profile preferences dropdown behaviour: click
+// outside or press Escape to close the menu.
+useEffect(() => {
+  function handleLayoutPointerDown(event) {
+    if (layoutDropdownRef.current && !layoutDropdownRef.current.contains(event.target)) {
+      setLayoutDropdownOpen(false);
+    }
+  }
+
+  function handleLayoutEscape(event) {
+    if (event.key === "Escape") {
+      setLayoutDropdownOpen(false);
+    }
+  }
+
+  document.addEventListener(
+    "pointerdown",
+    handleLayoutPointerDown
+  );
+
+  document.addEventListener(
+    "keydown",
+    handleLayoutEscape
+  );
+
+  return () => {
+    document.removeEventListener(
+      "pointerdown",
+      handleLayoutPointerDown
+    );
+
+    document.removeEventListener(
+      "keydown",
+      handleLayoutEscape
+    );
+  };
+}, []);
+
+// =========================================================
+// PANEL FOCUS MODE
+// =========================================================
+
+// null = normal three-panel workspace
+// "notes" / "graph" / "summary" = focused application view
+const [focusedPanel, setFocusedPanel] = useState(null);
+const [focusedPanelHeight, setFocusedPanelHeight] = useState(null);
+
+function togglePanelFocus(panelName) {
+  setFocusedPanel((currentPanel) =>
+    currentPanel === panelName
+      ? null
+      : panelName
+  );
+}
+
+// Escape always restores the user's previous multi-panel layout.
+useEffect(() => {
+  if (!focusedPanel) {
+    return undefined;
+  }
+
+  function handleFocusEscape(event) {
+    if (event.key === "Escape" && !layoutDropdownOpen) {
+      setFocusedPanel(null);
+    }
+  }
+
+  window.addEventListener(
+    "keydown",
+    handleFocusEscape
+  );
+
+  return () => {
+    window.removeEventListener(
+      "keydown",
+      handleFocusEscape
+    );
+  };
+}, [focusedPanel, layoutDropdownOpen]);
+
+// Measure the remaining viewport underneath the note title so the
+// focused panel fills the application workspace without invoking
+// the browser Fullscreen API.
+useEffect(() => {
+  if (!focusedPanel) {
+    setFocusedPanelHeight(null);
+    return undefined;
+  }
+
+  let frameId = null;
+
+  function updateFocusedPanelHeight() {
+    if (frameId !== null) {
+      cancelAnimationFrame(frameId);
+    }
+
+    frameId = requestAnimationFrame(() => {
+      const targetShell =
+        focusedPanel === "summary"
+          ? summaryPanelShellRef.current
+          : topPanelsShellRef.current;
+
+      if (!targetShell) {
+        return;
+      }
+
+      const bounds = targetShell.getBoundingClientRect();
+
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+
+      const availableHeight = Math.max(420, viewportHeight - Math.max(bounds.top, 0) - 18);
+
+      setFocusedPanelHeight(Math.floor(availableHeight));
+
+      requestAnimationFrame(() => {
+        graphPanelRef.current
+          ?.resizeGraph?.();
+      });
+    });
+  }
+
+  updateFocusedPanelHeight();
+
+  window.addEventListener(
+    "resize",
+    updateFocusedPanelHeight
+  );
+
+  return () => {
+    if (frameId !== null) {
+      cancelAnimationFrame(frameId);
+    }
+
+    window.removeEventListener(
+      "resize",
+      updateFocusedPanelHeight
+    );
+  };
+}, [focusedPanel]);
+
+// =========================================================
+// WORKSPACE PANEL RESIZING
+// =========================================================
+
+// The desktop Raw Notes / Graph View row itself.
+const notesLayoutRef = useRef(null);
+
+// Pointer-drag state is kept in a ref so movement remains
+// reliable even between React state updates.
+const notesGraphDraggingRef = useRef(false);
+
+const NOTES_GRAPH_MIN_SPLIT = 20;
+const NOTES_GRAPH_MAX_SPLIT = 80;
+
+function clampNotesGraphSplit(value) {
+  return Math.min(
+    NOTES_GRAPH_MAX_SPLIT,
+    Math.max(
+      NOTES_GRAPH_MIN_SPLIT,
+      value
+    )
+  );
+}
+
+const [notesGraphSplit, setNotesGraphSplit] = useState(() => {
+  if (typeof window === "undefined") {
+    return 50;
+  }
+
+  const savedSplit = Number(
+    window.localStorage.getItem(
+      "treenotes-notes-graph-split"
+    )
+  );
+
+  return Number.isFinite(savedSplit)
+    ? clampNotesGraphSplit(savedSplit)
+    : 50;
+});
+
+const [isResizingNotesGraph, setIsResizingNotesGraph] = useState(false);
+
+// ---------------------------------------------------------
+// Shared Raw Notes + Graph View vertical resizing
+// ---------------------------------------------------------
+
+// Both upper panels always keep the same height. The user can
+// drag one shared grip beneath the row to gain more vertical
+// writing / graph space without stealing height from Summary.
+const topPanelsShellRef = useRef(null);
+const topPanelsDraggingRef = useRef(false);
+const topPanelsPointerOffsetRef = useRef(0);
+
+const TOP_PANELS_DEFAULT_HEIGHT = 480;
+const TOP_PANELS_MIN_HEIGHT = 480;
+const TOP_PANELS_MAX_HEIGHT = 1000;
+
+function clampTopPanelsHeight(value) {
+  return Math.min(
+    TOP_PANELS_MAX_HEIGHT,
+    Math.max(
+      TOP_PANELS_MIN_HEIGHT,
+      value
+    )
+  );
+}
+
+const [topPanelsHeight, setTopPanelsHeight] = useState(() => {
+  if (typeof window === "undefined") {
+    return TOP_PANELS_DEFAULT_HEIGHT;
+  }
+
+  const savedHeight = Number(window.localStorage.getItem("treenotes-top-panels-height"));
+
+  return Number.isFinite(savedHeight)
+    ? clampTopPanelsHeight(savedHeight)
+    : TOP_PANELS_DEFAULT_HEIGHT;
+});
+
+const [isResizingTopPanels, setIsResizingTopPanels] = useState(false);
+
+// Remember the user's preferred upper workspace height.
+useEffect(() => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(
+    "treenotes-top-panels-height",
+    String(topPanelsHeight)
+  );
+}, [topPanelsHeight]);
+
+// Remember the user's preferred desktop split.
+useEffect(() => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(
+    "treenotes-notes-graph-split",
+    String(notesGraphSplit)
+  );
+}, [notesGraphSplit]);
+
+// Tell Cytoscape its container changed size.
+// requestAnimationFrame waits until the new grid width has
+// reached the DOM before Cytoscape measures it.
+useEffect(() => {
+  const frame = requestAnimationFrame(() => {
+    graphPanelRef.current
+      ?.resizeGraph?.();
+  });
+
+  return () => {
+    cancelAnimationFrame(frame);
+  };
+}, [notesGraphSplit, topPanelsHeight, focusedPanel, focusedPanelHeight]);
+
+// Prevent accidental text selection while dragging the divider.
+useEffect(() => {
+  if (!isResizingNotesGraph) {
+    return undefined;
+  }
+
+  const previousCursor = document.body.style.cursor;
+  const previousUserSelect = document.body.style.userSelect;
+
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+
+  return () => {
+    document.body.style.cursor = previousCursor;
+    document.body.style.userSelect = previousUserSelect;
+  };
+}, [isResizingNotesGraph]);
+
+function updateNotesGraphSplit(clientX) {
+  const layout = notesLayoutRef.current;
+
+  if (!layout) {
+    return;
+  }
+
+  const bounds = layout.getBoundingClientRect();
+
+  if (bounds.width <= 0) {
+    return;
+  }
+
+  const pointerX = clientX - bounds.left;
+  const nextSplit = (pointerX / bounds.width) * 100;
+
+  setNotesGraphSplit(
+    clampNotesGraphSplit(nextSplit)
+  );
+}
+
+function finishNotesGraphResize(event) {
+  if (!notesGraphDraggingRef.current) {
+    return;
+  }
+
+  notesGraphDraggingRef.current = false;
+  setIsResizingNotesGraph(false);
+
+  if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+}
+
+function handleNotesGraphResizeKeyDown(event) {
+  let nextSplit = null;
+
+  if (event.key === "ArrowLeft") {
+    nextSplit = notesGraphSplit - 5;
+  } else if (event.key === "ArrowRight") {
+    nextSplit = notesGraphSplit + 5;
+  } else if (event.key === "Home") {
+    nextSplit = NOTES_GRAPH_MIN_SPLIT;
+  } else if (event.key === "End") {
+    nextSplit = NOTES_GRAPH_MAX_SPLIT;
+  }
+
+  if (nextSplit === null) {
+    return;
+  }
+
+  event.preventDefault();
+
+  setNotesGraphSplit(
+    clampNotesGraphSplit(nextSplit)
+  );
+}
+
+// Prevent text selection while dragging the shared bottom edge.
+useEffect(() => {
+  if (!isResizingTopPanels) {
+    return undefined;
+  }
+
+  const previousCursor = document.body.style.cursor;
+  const previousUserSelect = document.body.style.userSelect;
+
+  document.body.style.cursor = "row-resize";
+  document.body.style.userSelect = "none";
+
+  return () => {
+    document.body.style.cursor = previousCursor;
+    document.body.style.userSelect = previousUserSelect;
+  };
+}, [isResizingTopPanels]);
+
+function updateTopPanelsHeight(clientY) {
+  const shell = topPanelsShellRef.current;
+
+  if (!shell) {
+    return;
+  }
+
+  const bounds = shell.getBoundingClientRect();
+
+  const nextHeight =
+    clientY -
+    bounds.top -
+    topPanelsPointerOffsetRef.current;
+
+  setTopPanelsHeight(
+    clampTopPanelsHeight(nextHeight)
+  );
+}
+
+function finishTopPanelsResize(event) {
+  if (!topPanelsDraggingRef.current) {
+    return;
+  }
+
+  topPanelsDraggingRef.current = false;
+  setIsResizingTopPanels(false);
+
+  if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+}
+
+function handleTopPanelsResizeKeyDown(event) {
+  let nextHeight = null;
+
+  if (event.key === "ArrowUp") {
+    nextHeight = topPanelsHeight - 24;
+  } else if (event.key === "ArrowDown") {
+    nextHeight = topPanelsHeight + 24;
+  } else if (event.key === "PageUp") {
+    nextHeight = topPanelsHeight - 100;
+  } else if (event.key === "PageDown") {
+    nextHeight = topPanelsHeight + 100;
+  } else if (event.key === "Home") {
+    nextHeight = TOP_PANELS_MIN_HEIGHT;
+  } else if (event.key === "End") {
+    nextHeight = TOP_PANELS_MAX_HEIGHT;
+  }
+
+  if (nextHeight === null) {
+    return;
+  }
+
+  event.preventDefault();
+
+  setTopPanelsHeight(
+    clampTopPanelsHeight(nextHeight)
+  );
+}
+
+// ---------------------------------------------------------
+// Summary panel vertical resizing
+// ---------------------------------------------------------
+
+// The Summary keeps its current compact size by default, but the
+// user can pull its bottom edge downward whenever they want more
+// writing room. The textarea still keeps its own internal scrollbar.
+const summaryPanelShellRef = useRef(null);
+const summaryPanelDraggingRef = useRef(false);
+const summaryPanelPointerOffsetRef = useRef(0);
+
+const SUMMARY_PANEL_MIN_HEIGHT = 264;
+const SUMMARY_PANEL_MAX_HEIGHT = 1200;
+
+function clampSummaryPanelHeight(value) {
+  return Math.min(
+    SUMMARY_PANEL_MAX_HEIGHT,
+    Math.max(
+      SUMMARY_PANEL_MIN_HEIGHT,
+      value
+    )
+  );
+}
+
+const [summaryPanelHeight, setSummaryPanelHeight] = useState(() => {
+  if (typeof window === "undefined") {
+    return SUMMARY_PANEL_MIN_HEIGHT;
+  }
+
+  const savedHeight = Number(
+    window.localStorage.getItem(
+      "treenotes-summary-panel-height"
+    )
+  );
+
+  return Number.isFinite(savedHeight)
+    ? clampSummaryPanelHeight(savedHeight)
+    : SUMMARY_PANEL_MIN_HEIGHT;
+});
+
+const [isResizingSummaryPanel, setIsResizingSummaryPanel] = useState(false);
+
+// Remember the user's preferred Summary height.
+useEffect(() => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(
+    "treenotes-summary-panel-height",
+    String(summaryPanelHeight)
+  );
+}, [summaryPanelHeight]);
+
+// Prevent text selection while dragging the Summary edge.
+useEffect(() => {
+  if (!isResizingSummaryPanel) {
+    return undefined;
+  }
+
+  const previousCursor = document.body.style.cursor;
+  const previousUserSelect = document.body.style.userSelect;
+
+  document.body.style.cursor = "row-resize";
+  document.body.style.userSelect = "none";
+
+  return () => {
+    document.body.style.cursor = previousCursor;
+    document.body.style.userSelect = previousUserSelect;
+  };
+}, [isResizingSummaryPanel]);
+
+function updateSummaryPanelHeight(clientY) {
+  const shell = summaryPanelShellRef.current;
+
+  if (!shell) {
+    return;
+  }
+
+  const bounds = shell.getBoundingClientRect();
+
+  const nextHeight =
+    clientY -
+    bounds.top -
+    summaryPanelPointerOffsetRef.current;
+
+  setSummaryPanelHeight(
+    clampSummaryPanelHeight(nextHeight)
+  );
+}
+
+function finishSummaryPanelResize(event) {
+  if (!summaryPanelDraggingRef.current) {
+    return;
+  }
+
+  summaryPanelDraggingRef.current = false;
+  setIsResizingSummaryPanel(false);
+
+  if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+}
+
+function handleSummaryPanelResizeKeyDown(event) {
+  let nextHeight = null;
+
+  if (event.key === "ArrowUp") {
+    nextHeight = summaryPanelHeight - 24;
+  } else if (event.key === "ArrowDown") {
+    nextHeight = summaryPanelHeight + 24;
+  } else if (event.key === "PageUp") {
+    nextHeight = summaryPanelHeight - 100;
+  } else if (event.key === "PageDown") {
+    nextHeight = summaryPanelHeight + 100;
+  } else if (event.key === "Home") {
+    nextHeight = SUMMARY_PANEL_MIN_HEIGHT;
+  } else if (event.key === "End") {
+    nextHeight = SUMMARY_PANEL_MAX_HEIGHT;
+  }
+
+  if (nextHeight === null) {
+    return;
+  }
+
+  event.preventDefault();
+
+  setSummaryPanelHeight(
+    clampSummaryPanelHeight(nextHeight)
+  );
+}
+
+// ---------------------------------------------------------
+// Layout preset detection / application
+// ---------------------------------------------------------
+
+const activeLayoutPreset =
+  WORKSPACE_LAYOUT_PRESETS.find(
+    (preset) =>
+      Math.abs(
+        notesGraphSplit -
+        preset.notesGraphSplit
+      ) < 0.5 &&
+      Math.abs(
+        topPanelsHeight -
+        preset.topPanelsHeight
+      ) < 1 &&
+      Math.abs(
+        summaryPanelHeight -
+        preset.summaryPanelHeight
+      ) < 1
+  ) ?? null;
+
+const activeLayoutValue =
+  activeLayoutPreset?.value ??
+  "custom";
+
+const activeLayoutLabel =
+  activeLayoutPreset?.label ??
+  "Custom";
+
+// Focus Mode temporarily takes precedence over the underlying
+// preset/custom label. The stored draggable values stay untouched,
+// so restoring focus immediately reveals the correct layout again.
+const workspaceLayoutDisplayValue =
+  focusedPanel
+    ? "focused"
+    : activeLayoutValue;
+
+const workspaceLayoutDisplayLabel =
+  focusedPanel
+    ? "Focused"
+    : activeLayoutLabel;
+
+// Use the custom layout artwork for known presets. Custom keeps
+// the generic Cornell-style Balanced icon, while Focus Mode uses
+// Maximize2 because it is a temporary single-panel state rather
+// than another three-panel preset.
+const WorkspaceLayoutTriggerIcon =
+  focusedPanel
+    ? Maximize2
+    : activeLayoutPreset?.Icon ??
+      LayoutBalancedIcon;
+
+function applyWorkspaceLayout(preset) {
+  setNotesGraphSplit(
+    clampNotesGraphSplit(
+      preset.notesGraphSplit
+    )
+  );
+
+  setTopPanelsHeight(
+    clampTopPanelsHeight(
+      preset.topPanelsHeight
+    )
+  );
+
+  setSummaryPanelHeight(
+    clampSummaryPanelHeight(
+      preset.summaryPanelHeight
+    )
+  );
+
+  // A layout preset describes the multi-panel workspace,
+  // so selecting one also returns from Focus Mode.
+  setFocusedPanel(null);
+  setLayoutDropdownOpen(false);
+}
 
 // Stores the current text selection while using colour pickers
 const savedSelectionRef = useRef(null);
@@ -2532,7 +3213,19 @@ function inferGraphLinkPaletteSlot(
 
   return (
     <div 
-      className="note-workspace"
+      className={`note-workspace ${
+        focusedPanel
+          ? `workspace-focus-mode focus-${focusedPanel}`
+          : ""
+      }`}
+      style={{
+        ...(focusedPanelHeight
+          ? {
+              "--focused-panel-height":
+                `${focusedPanelHeight}px`,
+            }
+          : {}),
+      }}
       onClick={() => {
         setContextMenu(null);
         setGraphNodeMenuOpen(false);
@@ -2541,16 +3234,190 @@ function inferGraphLinkPaletteSlot(
     >
 
     {/* << frontend dev >> */}
-    {/* Note title input */}
+    {/* Note title + workspace layout selector */}
 
-      <input
-        type="text"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        className="note-title"
-      />
+      <div className="note-title-panel">
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="note-title"
+        />
 
-      <div className="notes-layout">
+        <div
+          className="workspace-layout-dropdown"
+          ref={layoutDropdownRef}
+        >
+          <button
+            type="button"
+            className={`workspace-layout-trigger ${
+              layoutDropdownOpen
+                ? "workspace-layout-trigger-open"
+                : ""
+            }`}
+            aria-haspopup="listbox"
+            aria-expanded={layoutDropdownOpen}
+            aria-label={`Workspace layout: ${workspaceLayoutDisplayLabel}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setLayoutDropdownOpen(
+                (current) => !current
+              );
+            }}
+          >
+            <WorkspaceLayoutTriggerIcon
+              size={17}
+              strokeWidth={1.8}
+              className="workspace-layout-trigger-icon"
+              aria-hidden="true"
+            />
+
+            <span className="workspace-layout-trigger-label">
+              {workspaceLayoutDisplayLabel}
+            </span>
+
+            <ChevronDown
+              size={15}
+              strokeWidth={1.8}
+              className={`workspace-layout-chevron ${
+                layoutDropdownOpen
+                  ? "workspace-layout-chevron-open"
+                  : ""
+              }`}
+              aria-hidden="true"
+            />
+          </button>
+
+          {layoutDropdownOpen && (
+            <div
+              className="workspace-layout-menu"
+              role="listbox"
+              aria-label="Workspace layout"
+              onClick={(event) =>
+                event.stopPropagation()
+              }
+            >
+              {(workspaceLayoutDisplayValue === "custom" ||
+                workspaceLayoutDisplayValue === "focused") && (
+                <>
+                  <div
+                    className="workspace-layout-option workspace-layout-option-selected workspace-layout-status"
+                    role="option"
+                    aria-selected="true"
+                  >
+                    <span className="workspace-layout-option-main">
+                      {workspaceLayoutDisplayValue === "focused" ? (
+                        <Maximize2
+                          size={16}
+                          strokeWidth={1.8}
+                          className="workspace-layout-option-icon"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <LayoutBalancedIcon
+                          size={16}
+                          strokeWidth={1.8}
+                          className="workspace-layout-option-icon"
+                          aria-hidden="true"
+                        />
+                      )}
+
+                      <span>
+                        {workspaceLayoutDisplayLabel}
+                      </span>
+                    </span>
+
+                    <Check
+                      size={14}
+                      strokeWidth={2}
+                      aria-hidden="true"
+                    />
+                  </div>
+
+                  <div
+                    className="workspace-layout-menu-divider"
+                    aria-hidden="true"
+                  />
+                </>
+              )}
+
+              {WORKSPACE_LAYOUT_PRESETS.map(
+                (preset) => {
+                  const isSelected =
+                    workspaceLayoutDisplayValue ===
+                    preset.value;
+
+                  const PresetIcon = preset.Icon;
+
+                  return (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      className={`workspace-layout-option ${
+                        isSelected
+                          ? "workspace-layout-option-selected"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        applyWorkspaceLayout(
+                          preset
+                        )
+                      }
+                    >
+                      <span className="workspace-layout-option-main">
+                        <PresetIcon
+                          size={16}
+                          strokeWidth={1.8}
+                          className="workspace-layout-option-icon"
+                          aria-hidden="true"
+                        />
+
+                        <span>
+                          {preset.label}
+                        </span>
+                      </span>
+
+                      {isSelected && (
+                        <Check
+                          size={14}
+                          strokeWidth={2}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </button>
+                  );
+                }
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div
+        ref={topPanelsShellRef}
+        className={`notes-row-resizable-shell ${
+          isResizingTopPanels
+            ? "notes-row-resizing"
+            : ""
+        }`}
+        style={{
+          "--top-panels-height": `${topPanelsHeight}px`,
+        }}
+      >
+      <div
+        ref={notesLayoutRef}
+        className={`notes-layout ${
+          isResizingNotesGraph
+            ? "notes-layout-resizing"
+            : ""
+        }`}
+        style={{
+          "--notes-panel-fr": `${notesGraphSplit}fr`,
+          "--graph-panel-fr": `${100 - notesGraphSplit}fr`,
+        }}
+      >
         <section className="raw-notes">
           
           <div className="raw-notes-heading">
@@ -2564,6 +3431,38 @@ function inferGraphLinkPaletteSlot(
                 aria-hidden="true"
               />
             </div>
+
+            <button
+              type="button"
+              className="panel-focus-button tooltip-align-right"
+              onClick={(event) => {
+                event.stopPropagation();
+                togglePanelFocus("notes");
+              }}
+              aria-label={
+                focusedPanel === "notes"
+                  ? "Exit Raw Notes focus mode"
+                  : "Focus Raw Notes"
+              }
+              aria-pressed={focusedPanel === "notes"}
+              data-tooltip={
+                focusedPanel === "notes"
+                  ? "Restore layout"
+                  : "Focus Raw Notes"
+              }
+            >
+              {focusedPanel === "notes" ? (
+                <Minimize2
+                  size={18}
+                  strokeWidth={1.9}
+                />
+              ) : (
+                <Maximize2
+                  size={18}
+                  strokeWidth={1.9}
+                />
+              )}
+            </button>
 
           </div>
           
@@ -3281,7 +4180,9 @@ function inferGraphLinkPaletteSlot(
               
             </div>
 
-            {linkedTextNavigator && (
+            <div className="raw-notes-content-shell">
+
+              {linkedTextNavigator && (
               <div
                 className="linked-text-navigator"
                 role="group"
@@ -3646,6 +4547,8 @@ function inferGraphLinkPaletteSlot(
               onKeyUp={updateFormattingState}
               onFocus={updateFormattingState}
             >
+
+            </div>
 
             </div>
 
@@ -4130,6 +5033,56 @@ function inferGraphLinkPaletteSlot(
 
         </section>
 
+        <div
+          className="notes-graph-resizer"
+          role="separator"
+          aria-label="Resize Raw Notes and Graph View"
+          aria-orientation="vertical"
+          aria-valuemin={NOTES_GRAPH_MIN_SPLIT}
+          aria-valuemax={NOTES_GRAPH_MAX_SPLIT}
+          aria-valuenow={Math.round(notesGraphSplit)}
+          tabIndex={0}
+          onPointerDown={(event) => {
+            if (
+              typeof window !== "undefined" &&
+              window.matchMedia(
+                "(max-width: 1100px)"
+              ).matches
+            ) {
+              return;
+            }
+
+            notesGraphDraggingRef.current = true;
+            setIsResizingNotesGraph(true);
+
+            event.currentTarget
+              .setPointerCapture?.(
+                event.pointerId
+              );
+
+            updateNotesGraphSplit(
+              event.clientX
+            );
+          }}
+          onPointerMove={(event) => {
+            if (!notesGraphDraggingRef.current) {
+              return;
+            }
+
+            updateNotesGraphSplit(
+              event.clientX
+            );
+          }}
+          onPointerUp={finishNotesGraphResize}
+          onPointerCancel={finishNotesGraphResize}
+          onKeyDown={handleNotesGraphResizeKeyDown}
+        >
+          <span
+            className="notes-graph-resizer-line"
+            aria-hidden="true"
+          />
+        </div>
+
         {/* << GRAPH / AI CONNECTION >> */}
         {/* Provides current note text to GraphPanel */}
         {/* GraphPanel sends rawNotes to backend / AI */}
@@ -4142,18 +5095,152 @@ function inferGraphLinkPaletteSlot(
         initialGraph={note.graph_json}
         ref={graphPanelRef}
         onNavigateLinkedText={openLinkedTextNavigator}
+        isFocused={focusedPanel === "graph"}
+        onToggleFocus={() =>
+          togglePanelFocus("graph")
+        }
         />
+      </div>
+
+        <div
+          className="top-panels-resizer"
+          role="separator"
+          aria-label="Resize Raw Notes and Graph View height"
+          aria-orientation="horizontal"
+          aria-valuemin={TOP_PANELS_MIN_HEIGHT}
+          aria-valuemax={TOP_PANELS_MAX_HEIGHT}
+          aria-valuenow={Math.round(topPanelsHeight)}
+          tabIndex={0}
+          onPointerDown={(event) => {
+            if (event.button !== 0) {
+              return;
+            }
+
+            if (
+              typeof window !== "undefined" &&
+              window.matchMedia(
+                "(max-width: 1100px)"
+              ).matches
+            ) {
+              return;
+            }
+
+            const shell = topPanelsShellRef.current;
+
+            if (!shell) {
+              return;
+            }
+
+            const bounds = shell.getBoundingClientRect();
+
+            topPanelsPointerOffsetRef.current =
+              event.clientY - bounds.bottom;
+
+            topPanelsDraggingRef.current = true;
+            setIsResizingTopPanels(true);
+
+            event.currentTarget
+              .setPointerCapture?.(
+                event.pointerId
+              );
+          }}
+          onPointerMove={(event) => {
+            if (!topPanelsDraggingRef.current) {
+              return;
+            }
+
+            updateTopPanelsHeight(
+              event.clientY
+            );
+          }}
+          onPointerUp={finishTopPanelsResize}
+          onPointerCancel={finishTopPanelsResize}
+          onKeyDown={handleTopPanelsResizeKeyDown}
+        >
+          <span
+            className="top-panels-resizer-grip"
+            aria-hidden="true"
+          />
+        </div>
       </div>
 
       {/* << SUMMARY / AI CONNECTION >> */  }
       {/* Provides current note text to SummaryPanel */}
       {/* SummaryPanel sends rawNotes to backend / AI */}
 
-      <SummaryPanel
-        rawNotes={rawNotes}
-        summary={summary}
-        onSummaryChange={setSummary}
-      />
+      <div
+        ref={summaryPanelShellRef}
+        className={`summary-resizable-shell ${
+          isResizingSummaryPanel
+            ? "summary-panel-resizing"
+            : ""
+        }`}
+        style={{
+          "--summary-panel-height": `${summaryPanelHeight}px`,
+        }}
+      >
+        <SummaryPanel
+          rawNotes={rawNotes}
+          summary={summary}
+          onSummaryChange={setSummary}
+          isFocused={focusedPanel === "summary"}
+          onToggleFocus={() =>
+            togglePanelFocus("summary")
+          }
+        />
+
+        <div
+          className="summary-panel-resizer"
+          role="separator"
+          aria-label="Resize Summary panel"
+          aria-orientation="horizontal"
+          aria-valuemin={SUMMARY_PANEL_MIN_HEIGHT}
+          aria-valuemax={SUMMARY_PANEL_MAX_HEIGHT}
+          aria-valuenow={Math.round(summaryPanelHeight)}
+          tabIndex={0}
+          onPointerDown={(event) => {
+            if (event.button !== 0) {
+              return;
+            }
+
+            const shell = summaryPanelShellRef.current;
+
+            if (!shell) {
+              return;
+            }
+
+            const bounds = shell.getBoundingClientRect();
+
+            summaryPanelPointerOffsetRef.current =
+              event.clientY - bounds.bottom;
+
+            summaryPanelDraggingRef.current = true;
+            setIsResizingSummaryPanel(true);
+
+            event.currentTarget
+              .setPointerCapture?.(
+                event.pointerId
+              );
+          }}
+          onPointerMove={(event) => {
+            if (!summaryPanelDraggingRef.current) {
+              return;
+            }
+
+            updateSummaryPanelHeight(
+              event.clientY
+            );
+          }}
+          onPointerUp={finishSummaryPanelResize}
+          onPointerCancel={finishSummaryPanelResize}
+          onKeyDown={handleSummaryPanelResizeKeyDown}
+        >
+          <span
+            className="summary-panel-resizer-grip"
+            aria-hidden="true"
+          />
+        </div>
+      </div>
     </div>
   );
 });
