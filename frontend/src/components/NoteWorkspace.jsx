@@ -36,6 +36,12 @@ import {
   Maximize2,
   Minimize2,
   Check,
+  Mic,
+  Square,
+  Trash2,
+  Plus,
+  FilePlus2,
+  Languages,
 } from "lucide-react";
 
 import {
@@ -90,6 +96,105 @@ const WORKSPACE_LAYOUT_PRESETS = [
   },
 ];
 
+
+// =========================================================
+// TRANSCRIPTION AUDIO CAPTURE
+// =========================================================
+
+// The AudioWorklet converts the microphone's Float32 samples into
+// signed 16-bit PCM. Stage 4.1 keeps those PCM frames in the frontend
+// only; the next ASR stage can send the exact same frames over WebSocket.
+const TRANSCRIPTION_PCM_WORKLET_SOURCE = `
+class TreeNotesPcmCaptureProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.levelFrame = 0;
+  }
+
+  process(inputs) {
+    const channels = inputs[0];
+
+    if (!channels || channels.length === 0 || !channels[0]) {
+      return true;
+    }
+
+    const input = channels[0];
+    const pcm = new Int16Array(input.length);
+
+    let squareSum = 0;
+
+    for (let index = 0; index < input.length; index += 1) {
+      const sample = Math.max(-1, Math.min(1, input[index]));
+
+      squareSum += sample * sample;
+
+      pcm[index] =
+        sample < 0
+          ? sample * 0x8000
+          : sample * 0x7fff;
+    }
+
+    // AudioWorklet buffers are very small, so only send a level update
+    // every few frames while still forwarding every PCM frame.
+    this.levelFrame += 1;
+
+    const message = {
+      type: "pcm",
+      pcm: pcm.buffer,
+    };
+
+    if (this.levelFrame >= 4) {
+      message.level =
+        Math.min(
+          1,
+          Math.sqrt(squareSum / input.length) * 5
+        );
+
+      this.levelFrame = 0;
+    }
+
+    this.port.postMessage(
+      message,
+      [pcm.buffer]
+    );
+
+    return true;
+  }
+}
+
+registerProcessor(
+  "treenotes-pcm-capture",
+  TreeNotesPcmCaptureProcessor
+);
+`;
+
+// =========================================================
+// TRANSCRIPTION ASR WEBSOCKET
+// =========================================================
+
+// The frontend speaks the same small protocol as Vosk's reference
+// WebSocket server: JSON config first, binary PCM16 frames while
+// listening, then { "eof": 1 } when the session ends.
+function getTranscriptionAsrWebSocketUrl() {
+  const configuredUrl =
+    import.meta.env.VITE_ASR_WS_URL?.trim();
+
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+
+  if (typeof window === "undefined") {
+    return "ws://localhost:2700";
+  }
+
+  const protocol =
+    window.location.protocol === "https:"
+      ? "wss:"
+      : "ws:";
+
+  return `${protocol}//${window.location.hostname}:2700`;
+}
+
 const NoteWorkspace = forwardRef(function NoteWorkspace(
   { note, onNoteSaved },
   ref
@@ -105,6 +210,1174 @@ const graphPanelRef = useRef(null);
 
 const layoutDropdownRef = useRef(null);
 const [layoutDropdownOpen, setLayoutDropdownOpen] = useState(false);
+
+// =========================================================
+// TRANSCRIPTION REVIEW MODAL
+// =========================================================
+
+// The modal is now backed by a real browser microphone capture pipeline.
+// Audio is captured as mono PCM16 samples so the next stage can forward the
+// same frames directly to the ASR WebSocket service.
+const transcriptionTextareaRef = useRef(null);
+const transcriptionModalOpenRef = useRef(false);
+const transcriptionStreamRef = useRef(null);
+const transcriptionAudioContextRef = useRef(null);
+const transcriptionAudioSourceRef = useRef(null);
+const transcriptionCaptureNodeRef = useRef(null);
+const transcriptionSilentGainRef = useRef(null);
+const transcriptionWorkletUrlRef = useRef(null);
+const transcriptionCaptureRequestRef = useRef(0);
+const transcriptionCapturedSamplesRef = useRef(0);
+const transcriptionCapturedBytesRef = useRef(0);
+const transcriptionCaptureSampleRateRef = useRef(0);
+const transcriptionLastLevelUpdateRef = useRef(0);
+const transcriptionLastCaptureInfoUpdateRef = useRef(0);
+const transcriptionAsrSocketRef = useRef(null);
+const transcriptionAsrCloseTimerRef = useRef(null);
+const transcriptionAsrExpectedCloseRef = useRef(false);
+const transcriptionAsrFinalSegmentsRef = useRef([]);
+const transcriptionAsrPartialRef = useRef("");
+const transcriptionAsrSessionBaseRef = useRef("");
+
+const [transcriptionModalOpen, setTranscriptionModalOpen] = useState(false);
+const [transcriptionListening, setTranscriptionListening] = useState(false);
+const [transcriptionMicRequesting, setTranscriptionMicRequesting] = useState(false);
+const [transcriptionMicError, setTranscriptionMicError] = useState("");
+const [transcriptionAudioLevel, setTranscriptionAudioLevel] = useState(0);
+const [transcriptionCaptureInfo, setTranscriptionCaptureInfo] = useState(null);
+const [transcriptionAsrState, setTranscriptionAsrState] = useState("idle");
+const [transcriptionAsrError, setTranscriptionAsrError] = useState("");
+const [transcriptionDraft, setTranscriptionDraft] = useState("");
+const [transcriptionTermInput, setTranscriptionTermInput] = useState("");
+const [transcriptionTerms, setTranscriptionTerms] = useState([]);
+
+function formatTranscriptionCaptureSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 KB";
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function openTranscriptionModal(event) {
+  event?.stopPropagation?.();
+
+  transcriptionModalOpenRef.current = true;
+
+  setLayoutDropdownOpen(false);
+  setTranscriptionMicError("");
+  setTranscriptionAsrError("");
+  setTranscriptionAsrState("idle");
+  setTranscriptionCaptureInfo(null);
+  setTranscriptionAudioLevel(0);
+  setTranscriptionModalOpen(true);
+}
+
+function buildLiveTranscriptionDraft() {
+  const base =
+    transcriptionAsrSessionBaseRef.current.trimEnd();
+
+  const finalText =
+    transcriptionAsrFinalSegmentsRef.current
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const partialText =
+    transcriptionAsrPartialRef.current
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const liveText =
+    [finalText, partialText]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+  if (base && liveText) {
+    return `${base}\n\n${liveText}`;
+  }
+
+  return base || liveText;
+}
+
+function updateLiveTranscriptionDraft() {
+  setTranscriptionDraft(
+    buildLiveTranscriptionDraft()
+  );
+}
+
+function clearTranscriptionAsrCloseTimer() {
+  if (transcriptionAsrCloseTimerRef.current) {
+    window.clearTimeout(
+      transcriptionAsrCloseTimerRef.current
+    );
+
+    transcriptionAsrCloseTimerRef.current = null;
+  }
+}
+
+function closeTranscriptionAsrSocket({
+  finalise = false,
+} = {}) {
+  const socket =
+    transcriptionAsrSocketRef.current;
+
+  clearTranscriptionAsrCloseTimer();
+
+  if (!socket) {
+    setTranscriptionAsrState("idle");
+    return;
+  }
+
+  transcriptionAsrExpectedCloseRef.current = true;
+
+  if (
+    finalise &&
+    socket.readyState === WebSocket.OPEN
+  ) {
+    setTranscriptionAsrState("finalising");
+
+    try {
+      socket.send(
+        JSON.stringify({ eof: 1 })
+      );
+
+      // Vosk normally returns its final result and then closes the
+      // connection itself. This timeout prevents a stuck socket if a
+      // proxy/backend fails to honour that convention.
+      transcriptionAsrCloseTimerRef.current =
+        window.setTimeout(() => {
+          if (
+            transcriptionAsrSocketRef.current === socket &&
+            socket.readyState !== WebSocket.CLOSED
+          ) {
+            socket.close(1000, "Transcription complete");
+          }
+        }, 2500);
+
+      return;
+    } catch {
+      // Fall through to a normal close.
+    }
+  }
+
+  if (
+    socket.readyState === WebSocket.OPEN ||
+    socket.readyState === WebSocket.CONNECTING
+  ) {
+    try {
+      socket.close(1000, "Transcription closed");
+    } catch {
+      // Ignore close failures during teardown.
+    }
+  }
+
+  if (transcriptionAsrSocketRef.current === socket) {
+    transcriptionAsrSocketRef.current = null;
+  }
+
+  setTranscriptionAsrState("idle");
+}
+
+function handleTranscriptionAsrMessage(event) {
+  if (typeof event.data !== "string") {
+    return;
+  }
+
+  let message;
+
+  try {
+    message = JSON.parse(event.data);
+  } catch {
+    return;
+  }
+
+  if (message?.error) {
+    setTranscriptionAsrError(
+      String(message.error)
+    );
+    setTranscriptionAsrState("error");
+    return;
+  }
+
+  // Native Vosk responses use `partial` for interim text and `text`
+  // for accepted/final segments. A future TreeNotes proxy may instead
+  // normalise these to { type: "partial|final", text }, so accept both.
+  const partialText =
+    typeof message.partial === "string"
+      ? message.partial
+      : message.type === "partial" &&
+          typeof message.text === "string"
+        ? message.text
+        : null;
+
+  if (partialText !== null) {
+    transcriptionAsrPartialRef.current =
+      partialText;
+
+    updateLiveTranscriptionDraft();
+    return;
+  }
+
+  const finalText =
+    message.type === "final" &&
+    typeof message.text === "string"
+      ? message.text
+      : typeof message.text === "string"
+        ? message.text
+        : "";
+
+  const cleanFinalText =
+    finalText
+      .replace(/\s+/g, " ")
+      .trim();
+
+  transcriptionAsrPartialRef.current = "";
+
+  if (cleanFinalText) {
+    const finalSegments =
+      transcriptionAsrFinalSegmentsRef.current;
+
+    if (
+      finalSegments[finalSegments.length - 1] !==
+      cleanFinalText
+    ) {
+      finalSegments.push(cleanFinalText);
+    }
+  }
+
+  updateLiveTranscriptionDraft();
+}
+
+function connectTranscriptionAsr(
+  sampleRate,
+  requestId
+) {
+  if (typeof WebSocket === "undefined") {
+    return Promise.reject(
+      new Error(
+        "This browser does not support WebSocket speech recognition."
+      )
+    );
+  }
+
+  closeTranscriptionAsrSocket();
+
+  const socketUrl =
+    getTranscriptionAsrWebSocketUrl();
+
+  setTranscriptionAsrError("");
+  setTranscriptionAsrState("connecting");
+  transcriptionAsrExpectedCloseRef.current = false;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let socket;
+
+    try {
+      socket = new WebSocket(socketUrl);
+    } catch (error) {
+      setTranscriptionAsrState("error");
+      reject(error);
+      return;
+    }
+
+    transcriptionAsrSocketRef.current = socket;
+    socket.binaryType = "arraybuffer";
+
+    const connectionTimeout =
+      window.setTimeout(() => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+
+        try {
+          socket.close();
+        } catch {
+          // Ignore timeout close errors.
+        }
+
+        reject(
+          new Error(
+            `Timed out connecting to the speech recognition service at ${socketUrl}.`
+          )
+        );
+      }, 5000);
+
+    socket.onopen = () => {
+      if (
+        requestId !==
+          transcriptionCaptureRequestRef.current ||
+        !transcriptionModalOpenRef.current
+      ) {
+        transcriptionAsrExpectedCloseRef.current = true;
+        socket.close();
+        return;
+      }
+
+      window.clearTimeout(connectionTimeout);
+
+      try {
+        socket.send(
+          JSON.stringify({
+            config: {
+              sample_rate: sampleRate,
+            },
+          })
+        );
+      } catch (error) {
+        if (!settled) {
+          settled = true;
+          reject(error);
+        }
+        return;
+      }
+
+      setTranscriptionAsrState("connected");
+
+      if (!settled) {
+        settled = true;
+        resolve(socket);
+      }
+    };
+
+    socket.onmessage =
+      handleTranscriptionAsrMessage;
+
+    socket.onerror = () => {
+      if (!settled) {
+        window.clearTimeout(connectionTimeout);
+        settled = true;
+
+        reject(
+          new Error(
+            `Unable to connect to the speech recognition service at ${socketUrl}.`
+          )
+        );
+      }
+    };
+
+    socket.onclose = () => {
+      window.clearTimeout(connectionTimeout);
+      clearTranscriptionAsrCloseTimer();
+
+      if (
+        transcriptionAsrSocketRef.current ===
+        socket
+      ) {
+        transcriptionAsrSocketRef.current = null;
+      }
+
+      const expectedClose =
+        transcriptionAsrExpectedCloseRef.current;
+
+      transcriptionAsrExpectedCloseRef.current = false;
+
+      if (!settled) {
+        settled = true;
+
+        reject(
+          new Error(
+            `The speech recognition service at ${socketUrl} closed before transcription could start.`
+          )
+        );
+
+        return;
+      }
+
+      if (expectedClose) {
+        setTranscriptionAsrState("idle");
+        return;
+      }
+
+      if (transcriptionStreamRef.current) {
+        setTranscriptionAsrError(
+          "The speech recognition connection closed unexpectedly. Start listening again to reconnect."
+        );
+        setTranscriptionAsrState("error");
+
+        releaseTranscriptionAudioResources({
+          keepCaptureSummary: true,
+        });
+      } else {
+        setTranscriptionAsrState("idle");
+      }
+    };
+  });
+}
+
+function releaseTranscriptionAudioResources({
+  keepCaptureSummary = true,
+  updateUi = true,
+} = {}) {
+  const sampleRate =
+    transcriptionCaptureSampleRateRef.current;
+
+  const capturedSamples =
+    transcriptionCapturedSamplesRef.current;
+
+  const capturedBytes =
+    transcriptionCapturedBytesRef.current;
+
+  const captureNode =
+    transcriptionCaptureNodeRef.current;
+
+  if (captureNode) {
+    try {
+      if ("port" in captureNode && captureNode.port) {
+        captureNode.port.onmessage = null;
+      }
+
+      if ("onaudioprocess" in captureNode) {
+        captureNode.onaudioprocess = null;
+      }
+
+      captureNode.disconnect();
+    } catch {
+      // The node may already have been disconnected.
+    }
+  }
+
+  if (transcriptionAudioSourceRef.current) {
+    try {
+      transcriptionAudioSourceRef.current.disconnect();
+    } catch {
+      // The source may already have been disconnected.
+    }
+  }
+
+  if (transcriptionSilentGainRef.current) {
+    try {
+      transcriptionSilentGainRef.current.disconnect();
+    } catch {
+      // The gain node may already have been disconnected.
+    }
+  }
+
+  if (transcriptionStreamRef.current) {
+    transcriptionStreamRef.current
+      .getTracks()
+      .forEach((track) => track.stop());
+  }
+
+  const audioContext =
+    transcriptionAudioContextRef.current;
+
+  if (
+    audioContext &&
+    audioContext.state !== "closed"
+  ) {
+    audioContext.close().catch(() => {});
+  }
+
+  if (transcriptionWorkletUrlRef.current) {
+    URL.revokeObjectURL(
+      transcriptionWorkletUrlRef.current
+    );
+  }
+
+  transcriptionStreamRef.current = null;
+  transcriptionAudioContextRef.current = null;
+  transcriptionAudioSourceRef.current = null;
+  transcriptionCaptureNodeRef.current = null;
+  transcriptionSilentGainRef.current = null;
+  transcriptionWorkletUrlRef.current = null;
+
+  if (updateUi) {
+    setTranscriptionListening(false);
+    setTranscriptionMicRequesting(false);
+    setTranscriptionAudioLevel(0);
+  }
+
+  if (
+    updateUi &&
+    keepCaptureSummary &&
+    sampleRate > 0 &&
+    capturedSamples > 0
+  ) {
+    setTranscriptionCaptureInfo({
+      durationSeconds:
+        capturedSamples / sampleRate,
+      sampleRate,
+      bytes: capturedBytes,
+      complete: true,
+    });
+  }
+}
+
+function stopTranscriptionCapture() {
+  // Invalidates a permission request that may still be waiting for the
+  // browser/user. If that old request resolves later it will clean itself up.
+  transcriptionCaptureRequestRef.current += 1;
+
+  releaseTranscriptionAudioResources({
+    keepCaptureSummary: true,
+  });
+
+  closeTranscriptionAsrSocket({
+    finalise: true,
+  });
+}
+
+function closeTranscriptionModal() {
+  transcriptionModalOpenRef.current = false;
+  transcriptionCaptureRequestRef.current += 1;
+
+  releaseTranscriptionAudioResources({
+    keepCaptureSummary: true,
+  });
+
+  closeTranscriptionAsrSocket();
+
+  setTranscriptionModalOpen(false);
+}
+
+function handleCapturedPcmChunk(
+  pcmChunk,
+  sampleRate,
+  level = null
+) {
+  if (!pcmChunk || pcmChunk.length === 0) {
+    return;
+  }
+
+  transcriptionCapturedSamplesRef.current +=
+    pcmChunk.length;
+
+  transcriptionCapturedBytesRef.current +=
+    pcmChunk.byteLength;
+
+  transcriptionCaptureSampleRateRef.current =
+    sampleRate;
+
+  const asrSocket =
+    transcriptionAsrSocketRef.current;
+
+  if (
+    asrSocket &&
+    asrSocket.readyState === WebSocket.OPEN
+  ) {
+    try {
+      asrSocket.send(
+        pcmChunk.buffer
+      );
+    } catch (error) {
+      console.error(
+        "Unable to stream transcription audio:",
+        error
+      );
+
+      setTranscriptionAsrError(
+        "Audio capture is active, but the speech recognition service stopped accepting audio."
+      );
+      setTranscriptionAsrState("error");
+    }
+  }
+
+  // PCM frames are streamed immediately and intentionally not retained
+  // in browser memory. This keeps long lecture sessions lightweight.
+
+  const now = performance.now();
+
+  if (
+    level !== null &&
+    now -
+      transcriptionLastLevelUpdateRef.current >=
+      45
+  ) {
+    setTranscriptionAudioLevel(
+      Math.max(
+        0,
+        Math.min(1, level)
+      )
+    );
+
+    transcriptionLastLevelUpdateRef.current = now;
+  }
+
+  if (
+    now -
+      transcriptionLastCaptureInfoUpdateRef.current >=
+      220
+  ) {
+    const capturedSamples =
+      transcriptionCapturedSamplesRef.current;
+
+    const capturedBytes =
+      transcriptionCapturedBytesRef.current;
+
+    setTranscriptionCaptureInfo({
+      durationSeconds:
+        sampleRate > 0
+          ? capturedSamples / sampleRate
+          : 0,
+      sampleRate,
+      bytes: capturedBytes,
+      complete: false,
+    });
+
+    transcriptionLastCaptureInfoUpdateRef.current = now;
+  }
+}
+
+function convertFloatSamplesToPcm(
+  floatSamples
+) {
+  const pcm = new Int16Array(
+    floatSamples.length
+  );
+
+  let squareSum = 0;
+
+  for (
+    let index = 0;
+    index < floatSamples.length;
+    index += 1
+  ) {
+    const sample =
+      Math.max(
+        -1,
+        Math.min(
+          1,
+          floatSamples[index]
+        )
+      );
+
+    squareSum += sample * sample;
+
+    pcm[index] =
+      sample < 0
+        ? sample * 0x8000
+        : sample * 0x7fff;
+  }
+
+  const level =
+    Math.min(
+      1,
+      Math.sqrt(
+        squareSum /
+        Math.max(
+          1,
+          floatSamples.length
+        )
+      ) * 5
+    );
+
+  return {
+    pcm,
+    level,
+  };
+}
+
+function getMicrophoneErrorMessage(error) {
+  switch (error?.name) {
+    case "NotAllowedError":
+    case "PermissionDeniedError":
+      return "Microphone permission was denied. Allow microphone access for TreeNotes in your browser and try again.";
+
+    case "NotFoundError":
+    case "DevicesNotFoundError":
+      return "No microphone was found. Connect or enable a microphone and try again.";
+
+    case "NotReadableError":
+    case "TrackStartError":
+      return "The microphone is already in use or could not be opened.";
+
+    case "OverconstrainedError":
+    case "ConstraintNotSatisfiedError":
+      return "The microphone could not satisfy the requested audio settings.";
+
+    case "SecurityError":
+      return "The browser blocked microphone access for this page.";
+
+    case "AbortError":
+      return "Microphone capture was interrupted before it could start.";
+
+    default:
+      return (
+        error?.message ||
+        "Unable to start microphone capture."
+      );
+  }
+}
+
+async function startTranscriptionCapture() {
+  if (
+    transcriptionListening ||
+    transcriptionMicRequesting
+  ) {
+    return;
+  }
+
+  if (
+    !navigator.mediaDevices?.getUserMedia
+  ) {
+    setTranscriptionMicError(
+      "Microphone access is unavailable. Use HTTPS or localhost in a browser that supports getUserMedia()."
+    );
+
+    return;
+  }
+
+  const AudioContextClass =
+    window.AudioContext ||
+    window.webkitAudioContext;
+
+  if (!AudioContextClass) {
+    setTranscriptionMicError(
+      "This browser does not support the Web Audio API required for microphone capture."
+    );
+
+    return;
+  }
+
+  const requestId =
+    transcriptionCaptureRequestRef.current + 1;
+
+  transcriptionCaptureRequestRef.current =
+    requestId;
+
+  setTranscriptionMicError("");
+  setTranscriptionAsrError("");
+  setTranscriptionAsrState("idle");
+  setTranscriptionMicRequesting(true);
+  setTranscriptionCaptureInfo(null);
+  setTranscriptionAudioLevel(0);
+
+  transcriptionAsrSessionBaseRef.current =
+    transcriptionDraft.trimEnd();
+  transcriptionAsrFinalSegmentsRef.current = [];
+  transcriptionAsrPartialRef.current = "";
+
+  transcriptionCapturedSamplesRef.current = 0;
+  transcriptionCapturedBytesRef.current = 0;
+  transcriptionCaptureSampleRateRef.current = 0;
+  transcriptionLastLevelUpdateRef.current = 0;
+  transcriptionLastCaptureInfoUpdateRef.current = 0;
+
+  let stream = null;
+  let audioContext = null;
+  let source = null;
+  let captureNode = null;
+  let silentGain = null;
+  let workletUrl = null;
+
+  try {
+    stream =
+      await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      });
+
+    if (
+      requestId !==
+        transcriptionCaptureRequestRef.current ||
+      !transcriptionModalOpenRef.current
+    ) {
+      stream
+        .getTracks()
+        .forEach((track) => track.stop());
+
+      return;
+    }
+
+    /*
+      Ask for 16 kHz because that is a common ASR rate. Browsers are
+      allowed to choose another hardware/context rate, so the actual
+      value is always read from audioContext.sampleRate and reported
+      to the future backend.
+    */
+    try {
+      audioContext =
+        new AudioContextClass({
+          sampleRate: 16000,
+        });
+    } catch {
+      audioContext =
+        new AudioContextClass();
+    }
+
+    await audioContext.resume();
+
+    await connectTranscriptionAsr(
+      audioContext.sampleRate,
+      requestId
+    );
+
+    source =
+      audioContext.createMediaStreamSource(
+        stream
+      );
+
+    silentGain =
+      audioContext.createGain();
+
+    silentGain.gain.value = 0;
+
+    const canUseAudioWorklet =
+      Boolean(audioContext.audioWorklet) &&
+      typeof AudioWorkletNode !==
+        "undefined";
+
+    if (canUseAudioWorklet) {
+      workletUrl =
+        URL.createObjectURL(
+          new Blob(
+            [
+              TRANSCRIPTION_PCM_WORKLET_SOURCE,
+            ],
+            {
+              type: "application/javascript",
+            }
+          )
+        );
+
+      await audioContext.audioWorklet.addModule(
+        workletUrl
+      );
+
+      captureNode =
+        new AudioWorkletNode(
+          audioContext,
+          "treenotes-pcm-capture",
+          {
+            numberOfInputs: 1,
+            numberOfOutputs: 1,
+            channelCount: 1,
+          }
+        );
+
+      captureNode.port.onmessage = (
+        event
+      ) => {
+        const data =
+          event.data ?? {};
+
+        if (
+          data.type !== "pcm" ||
+          !(data.pcm instanceof ArrayBuffer)
+        ) {
+          return;
+        }
+
+        handleCapturedPcmChunk(
+          new Int16Array(data.pcm),
+          audioContext.sampleRate,
+          Number.isFinite(data.level)
+            ? data.level
+            : null
+        );
+      };
+    } else {
+      /*
+        Older-browser fallback. ScriptProcessorNode is deprecated,
+        but it keeps the prototype functional where AudioWorklet is
+        unavailable. Modern Chromium/Firefox/Safari should take the
+        AudioWorklet path above.
+      */
+      captureNode =
+        audioContext.createScriptProcessor(
+          2048,
+          1,
+          1
+        );
+
+      captureNode.onaudioprocess = (
+        event
+      ) => {
+        const input =
+          event.inputBuffer
+            .getChannelData(0);
+
+        const {
+          pcm,
+          level,
+        } =
+          convertFloatSamplesToPcm(
+            input
+          );
+
+        handleCapturedPcmChunk(
+          pcm,
+          audioContext.sampleRate,
+          level
+        );
+      };
+    }
+
+    source.connect(captureNode);
+    captureNode.connect(silentGain);
+    silentGain.connect(
+      audioContext.destination
+    );
+
+    transcriptionStreamRef.current =
+      stream;
+
+    transcriptionAudioContextRef.current =
+      audioContext;
+
+    transcriptionAudioSourceRef.current =
+      source;
+
+    transcriptionCaptureNodeRef.current =
+      captureNode;
+
+    transcriptionSilentGainRef.current =
+      silentGain;
+
+    transcriptionWorkletUrlRef.current =
+      workletUrl;
+
+    transcriptionCaptureSampleRateRef.current =
+      audioContext.sampleRate;
+
+    setTranscriptionCaptureInfo({
+      durationSeconds: 0,
+      sampleRate:
+        audioContext.sampleRate,
+      bytes: 0,
+      complete: false,
+    });
+
+    setTranscriptionListening(true);
+  } catch (error) {
+    console.error(
+      "Unable to start microphone capture:",
+      error
+    );
+
+    if (captureNode) {
+      try {
+        if (
+          "port" in captureNode &&
+          captureNode.port
+        ) {
+          captureNode.port.onmessage = null;
+        }
+
+        if ("onaudioprocess" in captureNode) {
+          captureNode.onaudioprocess = null;
+        }
+
+        captureNode.disconnect();
+      } catch {
+        // Ignore partial setup cleanup failures.
+      }
+    }
+
+    if (source) {
+      try {
+        source.disconnect();
+      } catch {
+        // Ignore partial setup cleanup failures.
+      }
+    }
+
+    if (silentGain) {
+      try {
+        silentGain.disconnect();
+      } catch {
+        // Ignore partial setup cleanup failures.
+      }
+    }
+
+    if (stream) {
+      stream
+        .getTracks()
+        .forEach((track) => track.stop());
+    }
+
+    if (
+      audioContext &&
+      audioContext.state !== "closed"
+    ) {
+      audioContext.close().catch(() => {});
+    }
+
+    if (workletUrl) {
+      URL.revokeObjectURL(workletUrl);
+    }
+
+    closeTranscriptionAsrSocket();
+
+    if (
+      requestId ===
+      transcriptionCaptureRequestRef.current
+    ) {
+      const isAsrConnectionError =
+        /speech recognition service|WebSocket/i.test(
+          error?.message ?? ""
+        );
+
+      if (isAsrConnectionError) {
+        setTranscriptionAsrError(
+          error.message
+        );
+        setTranscriptionAsrState("error");
+      } else {
+        setTranscriptionMicError(
+          getMicrophoneErrorMessage(error)
+        );
+      }
+
+      setTranscriptionListening(false);
+    }
+  } finally {
+    if (
+      requestId ===
+      transcriptionCaptureRequestRef.current
+    ) {
+      setTranscriptionMicRequesting(false);
+    }
+  }
+}
+
+function toggleTranscriptionListening() {
+  if (transcriptionListening) {
+    stopTranscriptionCapture();
+    return;
+  }
+
+  startTranscriptionCapture();
+}
+
+function addTranscriptionTerm() {
+  const cleanTerm = transcriptionTermInput.trim();
+
+  if (!cleanTerm) {
+    return;
+  }
+
+  const alreadyAdded = transcriptionTerms.some(
+    (term) => term.toLocaleLowerCase() === cleanTerm.toLocaleLowerCase()
+  );
+
+  if (!alreadyAdded) {
+    setTranscriptionTerms((current) => [...current, cleanTerm]);
+  }
+
+  setTranscriptionTermInput("");
+}
+
+function removeTranscriptionTerm(termToRemove) {
+  setTranscriptionTerms((current) =>
+    current.filter((term) => term !== termToRemove)
+  );
+}
+
+function clearTranscriptionDraft() {
+  transcriptionAsrSessionBaseRef.current = "";
+  transcriptionAsrFinalSegmentsRef.current = [];
+  transcriptionAsrPartialRef.current = "";
+  setTranscriptionDraft("");
+}
+
+function appendTranscriptionToNotes() {
+  const cleanTranscript = transcriptionDraft.trim();
+  const editor = editorRef.current;
+
+  if (!cleanTranscript || !editor) {
+    return;
+  }
+
+  // Append fresh paragraph blocks so existing rich-text formatting
+  // and graph-linked spans remain untouched.
+  const paragraphBlocks = cleanTranscript
+    .split(/\n\s*\n/)
+    .filter((block) => block.trim().length > 0);
+
+  paragraphBlocks.forEach((block) => {
+    const paragraph = document.createElement("p");
+    const lines = block.split("\n");
+
+    lines.forEach((line, lineIndex) => {
+      if (lineIndex > 0) {
+        paragraph.appendChild(document.createElement("br"));
+      }
+
+      paragraph.appendChild(document.createTextNode(line));
+    });
+
+    editor.appendChild(paragraph);
+  });
+
+  updateRawNotes();
+
+  transcriptionModalOpenRef.current = false;
+  transcriptionCaptureRequestRef.current += 1;
+
+  releaseTranscriptionAudioResources({
+    keepCaptureSummary: true,
+  });
+  closeTranscriptionAsrSocket();
+
+  setTranscriptionDraft("");
+  setTranscriptionModalOpen(false);
+
+  requestAnimationFrame(() => {
+    editor.scrollTop = editor.scrollHeight;
+    editor.focus();
+  });
+}
+
+// Always release the physical microphone if the workspace unmounts.
+useEffect(() => {
+  return () => {
+    transcriptionModalOpenRef.current = false;
+    transcriptionCaptureRequestRef.current += 1;
+
+    releaseTranscriptionAudioResources({
+      keepCaptureSummary: false,
+      updateUi: false,
+    });
+
+    closeTranscriptionAsrSocket();
+  };
+}, []);
+
+// Escape closes transcription before it can affect workspace Focus
+// Mode. Body scrolling is locked while the modal is open.
+useEffect(() => {
+  if (!transcriptionModalOpen) {
+    return undefined;
+  }
+
+  const previousOverflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+
+  function handleTranscriptionEscape(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeTranscriptionModal();
+    }
+  }
+
+  window.addEventListener("keydown", handleTranscriptionEscape, true);
+
+  const focusFrame = requestAnimationFrame(() => {
+    transcriptionTextareaRef.current?.focus();
+  });
+
+  return () => {
+    cancelAnimationFrame(focusFrame);
+    document.body.style.overflow = previousOverflow;
+    window.removeEventListener("keydown", handleTranscriptionEscape, true);
+  };
+}, [transcriptionModalOpen]);
 
 // Match the Profile preferences dropdown behaviour: click
 // outside or press Escape to close the menu.
@@ -168,7 +1441,11 @@ useEffect(() => {
   }
 
   function handleFocusEscape(event) {
-    if (event.key === "Escape" && !layoutDropdownOpen) {
+    if (
+      event.key === "Escape" &&
+      !layoutDropdownOpen &&
+      !transcriptionModalOpen
+    ) {
       setFocusedPanel(null);
     }
   }
@@ -184,7 +1461,7 @@ useEffect(() => {
       handleFocusEscape
     );
   };
-}, [focusedPanel, layoutDropdownOpen]);
+}, [focusedPanel, layoutDropdownOpen, transcriptionModalOpen]);
 
 // Measure the remaining viewport underneath the note title so the
 // focused panel fills the application workspace without invoking
@@ -3432,37 +4709,44 @@ function inferGraphLinkPaletteSlot(
               />
             </div>
 
-            <button
-              type="button"
-              className="panel-focus-button tooltip-align-right"
-              onClick={(event) => {
-                event.stopPropagation();
-                togglePanelFocus("notes");
-              }}
-              aria-label={
-                focusedPanel === "notes"
-                  ? "Exit Raw Notes focus mode"
-                  : "Focus Raw Notes"
-              }
-              aria-pressed={focusedPanel === "notes"}
-              data-tooltip={
-                focusedPanel === "notes"
-                  ? "Restore layout"
-                  : "Focus Raw Notes"
-              }
-            >
-              {focusedPanel === "notes" ? (
-                <Minimize2
-                  size={18}
-                  strokeWidth={1.9}
-                />
-              ) : (
-                <Maximize2
-                  size={18}
-                  strokeWidth={1.9}
-                />
-              )}
-            </button>
+            <div className="raw-notes-heading-actions">
+              <button
+                type="button"
+                className="panel-focus-button transcription-launch-button tooltip-align-right"
+                onClick={openTranscriptionModal}
+                aria-label="Open transcription review"
+                aria-pressed={transcriptionModalOpen}
+                data-tooltip="Transcribe with microphone"
+              >
+                <Mic size={18} strokeWidth={1.9} />
+              </button>
+
+              <button
+                type="button"
+                className="panel-focus-button tooltip-align-right"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  togglePanelFocus("notes");
+                }}
+                aria-label={
+                  focusedPanel === "notes"
+                    ? "Exit Raw Notes focus mode"
+                    : "Focus Raw Notes"
+                }
+                aria-pressed={focusedPanel === "notes"}
+                data-tooltip={
+                  focusedPanel === "notes"
+                    ? "Restore layout"
+                    : "Focus Raw Notes"
+                }
+              >
+                {focusedPanel === "notes" ? (
+                  <Minimize2 size={18} strokeWidth={1.9} />
+                ) : (
+                  <Maximize2 size={18} strokeWidth={1.9} />
+                )}
+              </button>
+            </div>
 
           </div>
           
@@ -5241,6 +6525,298 @@ function inferGraphLinkPaletteSlot(
           />
         </div>
       </div>
+
+      {transcriptionModalOpen && (
+        <div
+          className="transcription-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeTranscriptionModal();
+            }
+          }}
+        >
+          <section
+            className="transcription-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="transcription-modal-title"
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="transcription-modal-header">
+              <div className="transcription-modal-heading">
+                <span
+                  className={`transcription-modal-icon ${
+                    transcriptionListening
+                      ? "transcription-modal-icon-listening"
+                      : ""
+                  }`}
+                  aria-hidden="true"
+                >
+                  <Mic size={21} strokeWidth={1.9} />
+                </span>
+
+                <div>
+                  <h2 id="transcription-modal-title">Live Transcription</h2>
+                  <p>Review and edit speech before adding it to Raw Notes.</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="transcription-modal-close"
+                onClick={closeTranscriptionModal}
+                aria-label="Close transcription"
+              >
+                <X size={18} strokeWidth={1.9} />
+              </button>
+            </header>
+
+            <div className="transcription-modal-body">
+              <div className="transcription-status-row">
+                <div className="transcription-language-badge">
+                  <Languages size={16} strokeWidth={1.8} aria-hidden="true" />
+                  <span>English</span>
+                </div>
+
+                <div
+                  className={`transcription-status ${
+                    transcriptionMicError || transcriptionAsrError
+                      ? "transcription-status-error"
+                      : transcriptionAsrState === "finalising"
+                        ? "transcription-status-finalising"
+                        : transcriptionAsrState === "connecting"
+                          ? "transcription-status-connecting"
+                          : transcriptionListening
+                            ? "transcription-status-listening"
+                            : transcriptionMicRequesting
+                              ? "transcription-status-requesting"
+                              : transcriptionCaptureInfo?.complete
+                                ? "transcription-status-captured"
+                                : ""
+                  }`}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className="transcription-status-dot" aria-hidden="true" />
+                  <span>
+                    {transcriptionMicError
+                      ? "Microphone error"
+                      : transcriptionAsrError
+                        ? "ASR connection error"
+                        : transcriptionAsrState === "finalising"
+                          ? "Finalising"
+                          : transcriptionAsrState === "connecting"
+                            ? "Connecting ASR"
+                            : transcriptionListening
+                              ? "Listening"
+                              : transcriptionMicRequesting
+                                ? "Requesting access"
+                                : transcriptionCaptureInfo?.complete
+                                  ? "Transcription ready"
+                                  : "Ready"}
+                  </span>
+                </div>
+              </div>
+
+              <div
+                className={`transcription-waveform ${
+                  transcriptionListening ? "transcription-waveform-active" : ""
+                }`}
+                aria-hidden="true"
+              >
+                {Array.from({ length: 13 }).map((_, index) => {
+                  const wavePattern =
+                    [0.42, 0.68, 0.9, 0.58, 0.82, 1, 0.72, 0.94, 0.62, 0.84, 0.52, 0.76, 0.46];
+
+                  const liveHeight =
+                    transcriptionListening
+                      ? 10 +
+                        transcriptionAudioLevel *
+                          42 *
+                          wavePattern[index]
+                      : 12;
+
+                  return (
+                    <span
+                      key={index}
+                      style={{
+                        height: `${liveHeight}px`,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+
+              {transcriptionMicError || transcriptionAsrError ? (
+                <p
+                  className="transcription-prototype-note transcription-microphone-error"
+                  role="alert"
+                >
+                  {transcriptionMicError || transcriptionAsrError}
+                </p>
+              ) : (
+                <p className="transcription-prototype-note">
+                  {transcriptionListening
+                    ? `Microphone active. Streaming mono PCM audio to speech recognition at ${transcriptionCaptureInfo?.sampleRate?.toLocaleString() ?? "the browser's"} Hz.`
+                    : transcriptionAsrState === "finalising"
+                      ? "Finishing the last spoken phrase before closing the transcription session..."
+                      : transcriptionCaptureInfo?.complete
+                        ? `Captured ${transcriptionCaptureInfo.durationSeconds.toFixed(1)} seconds of audio at ${transcriptionCaptureInfo.sampleRate.toLocaleString()} Hz (${formatTranscriptionCaptureSize(transcriptionCaptureInfo.bytes)}). Review the transcript below before adding it to Raw Notes.`
+                        : transcriptionAsrState === "connecting"
+                          ? "Microphone access granted. Connecting to the speech recognition service..."
+                          : transcriptionMicRequesting
+                            ? "Waiting for microphone permission from your browser..."
+                            : "Press Start Listening to begin live speech transcription."}
+                </p>
+              )}
+
+              <label
+                className="transcription-field"
+                htmlFor="transcription-review-text"
+              >
+                <span>Transcription</span>
+
+                <textarea
+                  ref={transcriptionTextareaRef}
+                  id="transcription-review-text"
+                  value={transcriptionDraft}
+                  onChange={(event) => setTranscriptionDraft(event.target.value)}
+                  readOnly={
+                    transcriptionListening ||
+                    transcriptionMicRequesting ||
+                    transcriptionAsrState === "finalising"
+                  }
+                  placeholder="Your speech transcript will appear here. You can edit it before adding it to Raw Notes."
+                  spellCheck
+                />
+              </label>
+
+              <div className="transcription-terms-section">
+                <div className="transcription-terms-copy">
+                  <strong>Custom terminology</strong>
+                  <span>Add jargon or names for your future personal ASR vocabulary.</span>
+                </div>
+
+                <div className="transcription-term-entry">
+                  <input
+                    type="text"
+                    value={transcriptionTermInput}
+                    onChange={(event) => setTranscriptionTermInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        addTranscriptionTerm();
+                      }
+                    }}
+                    placeholder="e.g. Kubernetes, TreeNotes, NumPy"
+                    aria-label="Custom transcription terminology"
+                  />
+
+                  <button
+                    type="button"
+                    className="transcription-term-add"
+                    onClick={addTranscriptionTerm}
+                    disabled={!transcriptionTermInput.trim()}
+                  >
+                    <Plus size={16} strokeWidth={2} aria-hidden="true" />
+                    <span>Add</span>
+                  </button>
+                </div>
+
+                {transcriptionTerms.length > 0 && (
+                  <div
+                    className="transcription-term-list"
+                    aria-label="Added custom terminology"
+                  >
+                    {transcriptionTerms.map((term) => (
+                      <span key={term} className="transcription-term-chip">
+                        <span>{term}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeTranscriptionTerm(term)}
+                          aria-label={`Remove ${term}`}
+                        >
+                          <X size={13} strokeWidth={2} aria-hidden="true" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <footer className="transcription-modal-footer">
+              <button
+                type="button"
+                className="transcription-footer-button transcription-clear-button"
+                onClick={clearTranscriptionDraft}
+                disabled={
+                  !transcriptionDraft ||
+                  transcriptionListening ||
+                  transcriptionMicRequesting ||
+                  transcriptionAsrState === "finalising"
+                }
+              >
+                <Trash2 size={16} strokeWidth={1.9} aria-hidden="true" />
+                <span>Clear</span>
+              </button>
+
+              <div className="transcription-modal-actions">
+                <button
+                  type="button"
+                  className={`transcription-footer-button transcription-listen-button ${
+                    transcriptionListening ? "transcription-listen-button-active" : ""
+                  }`}
+                  onClick={toggleTranscriptionListening}
+                  disabled={
+                    transcriptionMicRequesting ||
+                    transcriptionAsrState === "finalising"
+                  }
+                >
+                  {transcriptionListening ? (
+                    <Square
+                      size={15}
+                      strokeWidth={2}
+                      fill="currentColor"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Mic size={16} strokeWidth={1.9} aria-hidden="true" />
+                  )}
+                  <span>
+                    {transcriptionAsrState === "connecting"
+                      ? "Connecting..."
+                      : transcriptionMicRequesting
+                        ? "Requesting..."
+                        : transcriptionAsrState === "finalising"
+                          ? "Finalising..."
+                          : transcriptionListening
+                            ? "Stop"
+                            : "Start Listening"}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  className="transcription-footer-button transcription-append-button"
+                  onClick={appendTranscriptionToNotes}
+                  disabled={
+                    !transcriptionDraft.trim() ||
+                    transcriptionListening ||
+                    transcriptionMicRequesting ||
+                    transcriptionAsrState === "finalising"
+                  }
+                >
+                  <FilePlus2 size={17} strokeWidth={1.9} aria-hidden="true" />
+                  <span>Append to Raw Notes</span>
+                </button>
+              </div>
+            </footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 });

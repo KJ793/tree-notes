@@ -4511,7 +4511,7 @@ button:disabled {
 }
 
 /* =========================================================
-   STAGE 3.1 - LAYOUT-SPECIFIC ICONS
+   LAYOUT-SPECIFIC ICONS
    ========================================================= */
 
 .note-workspace .workspace-layout-trigger-icon,
@@ -4550,4 +4550,1779 @@ button:disabled {
 .note-workspace .workspace-layout-option-selected:hover
 .workspace-layout-option-icon {
   color: var(--accent-primary);
+}
+
+/* Raw Notes now has two compact workspace controls: microphone
+   transcription and panel focus. */
+.note-workspace .raw-notes-heading-actions {
+  margin-left: auto;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  flex: 0 0 auto;
+}
+
+.note-workspace
+.raw-notes-heading-actions
+.panel-focus-button {
+  margin-left: 0;
+}
+
+.note-workspace
+.transcription-launch-button[aria-pressed="true"] {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+}
+
+/* ---------------------------------------------------------
+   Modal backdrop
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-modal-backdrop {
+  position: fixed;
+  inset: 0;
+
+  z-index: 7000;
+
+  display: grid;
+  place-items: center;
+
+  padding: 28px;
+
+  background: rgba(3, 8, 20, 0.76);
+
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.note-workspace .transcription-modal {
+  width: min(780px, calc(100vw - 56px));
+  max-height: calc(100vh - 56px);
+
+  display: flex;
+  flex-direction: column;
+
+  overflow: hidden;
+
+  border: 1px solid var(--border-primary);
+  border-radius: 16px;
+
+  background: var(--bg-panel);
+  color: var(--text-primary);
+
+  box-shadow: var(--shadow-card);
+}
+
+/* ---------------------------------------------------------
+   Header
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22px;
+
+  padding: 22px 24px 19px;
+
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.note-workspace .transcription-modal-heading {
+  min-width: 0;
+
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+}
+
+.note-workspace .transcription-modal-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid var(--border-accent);
+  border-radius: 10px;
+
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 10%,
+      transparent
+    );
+
+  color: var(--accent-primary);
+
+  transition:
+    background 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.note-workspace .transcription-modal-icon-listening {
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 20%,
+      transparent
+    );
+
+  box-shadow:
+    0 0 0 4px
+    color-mix(
+      in srgb,
+      var(--accent-primary) 9%,
+      transparent
+    );
+}
+
+.note-workspace .transcription-modal-heading h2 {
+  margin: 1px 0 0;
+
+  color: var(--text-primary);
+
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.note-workspace .transcription-modal-heading p {
+  margin: 6px 0 0;
+
+  color: var(--text-secondary);
+
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.note-workspace .transcription-modal-close {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border: 1px solid var(--border-control);
+  border-radius: 8px;
+
+  background: transparent;
+  color: var(--text-secondary);
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.note-workspace .transcription-modal-close:hover {
+  border-color: var(--accent-primary);
+
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 10%,
+      transparent
+    );
+
+  color: var(--accent-primary);
+}
+
+.note-workspace .transcription-modal-close:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--focus-ring-soft);
+}
+
+/* ---------------------------------------------------------
+   Body
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-modal-body {
+  min-height: 0;
+
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  padding: 20px 24px 22px;
+
+  overflow-y: auto;
+}
+
+.note-workspace .transcription-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.note-workspace .transcription-language-badge,
+.note-workspace .transcription-status {
+  min-height: 32px;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+
+  padding: 0 10px;
+
+  border: 1px solid var(--border-control);
+  border-radius: 999px;
+
+  background: var(--bg-panel-secondary);
+  color: var(--text-secondary);
+
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.note-workspace .transcription-language-badge svg {
+  color: var(--text-muted);
+}
+
+.note-workspace .transcription-status-dot {
+  width: 7px;
+  height: 7px;
+
+  border-radius: 50%;
+
+  background: var(--text-muted);
+
+  transition:
+    background 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.note-workspace
+.transcription-status-listening
+.transcription-status-dot {
+  background: var(--accent-primary);
+
+  box-shadow:
+    0 0 0 4px
+    color-mix(
+      in srgb,
+      var(--accent-primary) 12%,
+      transparent
+    );
+}
+
+.note-workspace .transcription-status-listening {
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+}
+
+/* ---------------------------------------------------------
+   Listening visualisation
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-waveform {
+  height: 70px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+
+  padding: 0 20px;
+
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+
+  background:
+    color-mix(
+      in srgb,
+      var(--bg-workspace-canvas) 88%,
+      transparent
+    );
+}
+
+.note-workspace .transcription-waveform span {
+  width: 4px;
+  height: 12px;
+
+  border-radius: 999px;
+
+  background: var(--text-muted);
+
+  opacity: 0.55;
+
+  transform-origin: center;
+}
+
+.note-workspace
+.transcription-waveform-active
+span {
+  background: var(--accent-primary);
+  opacity: 0.92;
+
+  animation:
+    transcriptionWavePulse
+    0.8s ease-in-out
+    infinite alternate;
+}
+
+.note-workspace
+.transcription-waveform-active
+span:nth-child(2n) {
+  animation-delay: -0.22s;
+}
+
+.note-workspace
+.transcription-waveform-active
+span:nth-child(3n) {
+  animation-delay: -0.46s;
+}
+
+.note-workspace
+.transcription-waveform-active
+span:nth-child(4n) {
+  animation-delay: -0.62s;
+}
+
+@keyframes transcriptionWavePulse {
+  0% {
+    height: 10px;
+  }
+
+  100% {
+    height: 42px;
+  }
+}
+
+.note-workspace .transcription-prototype-note {
+  margin: -4px 0 0;
+
+  color: var(--text-muted);
+
+  font-size: 0.72rem;
+  line-height: 1.45;
+
+  text-align: center;
+}
+
+/* ---------------------------------------------------------
+   Transcript editor
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  color: var(--text-primary);
+
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.note-workspace .transcription-field textarea {
+  width: 100%;
+  min-height: 170px;
+
+  box-sizing: border-box;
+
+  padding: 13px 14px;
+
+  resize: vertical;
+
+  border: 1px solid var(--border-control);
+  border-radius: 9px;
+
+  outline: none;
+
+  background: var(--bg-input);
+  color: var(--text-primary);
+
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 400;
+  line-height: 1.55;
+
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.note-workspace .transcription-field textarea::placeholder,
+.note-workspace .transcription-term-entry input::placeholder {
+  color: var(--text-muted);
+}
+
+.note-workspace .transcription-field textarea:focus,
+.note-workspace .transcription-term-entry input:focus {
+  background: var(--bg-input-focus);
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--focus-ring-soft);
+}
+
+/* ---------------------------------------------------------
+   Terminology
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-terms-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  padding-top: 2px;
+}
+
+.note-workspace .transcription-terms-copy strong,
+.note-workspace .transcription-terms-copy span {
+  display: block;
+}
+
+.note-workspace .transcription-terms-copy strong {
+  color: var(--text-primary);
+
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.note-workspace .transcription-terms-copy span {
+  margin-top: 4px;
+
+  color: var(--text-muted);
+
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.note-workspace .transcription-term-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+}
+
+.note-workspace .transcription-term-entry input {
+  min-width: 0;
+  height: 38px;
+
+  box-sizing: border-box;
+
+  padding: 0 12px;
+
+  border: 1px solid var(--border-control);
+  border-radius: 8px;
+
+  outline: none;
+
+  background: var(--bg-input);
+  color: var(--text-primary);
+
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.note-workspace .transcription-term-add {
+  height: 38px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+
+  padding: 0 13px;
+
+  border: 1px solid var(--border-control);
+  border-radius: 8px;
+
+  background: var(--bg-control);
+  color: var(--text-primary);
+
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 650;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.note-workspace .transcription-term-add:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}
+
+.note-workspace .transcription-term-add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.note-workspace .transcription-term-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.note-workspace .transcription-term-chip {
+  min-height: 28px;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+
+  padding: 0 5px 0 9px;
+
+  border: 1px solid var(--border-accent);
+  border-radius: 999px;
+
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 8%,
+      transparent
+    );
+
+  color: var(--text-primary);
+
+  font-size: 0.72rem;
+}
+
+.note-workspace .transcription-term-chip button {
+  width: 22px;
+  height: 22px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border: 0;
+  border-radius: 50%;
+
+  background: transparent;
+  color: var(--text-muted);
+
+  cursor: pointer;
+}
+
+.note-workspace .transcription-term-chip button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* ---------------------------------------------------------
+   Footer actions
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+
+  padding: 16px 24px;
+
+  border-top: 1px solid var(--border-subtle);
+
+  background:
+    color-mix(
+      in srgb,
+      var(--bg-panel-secondary) 82%,
+      transparent
+    );
+}
+
+.note-workspace .transcription-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.note-workspace .transcription-footer-button {
+  min-height: 38px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  padding: 0 14px;
+
+  border: 1px solid var(--border-control);
+  border-radius: 8px;
+
+  background: var(--bg-control);
+  color: var(--text-primary);
+
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 650;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
+}
+
+.note-workspace
+.transcription-footer-button:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  background: var(--bg-hover);
+}
+
+.note-workspace .transcription-footer-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.note-workspace .transcription-footer-button:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--focus-ring-soft);
+}
+
+.note-workspace .transcription-footer-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.note-workspace .transcription-clear-button {
+  color: var(--text-secondary);
+}
+
+.note-workspace .transcription-listen-button-active {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--status-error) 65%,
+      var(--border-control)
+    );
+
+  background:
+    color-mix(
+      in srgb,
+      var(--status-error) 10%,
+      transparent
+    );
+
+  color: var(--status-error);
+}
+
+.note-workspace .transcription-append-button {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+}
+
+.note-workspace
+.transcription-append-button:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  color: var(--text-on-accent);
+}
+
+/* ---------------------------------------------------------
+   Scrollbars
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-modal-body::-webkit-scrollbar,
+.note-workspace .transcription-field textarea::-webkit-scrollbar {
+  width: 7px;
+}
+
+.note-workspace .transcription-modal-body::-webkit-scrollbar-track,
+.note-workspace .transcription-field textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.note-workspace .transcription-modal-body::-webkit-scrollbar-thumb,
+.note-workspace .transcription-field textarea::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background: var(--scrollbar-thumb);
+}
+
+/* ---------------------------------------------------------
+   Responsive modal
+   --------------------------------------------------------- */
+
+@media (max-width: 680px) {
+  .note-workspace .transcription-modal-backdrop {
+    padding: 14px;
+  }
+
+  .note-workspace .transcription-modal {
+    width: min(100%, calc(100vw - 28px));
+    max-height: calc(100vh - 28px);
+  }
+
+  .note-workspace .transcription-modal-header,
+  .note-workspace .transcription-modal-body,
+  .note-workspace .transcription-modal-footer {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .note-workspace .transcription-status-row,
+  .note-workspace .transcription-modal-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .note-workspace .transcription-modal-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .note-workspace .transcription-footer-button,
+  .note-workspace .transcription-modal-actions .transcription-footer-button {
+    width: 100%;
+  }
+
+  .note-workspace .transcription-term-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .note-workspace .transcription-term-add {
+    width: 100%;
+  }
+}
+
+/* The waveform now follows the real microphone level. Inline heights are supplied by React. */
+.note-workspace
+.transcription-waveform-active
+span {
+  animation: none;
+
+  transition:
+    height 70ms linear,
+    background 0.16s ease,
+    opacity 0.16s ease;
+}
+
+/* Permission is pending. */
+.note-workspace
+.transcription-status-requesting {
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+}
+
+.note-workspace
+.transcription-status-requesting
+.transcription-status-dot {
+  background: var(--accent-primary);
+
+  animation:
+    transcriptionPermissionPulse
+    0.9s ease-in-out
+    infinite alternate;
+}
+
+/* A completed capture keeps a quieter positive status. */
+.note-workspace
+.transcription-status-captured {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 55%,
+      var(--border-control)
+    );
+
+  color: var(--text-primary);
+}
+
+.note-workspace
+.transcription-status-captured
+.transcription-status-dot {
+  background: var(--accent-primary);
+}
+
+/* Microphone permission/device failures. */
+.note-workspace
+.transcription-status-error {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--status-error) 55%,
+      var(--border-control)
+    );
+
+  color: var(--status-error);
+}
+
+.note-workspace
+.transcription-status-error
+.transcription-status-dot {
+  background: var(--status-error);
+}
+
+.note-workspace
+.transcription-microphone-error {
+  color: var(--status-error);
+}
+
+/* Make it visually obvious that Start is waiting on the browser's
+   permission prompt and cannot be clicked repeatedly. */
+.note-workspace
+.transcription-listen-button:disabled {
+  opacity: 0.68;
+  cursor: wait;
+}
+
+@keyframes transcriptionPermissionPulse {
+  from {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-workspace
+  .transcription-status-requesting
+  .transcription-status-dot {
+    animation: none;
+  }
+
+  .note-workspace
+  .transcription-waveform-active
+  span {
+    transition: none;
+  }
+}
+
+/* Raw Notes now has two compact workspace controls: microphone
+   transcription and panel focus. */
+.note-workspace .raw-notes-heading-actions {
+  margin-left: auto;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  flex: 0 0 auto;
+}
+
+.note-workspace
+.raw-notes-heading-actions
+.panel-focus-button {
+  margin-left: 0;
+}
+
+.note-workspace
+.transcription-launch-button[aria-pressed="true"] {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+}
+
+/* ---------------------------------------------------------
+   Modal backdrop
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-modal-backdrop {
+  position: fixed;
+  inset: 0;
+
+  z-index: 7000;
+
+  display: grid;
+  place-items: center;
+
+  padding: 28px;
+
+  background: rgba(3, 8, 20, 0.76);
+
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.note-workspace .transcription-modal {
+  width: min(780px, calc(100vw - 56px));
+  max-height: calc(100vh - 56px);
+
+  display: flex;
+  flex-direction: column;
+
+  overflow: hidden;
+
+  border: 1px solid var(--border-primary);
+  border-radius: 16px;
+
+  background: var(--bg-panel);
+  color: var(--text-primary);
+
+  box-shadow: var(--shadow-card);
+}
+
+/* ---------------------------------------------------------
+   Header
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22px;
+
+  padding: 22px 24px 19px;
+
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.note-workspace .transcription-modal-heading {
+  min-width: 0;
+
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+}
+
+.note-workspace .transcription-modal-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid var(--border-accent);
+  border-radius: 10px;
+
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 10%,
+      transparent
+    );
+
+  color: var(--accent-primary);
+
+  transition:
+    background 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.note-workspace .transcription-modal-icon-listening {
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 20%,
+      transparent
+    );
+
+  box-shadow:
+    0 0 0 4px
+    color-mix(
+      in srgb,
+      var(--accent-primary) 9%,
+      transparent
+    );
+}
+
+.note-workspace .transcription-modal-heading h2 {
+  margin: 1px 0 0;
+
+  color: var(--text-primary);
+
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.note-workspace .transcription-modal-heading p {
+  margin: 6px 0 0;
+
+  color: var(--text-secondary);
+
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.note-workspace .transcription-modal-close {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border: 1px solid var(--border-control);
+  border-radius: 8px;
+
+  background: transparent;
+  color: var(--text-secondary);
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.note-workspace .transcription-modal-close:hover {
+  border-color: var(--accent-primary);
+
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 10%,
+      transparent
+    );
+
+  color: var(--accent-primary);
+}
+
+.note-workspace .transcription-modal-close:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--focus-ring-soft);
+}
+
+/* ---------------------------------------------------------
+   Body
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-modal-body {
+  min-height: 0;
+
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  padding: 20px 24px 22px;
+
+  overflow-y: auto;
+}
+
+.note-workspace .transcription-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.note-workspace .transcription-language-badge,
+.note-workspace .transcription-status {
+  min-height: 32px;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+
+  padding: 0 10px;
+
+  border: 1px solid var(--border-control);
+  border-radius: 999px;
+
+  background: var(--bg-panel-secondary);
+  color: var(--text-secondary);
+
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.note-workspace .transcription-language-badge svg {
+  color: var(--text-muted);
+}
+
+.note-workspace .transcription-status-dot {
+  width: 7px;
+  height: 7px;
+
+  border-radius: 50%;
+
+  background: var(--text-muted);
+
+  transition:
+    background 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.note-workspace
+.transcription-status-listening
+.transcription-status-dot {
+  background: var(--accent-primary);
+
+  box-shadow:
+    0 0 0 4px
+    color-mix(
+      in srgb,
+      var(--accent-primary) 12%,
+      transparent
+    );
+}
+
+.note-workspace .transcription-status-listening {
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+}
+
+/* ---------------------------------------------------------
+   Listening visualisation
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-waveform {
+  height: 70px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+
+  padding: 0 20px;
+
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+
+  background:
+    color-mix(
+      in srgb,
+      var(--bg-workspace-canvas) 88%,
+      transparent
+    );
+}
+
+.note-workspace .transcription-waveform span {
+  width: 4px;
+  height: 12px;
+
+  border-radius: 999px;
+
+  background: var(--text-muted);
+
+  opacity: 0.55;
+
+  transform-origin: center;
+}
+
+.note-workspace
+.transcription-waveform-active
+span {
+  background: var(--accent-primary);
+  opacity: 0.92;
+
+  animation:
+    transcriptionWavePulse
+    0.8s ease-in-out
+    infinite alternate;
+}
+
+.note-workspace
+.transcription-waveform-active
+span:nth-child(2n) {
+  animation-delay: -0.22s;
+}
+
+.note-workspace
+.transcription-waveform-active
+span:nth-child(3n) {
+  animation-delay: -0.46s;
+}
+
+.note-workspace
+.transcription-waveform-active
+span:nth-child(4n) {
+  animation-delay: -0.62s;
+}
+
+@keyframes transcriptionWavePulse {
+  0% {
+    height: 10px;
+  }
+
+  100% {
+    height: 42px;
+  }
+}
+
+.note-workspace .transcription-prototype-note {
+  margin: -4px 0 0;
+
+  color: var(--text-muted);
+
+  font-size: 0.72rem;
+  line-height: 1.45;
+
+  text-align: center;
+}
+
+/* ---------------------------------------------------------
+   Transcript editor
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  color: var(--text-primary);
+
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.note-workspace .transcription-field textarea {
+  width: 100%;
+  min-height: 170px;
+
+  box-sizing: border-box;
+
+  padding: 13px 14px;
+
+  resize: vertical;
+
+  border: 1px solid var(--border-control);
+  border-radius: 9px;
+
+  outline: none;
+
+  background: var(--bg-input);
+  color: var(--text-primary);
+
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 400;
+  line-height: 1.55;
+
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.note-workspace .transcription-field textarea::placeholder,
+.note-workspace .transcription-term-entry input::placeholder {
+  color: var(--text-muted);
+}
+
+.note-workspace .transcription-field textarea:focus,
+.note-workspace .transcription-term-entry input:focus {
+  background: var(--bg-input-focus);
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--focus-ring-soft);
+}
+
+/* ---------------------------------------------------------
+   Terminology
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-terms-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  padding-top: 2px;
+}
+
+.note-workspace .transcription-terms-copy strong,
+.note-workspace .transcription-terms-copy span {
+  display: block;
+}
+
+.note-workspace .transcription-terms-copy strong {
+  color: var(--text-primary);
+
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.note-workspace .transcription-terms-copy span {
+  margin-top: 4px;
+
+  color: var(--text-muted);
+
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.note-workspace .transcription-term-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+}
+
+.note-workspace .transcription-term-entry input {
+  min-width: 0;
+  height: 38px;
+
+  box-sizing: border-box;
+
+  padding: 0 12px;
+
+  border: 1px solid var(--border-control);
+  border-radius: 8px;
+
+  outline: none;
+
+  background: var(--bg-input);
+  color: var(--text-primary);
+
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.note-workspace .transcription-term-add {
+  height: 38px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+
+  padding: 0 13px;
+
+  border: 1px solid var(--border-control);
+  border-radius: 8px;
+
+  background: var(--bg-control);
+  color: var(--text-primary);
+
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 650;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.note-workspace .transcription-term-add:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}
+
+.note-workspace .transcription-term-add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.note-workspace .transcription-term-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.note-workspace .transcription-term-chip {
+  min-height: 28px;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+
+  padding: 0 5px 0 9px;
+
+  border: 1px solid var(--border-accent);
+  border-radius: 999px;
+
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 8%,
+      transparent
+    );
+
+  color: var(--text-primary);
+
+  font-size: 0.72rem;
+}
+
+.note-workspace .transcription-term-chip button {
+  width: 22px;
+  height: 22px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border: 0;
+  border-radius: 50%;
+
+  background: transparent;
+  color: var(--text-muted);
+
+  cursor: pointer;
+}
+
+.note-workspace .transcription-term-chip button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* ---------------------------------------------------------
+   Footer actions
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+
+  padding: 16px 24px;
+
+  border-top: 1px solid var(--border-subtle);
+
+  background:
+    color-mix(
+      in srgb,
+      var(--bg-panel-secondary) 82%,
+      transparent
+    );
+}
+
+.note-workspace .transcription-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.note-workspace .transcription-footer-button {
+  min-height: 38px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  padding: 0 14px;
+
+  border: 1px solid var(--border-control);
+  border-radius: 8px;
+
+  background: var(--bg-control);
+  color: var(--text-primary);
+
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 650;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
+}
+
+.note-workspace
+.transcription-footer-button:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  background: var(--bg-hover);
+}
+
+.note-workspace .transcription-footer-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.note-workspace .transcription-footer-button:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--focus-ring-soft);
+}
+
+.note-workspace .transcription-footer-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.note-workspace .transcription-clear-button {
+  color: var(--text-secondary);
+}
+
+.note-workspace .transcription-listen-button-active {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--status-error) 65%,
+      var(--border-control)
+    );
+
+  background:
+    color-mix(
+      in srgb,
+      var(--status-error) 10%,
+      transparent
+    );
+
+  color: var(--status-error);
+}
+
+.note-workspace .transcription-append-button {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+}
+
+.note-workspace
+.transcription-append-button:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  color: var(--text-on-accent);
+}
+
+/* ---------------------------------------------------------
+   Scrollbars
+   --------------------------------------------------------- */
+
+.note-workspace .transcription-modal-body::-webkit-scrollbar,
+.note-workspace .transcription-field textarea::-webkit-scrollbar {
+  width: 7px;
+}
+
+.note-workspace .transcription-modal-body::-webkit-scrollbar-track,
+.note-workspace .transcription-field textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.note-workspace .transcription-modal-body::-webkit-scrollbar-thumb,
+.note-workspace .transcription-field textarea::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background: var(--scrollbar-thumb);
+}
+
+/* ---------------------------------------------------------
+   Responsive modal
+   --------------------------------------------------------- */
+
+@media (max-width: 680px) {
+  .note-workspace .transcription-modal-backdrop {
+    padding: 14px;
+  }
+
+  .note-workspace .transcription-modal {
+    width: min(100%, calc(100vw - 28px));
+    max-height: calc(100vh - 28px);
+  }
+
+  .note-workspace .transcription-modal-header,
+  .note-workspace .transcription-modal-body,
+  .note-workspace .transcription-modal-footer {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .note-workspace .transcription-status-row,
+  .note-workspace .transcription-modal-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .note-workspace .transcription-modal-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .note-workspace .transcription-footer-button,
+  .note-workspace .transcription-modal-actions .transcription-footer-button {
+    width: 100%;
+  }
+
+  .note-workspace .transcription-term-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .note-workspace .transcription-term-add {
+    width: 100%;
+  }
+}
+
+
+
+/* =========================================================
+   STAGE 4.1 - REAL MICROPHONE CAPTURE
+   Append after the Stage 4.0 transcription styles.
+   ========================================================= */
+
+/* The waveform now follows the real microphone level instead of the
+   Stage 4.0 placeholder animation. Inline heights are supplied by React. */
+.note-workspace
+.transcription-waveform-active
+span {
+  animation: none;
+
+  transition:
+    height 70ms linear,
+    background 0.16s ease,
+    opacity 0.16s ease;
+}
+
+/* Permission is pending. */
+.note-workspace
+.transcription-status-requesting {
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+}
+
+.note-workspace
+.transcription-status-requesting
+.transcription-status-dot {
+  background: var(--accent-primary);
+
+  animation:
+    transcriptionPermissionPulse
+    0.9s ease-in-out
+    infinite alternate;
+}
+
+/* A completed capture keeps a quieter positive status. */
+.note-workspace
+.transcription-status-captured {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 55%,
+      var(--border-control)
+    );
+
+  color: var(--text-primary);
+}
+
+.note-workspace
+.transcription-status-captured
+.transcription-status-dot {
+  background: var(--accent-primary);
+}
+
+/* Microphone permission/device failures. */
+.note-workspace
+.transcription-status-error {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--status-error) 55%,
+      var(--border-control)
+    );
+
+  color: var(--status-error);
+}
+
+.note-workspace
+.transcription-status-error
+.transcription-status-dot {
+  background: var(--status-error);
+}
+
+.note-workspace
+.transcription-microphone-error {
+  color: var(--status-error);
+}
+
+/* Make it visually obvious that Start is waiting on the browser's
+   permission prompt and cannot be clicked repeatedly. */
+.note-workspace
+.transcription-listen-button:disabled {
+  opacity: 0.68;
+  cursor: wait;
+}
+
+@keyframes transcriptionPermissionPulse {
+  from {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-workspace
+  .transcription-status-requesting
+  .transcription-status-dot {
+    animation: none;
+  }
+
+  .note-workspace
+  .transcription-waveform-active
+  span {
+    transition: none;
+  }
+}
+
+/* =========================================================
+   STAGE 4.2 - LIVE ASR WEBSOCKET
+   ========================================================= */
+
+.note-workspace
+.transcription-status-connecting,
+.note-workspace
+.transcription-status-finalising {
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+}
+
+.note-workspace
+.transcription-status-connecting
+.transcription-status-dot,
+.note-workspace
+.transcription-status-finalising
+.transcription-status-dot {
+  background: var(--accent-primary);
+
+  animation:
+    transcriptionPermissionPulse
+    0.9s ease-in-out
+    infinite alternate;
+}
+
+.note-workspace
+.transcription-field textarea[readonly] {
+  cursor: default;
+
+  background:
+    color-mix(
+      in srgb,
+      var(--bg-input) 92%,
+      var(--bg-panel-secondary)
+    );
+}
+
+.note-workspace
+.transcription-field textarea[readonly]:focus {
+  border-color: var(--border-control);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-workspace
+  .transcription-status-connecting
+  .transcription-status-dot,
+  .note-workspace
+  .transcription-status-finalising
+  .transcription-status-dot {
+    animation: none;
+  }
 }
