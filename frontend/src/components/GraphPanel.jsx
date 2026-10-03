@@ -25,12 +25,15 @@ import {
   ArrowUp,
   Type,
   PaintBucket,
+  ImagePlus,
+  Image as ImageIcon,
   MoveUpRight,
   Minus,
   ArrowRight,
   CircleX,
   Maximize2,
   Minimize2,
+  Settings,
 } from "lucide-react";
 import SquareDottedIcon from "./icons/SquareDottedIcon";
 import VeeIcon from "./icons/VeeIcon";
@@ -63,7 +66,6 @@ function getThemeColour(
 
   return value || fallback;
 }
-
 
 function getGraphThemeColours() {
   return {
@@ -240,6 +242,303 @@ const ARROW_SHAPES = [
 ];
 
 /* =========================================================
+   SEMANTIC NODE / EDGE TYPES
+   ========================================================= */
+
+const NODE_TYPES = [
+  { value: "standard", label: "Standard" },
+  { value: "conditional", label: "Conditional" },
+];
+
+const EDGE_ROLES = [
+  { value: "auto", label: "Auto-detect" },
+  { value: "standard", label: "Standard" },
+  { value: "reification", label: "Reification" },
+];
+
+/*
+  Match the muted / pastel preset row in TreeNotesColorPicker.
+  Start at the warm orange currently used by the first condition, then
+  walk around the rest of the row before returning to the muted coral.
+*/
+const CONDITIONAL_NODE_MUTED_PALETTE = [
+  "#FDBA74",
+  "#FDE68A",
+  "#BEF264",
+  "#86EFAC",
+  "#5EEAD4",
+  "#7DD3FC",
+  "#C4B5FD",
+  "#FCA5A5",
+];
+
+const CONDITIONAL_NODE_DEFAULT_COLOR =
+  CONDITIONAL_NODE_MUTED_PALETTE[0];
+
+const CONDITIONAL_NODE_DEFAULT_TEXT_COLOR = "#171717";
+
+function getThemeContrastColour() {
+  const theme = String(
+    document.documentElement.getAttribute(
+      "data-theme"
+    ) || ""
+  ).toLowerCase();
+
+  if (theme.includes("light")) {
+    return "#111111";
+  }
+
+  if (theme.includes("dark")) {
+    return "#ffffff";
+  }
+
+  return window.matchMedia?.(
+    "(prefers-color-scheme: light)"
+  )?.matches
+    ? "#111111"
+    : "#ffffff";
+}
+
+function getConditionalDefaultBorderColour() {
+  return getThemeContrastColour();
+}
+
+function getReadableTextColour(background) {
+  const value = String(background || "")
+    .trim()
+    .replace(/^#/, "");
+
+  if (!/^[0-9a-f]{6}$/i.test(value)) {
+    return "#ffffff";
+  }
+
+  const red = Number.parseInt(value.slice(0, 2), 16);
+  const green = Number.parseInt(value.slice(2, 4), 16);
+  const blue = Number.parseInt(value.slice(4, 6), 16);
+
+  const luminance =
+    (0.2126 * red +
+      0.7152 * green +
+      0.0722 * blue) /
+    255;
+
+  return luminance > 0.62
+    ? "#111827"
+    : "#ffffff";
+}
+
+function normaliseNodeType(value, conditionOwnerId = "") {
+  if (conditionOwnerId) {
+    return "conditional";
+  }
+
+  return String(value || "standard").toLowerCase() === "conditional"
+    ? "conditional"
+    : "standard";
+}
+
+function normaliseEdgeRole(value, reificationFlag = false) {
+  if (reificationFlag) {
+    return "reification";
+  }
+
+  const cleanValue = String(value || "auto").toLowerCase();
+
+  return ["auto", "standard", "reification"].includes(cleanValue)
+    ? cleanValue
+    : "auto";
+}
+
+function normaliseEdgeClassification(value) {
+  const cleanValue = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  if (
+    !cleanValue ||
+    ["normal", "standard", "none"].includes(cleanValue)
+  ) {
+    return "normal";
+  }
+
+  if (
+    ["negative", "negation", "negated"].includes(cleanValue)
+  ) {
+    return "negative";
+  }
+
+  if (
+    [
+      "prerequisite",
+      "pre-requisite",
+      "prereq",
+      "requirement",
+    ].includes(cleanValue)
+  ) {
+    return "prerequisite";
+  }
+
+  return cleanValue;
+}
+
+/*
+  Automatic clock-like slots for conditions around their semantic owner.
+  The first few favour the right/top/bottom side of the owner, while larger
+  groups gradually use the remaining space instead of becoming one tall
+  column. Users can drag any conditional afterwards to override its offset.
+*/
+const CONDITION_AUTO_PLACEMENT_SLOTS = [
+  { x: 1, y: 0 },
+  { x: 0.72, y: -0.72 },
+  { x: 0.72, y: 0.72 },
+  { x: 0, y: -1 },
+  { x: 0, y: 1 },
+  { x: -0.72, y: -0.72 },
+  { x: -0.72, y: 0.72 },
+  { x: -1, y: 0 },
+];
+
+function normaliseIncomingNodeData(nodeData = {}) {
+  const conditionOwnerId = String(
+    nodeData.conditionOwnerId ??
+      nodeData.parentNodeId ??
+      ""
+  ).trim();
+
+  const nodeType = normaliseNodeType(
+    nodeData.nodeType ??
+      (nodeData.isConditional === true
+        ? "conditional"
+        : "standard"),
+    conditionOwnerId
+  );
+
+  return {
+    ...nodeData,
+    nodeType,
+    ...(conditionOwnerId
+      ? { conditionOwnerId }
+      : {}),
+  };
+}
+
+function normaliseIncomingEdgeData(edgeData = {}) {
+  const reificationFlag =
+    edgeData.isReification === true ||
+    edgeData.reification === true;
+
+  const normalisedClassification =
+    normaliseEdgeClassification(
+      edgeData.classification
+    );
+
+  const conditionId = String(
+    edgeData.conditionId ?? ""
+  ).trim();
+
+  const fromEdgeId = String(
+    edgeData.fromEdgeId ?? ""
+  ).trim();
+
+  const toEdgeId = String(
+    edgeData.toEdgeId ?? ""
+  ).trim();
+
+  const normalised = {
+    ...edgeData,
+    relationship: String(
+      edgeData.relationship ??
+        edgeData.label ??
+        ""
+    ).trim(),
+    qualifier: String(
+      edgeData.qualifier ?? ""
+    ).trim(),
+    /*
+      Store only the final TreeNotes vocabulary in graph data.
+      Normal is represented by an empty string to match manual edges.
+    */
+    classification:
+      normalisedClassification === "normal"
+        ? ""
+        : normalisedClassification,
+    edgeRole: normaliseEdgeRole(
+      edgeData.edgeRole,
+      reificationFlag
+    ),
+  };
+
+  if (conditionId) {
+    normalised.conditionId = conditionId;
+  } else {
+    delete normalised.conditionId;
+  }
+
+  if (fromEdgeId) {
+    normalised.fromEdgeId = fromEdgeId;
+  } else {
+    delete normalised.fromEdgeId;
+  }
+
+  if (toEdgeId) {
+    normalised.toEdgeId = toEdgeId;
+  } else {
+    delete normalised.toEdgeId;
+  }
+
+  return normalised;
+}
+
+/*
+  Hans may either send a reification relation as a standalone edge
+  or attach it as data.relation on another streamed edge.  Expand the
+  nested form here so Cytoscape still receives ordinary node-to-node edges.
+*/
+function expandIncomingEdgeData(edgeData = {}) {
+  const relation =
+    edgeData?.relation &&
+    typeof edgeData.relation === "object"
+      ? edgeData.relation
+      : null;
+
+  const baseEdge = normaliseIncomingEdgeData({
+    ...edgeData,
+  });
+
+  delete baseEdge.relation;
+
+  const expanded = [baseEdge];
+
+  if (
+    relation &&
+    relation.source != null &&
+    relation.target != null
+  ) {
+    expanded.push(
+      normaliseIncomingEdgeData({
+        ...relation,
+        id:
+          relation.id ||
+          `${baseEdge.id || "relation"}-reification`,
+        relationship:
+          relation.relationship ??
+          relation.label ??
+          "",
+        edgeRole:
+          relation.edgeRole ||
+          "reification",
+        conditionId:
+          relation.conditionId ??
+          baseEdge.conditionId ??
+          "",
+      })
+    );
+  }
+
+  return expanded;
+}
+
+/* =========================================================
    NODE AUTO-SIZING
    ========================================================= */
 
@@ -254,6 +553,72 @@ const NODE_LINE_HEIGHT = 19;
   Cytoscape wraps it onto another line.
 */
 const NODE_TEXT_WRAP_WIDTH = 150;
+
+
+/* =========================================================
+   NODE IMAGE FILL
+   ========================================================= */
+
+/*
+  Large clipboard screenshots and phone photos should never be
+  stored directly inside graph_json. We accept a reasonably large
+  source file, then resize/compress it before attaching it to a node.
+*/
+const NODE_IMAGE_ALLOWED_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+]);
+
+const NODE_IMAGE_MAX_INPUT_BYTES = 5 * 1024 * 1024;
+
+/*
+  This is the compressed binary size before base64 expansion.
+  Keeping it below ~450 KB leaves much more breathing room in the
+  note PATCH request than storing the original clipboard image.
+*/
+const NODE_IMAGE_MAX_STORED_BYTES = 450 * 1024;
+
+const NODE_IMAGE_MAX_SOURCE_DIMENSION = 1024;
+
+const NODE_IMAGE_DEFAULT_POSITION_X = 50;
+const NODE_IMAGE_DEFAULT_POSITION_Y = 50;
+
+const NODE_IMAGE_PREVIEW_SCALE = 0.72;
+
+/*
+  Rectangle-style image nodes follow the picture's aspect ratio.
+  Geometric nodes keep a stable square bounding box so the chosen
+  Cytoscape shape remains visually intentional.
+*/
+const NODE_IMAGE_SIZE_PRESETS = {
+  small: {
+    rectMaxWidth: 220,
+    rectMaxHeight: 180,
+    rectMinWidth: 100,
+    rectMinHeight: 80,
+    geometricSize: 165,
+  },
+
+  medium: {
+    rectMaxWidth: 280,
+    rectMaxHeight: 220,
+    rectMinWidth: 120,
+    rectMinHeight: 90,
+    geometricSize: 200,
+  },
+
+  large: {
+    rectMaxWidth: 340,
+    rectMaxHeight: 270,
+    rectMinWidth: 150,
+    rectMinHeight: 110,
+    geometricSize: 240,
+  },
+};
+
+const NODE_IMAGE_DEFAULT_SIZE = "medium";
+const NODE_IMAGE_LABEL_GAP = 20;
 
 
 /*
@@ -323,22 +688,13 @@ function calculateNodeSize(
     Canvas lets us measure approximately the same
     text dimensions Cytoscape is rendering.
   */
-  const canvas =
-    document.createElement(
-      "canvas"
-    );
+  const canvas = document.createElement("canvas");
 
-  const context =
-    canvas.getContext("2d");
+  const context = canvas.getContext("2d");
 
+  context.font = `500 ${NODE_FONT_SIZE}px Inter, system-ui, sans-serif`;
 
-  context.font =
-    `500 ${NODE_FONT_SIZE}px Inter, system-ui, sans-serif`;
-
-
-  const words =
-    cleanLabel.split(/\s+/);
-
+  const words = cleanLabel.split(/\s+/);
 
   const lines = [];
 
@@ -438,12 +794,9 @@ function calculateNodeSize(
   /*
     Normal breathing room around the text.
   */
-  const paddedWidth =
-    widestLine + 34;
+  const paddedWidth = widestLine + 34;
 
-  const paddedHeight =
-    textHeight + 22;
-
+  const paddedHeight = textHeight + 22;
 
   const factors =
     NODE_SHAPE_SIZE_FACTORS[
@@ -502,6 +855,482 @@ function calculateNodeSize(
 
   };
 }
+
+function clampImagePosition(value) {
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      Number(value) || 0
+    )
+  );
+}
+
+
+function getImagePositionPercent(
+  value,
+  fallback = 50
+) {
+  const parsed =
+    Number.parseFloat(
+      String(value ?? "")
+        .replace("%", "")
+    );
+
+  return Number.isFinite(parsed)
+    ? clampImagePosition(parsed)
+    : fallback;
+}
+
+
+function getNodeImagePreviewSize(
+  imageWidth,
+  imageHeight,
+  shape,
+  imageSize
+) {
+  const {
+    width,
+    height,
+  } =
+    calculateImageNodeSize(
+      imageWidth,
+      imageHeight,
+      shape,
+      imageSize
+    );
+
+  return {
+    width:
+      Math.round(
+        width *
+        NODE_IMAGE_PREVIEW_SCALE
+      ),
+
+    height:
+      Math.round(
+        height *
+        NODE_IMAGE_PREVIEW_SCALE
+      ),
+  };
+}
+
+function formatNodeImageBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 KB";
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+
+function getClipboardImageFile(event) {
+  const items =
+    Array.from(
+      event?.clipboardData?.items ?? []
+    );
+
+  const imageItem =
+    items.find(
+      item =>
+        item.kind === "file" &&
+        item.type?.startsWith("image/")
+    );
+
+  return imageItem?.getAsFile?.() ?? null;
+}
+
+
+function readBlobAsDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () =>
+      resolve(String(reader.result || ""));
+
+    reader.onerror = () =>
+      reject(
+        new Error(
+          "TreeNotes could not read the processed image."
+        )
+      );
+
+    reader.readAsDataURL(blob);
+  });
+}
+
+
+function loadNodeImageSource(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl =
+      URL.createObjectURL(file);
+
+    const image =
+      new window.Image();
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(
+        new Error(
+          "TreeNotes could not decode that image."
+        )
+      );
+    };
+
+    image.src = objectUrl;
+  });
+}
+
+
+function canvasToNodeImageBlob(
+  canvas,
+  quality
+) {
+  return new Promise((resolve) => {
+    canvas.toBlob(
+      blob => resolve(blob),
+      "image/webp",
+      quality
+    );
+  });
+}
+
+
+async function processNodeImageFile(file) {
+  if (!file) {
+    throw new Error(
+      "No image was provided."
+    );
+  }
+
+  if (
+    !NODE_IMAGE_ALLOWED_TYPES.has(
+      file.type
+    )
+  ) {
+    throw new Error(
+      "Node images must be PNG, JPEG, or WebP."
+    );
+  }
+
+  if (
+    file.size >
+    NODE_IMAGE_MAX_INPUT_BYTES
+  ) {
+    throw new Error(
+      `That image is ${formatNodeImageBytes(file.size)}. The maximum source size is ${formatNodeImageBytes(NODE_IMAGE_MAX_INPUT_BYTES)}.`
+    );
+  }
+
+  const sourceImage =
+    await loadNodeImageSource(file);
+
+  const originalWidth =
+    sourceImage.naturalWidth ||
+    sourceImage.width;
+
+  const originalHeight =
+    sourceImage.naturalHeight ||
+    sourceImage.height;
+
+  if (
+    !Number.isFinite(originalWidth) ||
+    !Number.isFinite(originalHeight) ||
+    originalWidth <= 0 ||
+    originalHeight <= 0
+  ) {
+    throw new Error(
+      "TreeNotes could not determine the image dimensions."
+    );
+  }
+
+  const initialScale =
+    Math.min(
+      1,
+      NODE_IMAGE_MAX_SOURCE_DIMENSION /
+        Math.max(
+          originalWidth,
+          originalHeight
+        )
+    );
+
+  let targetWidth =
+    Math.max(
+      1,
+      Math.round(
+        originalWidth *
+        initialScale
+      )
+    );
+
+  let targetHeight =
+    Math.max(
+      1,
+      Math.round(
+        originalHeight *
+        initialScale
+      )
+    );
+
+  let bestBlob = null;
+  let bestWidth = targetWidth;
+  let bestHeight = targetHeight;
+
+  const qualitySteps = [
+    0.86,
+    0.78,
+    0.70,
+    0.62,
+    0.54,
+  ];
+
+  /*
+    Try a few quality levels first. If a very detailed screenshot is
+    still too large, reduce dimensions and repeat. At node scale this
+    remains far sharper than storing a tiny thumbnail.
+  */
+  for (let resizePass = 0; resizePass < 8; resizePass += 1) {
+    const canvas =
+      document.createElement("canvas");
+
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+
+    const context =
+      canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error(
+        "This browser could not prepare the node image."
+      );
+    }
+
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+
+    context.drawImage(
+      sourceImage,
+      0,
+      0,
+      targetWidth,
+      targetHeight
+    );
+
+    for (const quality of qualitySteps) {
+      const blob =
+        await canvasToNodeImageBlob(
+          canvas,
+          quality
+        );
+
+      if (!blob) {
+        continue;
+      }
+
+      if (
+        !bestBlob ||
+        blob.size < bestBlob.size
+      ) {
+        bestBlob = blob;
+        bestWidth = targetWidth;
+        bestHeight = targetHeight;
+      }
+
+      if (
+        blob.size <=
+        NODE_IMAGE_MAX_STORED_BYTES
+      ) {
+        return {
+          dataUrl:
+            await readBlobAsDataUrl(blob),
+          mime:
+            blob.type || "image/webp",
+          width:
+            targetWidth,
+          height:
+            targetHeight,
+          originalWidth,
+          originalHeight,
+          storedBytes:
+            blob.size,
+        };
+      }
+    }
+
+    targetWidth =
+      Math.max(
+        1,
+        Math.round(
+          targetWidth * 0.82
+        )
+      );
+
+    targetHeight =
+      Math.max(
+        1,
+        Math.round(
+          targetHeight * 0.82
+        )
+      );
+  }
+
+  if (
+    bestBlob &&
+    bestBlob.size <=
+      NODE_IMAGE_MAX_STORED_BYTES
+  ) {
+    return {
+      dataUrl:
+        await readBlobAsDataUrl(bestBlob),
+      mime:
+        bestBlob.type || "image/webp",
+      width:
+        bestWidth,
+      height:
+        bestHeight,
+      originalWidth,
+      originalHeight,
+      storedBytes:
+        bestBlob.size,
+    };
+  }
+
+  throw new Error(
+    `TreeNotes could not compress that image below ${formatNodeImageBytes(NODE_IMAGE_MAX_STORED_BYTES)}. Try a smaller image.`
+  );
+}
+
+
+function calculateImageNodeSize(
+  imageWidth,
+  imageHeight,
+  shape,
+  imageSize = NODE_IMAGE_DEFAULT_SIZE
+) {
+  const safeWidth =
+    Math.max(
+      1,
+      Number(imageWidth) || 1
+    );
+
+  const safeHeight =
+    Math.max(
+      1,
+      Number(imageHeight) || 1
+    );
+
+  const isRectangleShape =
+    shape === "rectangle" ||
+    shape === "round-rectangle";
+
+  const preset =
+    NODE_IMAGE_SIZE_PRESETS[
+      imageSize
+    ] ||
+    NODE_IMAGE_SIZE_PRESETS[
+      NODE_IMAGE_DEFAULT_SIZE
+    ];
+
+  let width;
+  let height;
+
+  if (isRectangleShape) {
+    const scale =
+      Math.min(
+        preset.rectMaxWidth /
+          safeWidth,
+        preset.rectMaxHeight /
+          safeHeight
+      );
+
+    width =
+      Math.max(
+        preset.rectMinWidth,
+        Math.round(
+          safeWidth * scale
+        )
+      );
+
+    height =
+      Math.max(
+        preset.rectMinHeight,
+        Math.round(
+          safeHeight * scale
+        )
+      );
+  } else {
+    width = preset.geometricSize;
+    height = preset.geometricSize;
+  }
+
+  return {
+    width,
+    height,
+
+    /*
+      The node name stays visible below the picture. Keeping this
+      width independent of very narrow portrait images prevents
+      labels from wrapping into a tall column.
+    */
+    textMaxWidth:
+      Math.max(
+        150,
+        Math.min(
+          220,
+          width
+        )
+      ),
+
+    /*
+      Existing rename-overlay maths already honours nodeTextMarginY.
+      Moving the normal centred label by half the image-node height
+      plus a gap places it neatly underneath the picture.
+    */
+    textMarginY:
+      Math.round(
+        height / 2 +
+        NODE_IMAGE_LABEL_GAP
+      ),
+  };
+}
+
+
+function getNodeImagePreviewClipPath(
+  shape
+) {
+  switch (shape) {
+    case "ellipse":
+      return "circle(50% at 50% 50%)";
+
+    case "diamond":
+      return "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)";
+
+    case "triangle":
+      return "polygon(50% 0%, 100% 100%, 0% 100%)";
+
+    case "vee":
+      return "polygon(0% 0%, 50% 100%, 100% 0%, 72% 0%, 50% 58%, 28% 0%)";
+
+    case "hexagon":
+      return "polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)";
+
+    case "octagon":
+      return "polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)";
+
+    default:
+      return "none";
+  }
+}
+
 
 function getThemeToken(
   tokenName,
@@ -586,6 +1415,217 @@ function getGraphThemeTokens() {
         "#cbd5e1"
       ),
   };
+}
+
+
+function GraphPropertyDropdown({
+  value,
+  options = [],
+  placeholder = "Select...",
+  isOpen,
+  onToggle,
+  onSelect,
+  searchable = false,
+  searchValue = "",
+  onSearchChange,
+  searchPlaceholder = "Search graph nodes...",
+  emptyMessage = "No matching options",
+  ariaLabel,
+}) {
+  const selectedOption =
+    options.find(
+      option =>
+        String(option.value ?? option.id) ===
+        String(value ?? "")
+    ) || null;
+
+  const query =
+    String(searchValue || "")
+      .trim()
+      .toLowerCase();
+
+  const filteredOptions =
+    searchable && query
+      ? options.filter(option =>
+          String(option.label || "")
+            .toLowerCase()
+            .includes(query)
+        )
+      : options;
+
+  return (
+    <div className={`graph-property-dropdown ${
+      searchable
+        ? "graph-property-dropdown-searchable"
+        : ""
+    }`}>
+      <button
+        type="button"
+        className={`graph-property-dropdown-trigger ${
+          isOpen
+            ? "graph-property-dropdown-trigger-open"
+            : ""
+        }`}
+        onClick={onToggle}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-label={ariaLabel}
+      >
+        <span className={`graph-property-dropdown-trigger-label ${
+          selectedOption
+            ? ""
+            : "is-placeholder"
+        }`}>
+          {selectedOption?.label || placeholder}
+        </span>
+
+        <ChevronDown
+          className={`graph-property-dropdown-chevron ${
+            isOpen
+              ? "graph-property-dropdown-chevron-open"
+              : ""
+          }`}
+          size={15}
+          strokeWidth={1.9}
+        />
+      </button>
+
+      {isOpen && (
+        <div
+          className="graph-property-dropdown-menu"
+          role="listbox"
+        >
+          {searchable && (
+            <div className="graph-property-dropdown-search-wrap">
+              <Search
+                size={13}
+                strokeWidth={1.8}
+                aria-hidden="true"
+              />
+
+              <input
+                type="text"
+                className="graph-property-dropdown-search"
+                value={searchValue}
+                onChange={(event) =>
+                  onSearchChange?.(
+                    event.target.value
+                  )
+                }
+                placeholder={searchPlaceholder}
+                autoFocus
+              />
+            </div>
+          )}
+
+          <div className="graph-property-dropdown-options">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map(option => {
+                const optionValue =
+                  String(
+                    option.value ??
+                    option.id ??
+                    ""
+                  );
+
+                const selected =
+                  optionValue ===
+                  String(value ?? "");
+
+                return (
+                  <button
+                    type="button"
+                    key={optionValue}
+                    className={`graph-property-dropdown-option ${
+                      selected
+                        ? "graph-property-dropdown-option-selected"
+                        : ""
+                    }`}
+                    role="option"
+                    aria-selected={selected}
+                    onClick={() =>
+                      onSelect(optionValue)
+                    }
+                  >
+                    <span>
+                      {option.label}
+                    </span>
+
+                    {selected && (
+                      <Check
+                        size={13}
+                        strokeWidth={2}
+                      />
+                    )}
+                  </button>
+                );
+              })
+            ) : (
+              <div className="graph-property-dropdown-empty">
+                {emptyMessage}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GraphSegmentedControl({
+  label,
+  value,
+  options = [],
+  onChange,
+  statusText,
+  ariaLabel,
+}) {
+  const selectedOption =
+    options.find(
+      option =>
+        String(option.value) ===
+        String(value)
+    ) || null;
+
+  return (
+    <div className="graph-image-control graph-property-segmented-control">
+      <div className="graph-image-control-heading">
+        <span>{label}</span>
+
+        <span>
+          {statusText || selectedOption?.label || ""}
+        </span>
+      </div>
+
+      <div
+        className="graph-image-segmented graph-property-segmented"
+        role="group"
+        aria-label={ariaLabel || label}
+      >
+        {options.map(option => (
+          <button
+            key={option.value}
+            type="button"
+            className={
+              String(value) ===
+              String(option.value)
+                ? "active"
+                : ""
+            }
+            aria-pressed={
+              String(value) ===
+              String(option.value)
+            }
+            onClick={() =>
+              onChange(option.value)
+            }
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 const GraphPanel = forwardRef(function GraphPanel(
@@ -698,6 +1738,14 @@ const GraphPanel = forwardRef(function GraphPanel(
   const [firstNodeToLink, setFirstNodeToLink] = useState(null);
 
   // =========================================================
+  // Node Image Preview Dragging Position
+  // =========================================================
+
+  const imagePreviewDragRef = useRef(null);
+
+  const [imagePreviewDragging, setImagePreviewDragging] = useState(false);
+
+  // =========================================================
   // Graph Toolbar
   // =========================================================
 
@@ -709,6 +1757,11 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   // Node border colour picker
   // const nodeBorderColorInputRef = useRef(null);
+
+  // Node image fill controls
+  const nodeImageInputRef = useRef(null);
+  const nodeImageTargetIdRef = useRef(null);
+  const [nodeImageModalOpen, setNodeImageModalOpen] = useState(false);
 
   // Node border style popover
   const nodeBorderStyleMenuRef = useRef(null);
@@ -800,6 +1853,42 @@ const GraphPanel = forwardRef(function GraphPanel(
   const [relationshipZoom, setRelationshipZoom] = useState(1);
 
   // =========================================================
+  // NODE / EDGE SEMANTIC PROPERTIES
+  // =========================================================
+
+  const [nodePropertiesModalOpen, setNodePropertiesModalOpen] =
+    useState(false);
+
+  const [nodePropertiesDraft, setNodePropertiesDraft] =
+    useState({
+      nodeId: "",
+      nodeType: "standard",
+      conditionOwnerId: "",
+    });
+
+  const [edgePropertiesModalOpen, setEdgePropertiesModalOpen] =
+    useState(false);
+
+  const [edgePropertiesDraft, setEdgePropertiesDraft] =
+    useState({
+      edgeId: "",
+      relationship: "",
+      qualifier: "",
+      classification: "",
+      edgeRole: "auto",
+      conditionId: "",
+    });
+
+  const [propertyDropdownOpen, setPropertyDropdownOpen] =
+    useState(null);
+
+  const [nodeOwnerSearch, setNodeOwnerSearch] =
+    useState("");
+
+  const [edgeConditionSearch, setEdgeConditionSearch] =
+    useState("");
+
+  // =========================================================
   // Node Auto-Sizing / Edge Label Refresh
   // =========================================================
 
@@ -822,6 +1911,51 @@ const GraphPanel = forwardRef(function GraphPanel(
     const shape =
       node.data("shape") ||
       "round-rectangle";
+
+    const imageSrc =
+      node.data("imageSrc");
+
+
+    /*
+      Image-filled nodes are sized from the picture rather than the
+      label. Rectangle variants preserve image aspect ratio, while
+      geometric shapes keep a stable body and crop with cover.
+    */
+    if (imageSrc) {
+      const {
+        width,
+        height,
+        textMaxWidth,
+        textMarginY,
+      } =
+        calculateImageNodeSize(
+          node.data("imageWidth"),
+          node.data("imageHeight"),
+          shape,
+          node.data("imageSize") ||
+            NODE_IMAGE_DEFAULT_SIZE
+        );
+
+      node.data({
+        nodeWidth:
+          width,
+
+        nodeHeight:
+          height,
+
+        nodeTextMaxWidth:
+          textMaxWidth,
+
+        nodeTextMarginY:
+          textMarginY,
+      });
+
+      refreshConnectedEdgeLabels(
+        node
+      );
+
+      return;
+    }
 
 
     const {
@@ -858,6 +1992,36 @@ const GraphPanel = forwardRef(function GraphPanel(
       node
     );
   }
+
+  function syncImageNodePresentation(
+    node
+  ) {
+    if (
+      !node ||
+      node.empty()
+    ) {
+      return;
+    }
+
+    const shouldHideLabel =
+      Boolean(
+        node.data("imageSrc")
+      ) &&
+      node.data(
+        "showImageLabel"
+      ) === false;
+
+    if (shouldHideLabel) {
+      node.addClass(
+        "image-label-hidden"
+      );
+    } else {
+      node.removeClass(
+        "image-label-hidden"
+      );
+    }
+  }
+
 
   function refreshConnectedEdgeLabels(
     node
@@ -908,10 +2072,14 @@ const GraphPanel = forwardRef(function GraphPanel(
         connectedEdges.forEach(
           edge => {
 
-            const relationship =
+            const displayLabel =
+              edge.data(
+                "displayLabel"
+              ) ||
               edge.data(
                 "relationship"
-              ) || "";
+              ) ||
+              "";
 
             /*
               Force Cytoscape to rebuild the label's
@@ -923,7 +2091,7 @@ const GraphPanel = forwardRef(function GraphPanel(
             */
             edge.style(
               "label",
-              `${relationship}\u200B`
+              `${displayLabel}\u200B`
             );
 
           }
@@ -933,7 +2101,7 @@ const GraphPanel = forwardRef(function GraphPanel(
           On the following frame, remove the temporary
           style override so the edge returns to using:
 
-            label: data(relationship)
+            label: data(displayLabel)
 
           from the normal Cytoscape stylesheet.
         */
@@ -1022,6 +2190,10 @@ const GraphPanel = forwardRef(function GraphPanel(
     setArrowShapeMenuOpen(false);
     setGraphColorPicker(null);
     setGraphFeedback(null);
+    setNodeImageModalOpen(false);
+    setNodePropertiesModalOpen(false);
+    setEdgePropertiesModalOpen(false);
+    nodeImageTargetIdRef.current = null;
 
     // Clear UI state and references belonging to linking mode.
     linkModeRef.current = false;
@@ -1399,6 +2571,1545 @@ useEffect(() => {
 
   }
 
+  /* =========================================================
+     CONDITIONAL / REIFICATION GRAPH HELPERS
+     ========================================================= */
+
+  function isInternalConditionOwnerEdge(edge) {
+    return (
+      edge?.data?.("graphInternal") ===
+      "condition-owner"
+    );
+  }
+
+  function getConditionalNodes(
+    cy = cyRef.current
+  ) {
+    if (!cy) {
+      return [];
+    }
+
+    return cy.nodes().filter(
+      node =>
+        normaliseNodeType(
+          node.data("nodeType"),
+          node.data("conditionOwnerId")
+        ) === "conditional"
+    );
+  }
+
+  function getConditionalNodeColour(node) {
+    if (!node || node.empty()) {
+      return CONDITIONAL_NODE_DEFAULT_COLOR;
+    }
+
+    return (
+      node.data("conditionColor") ||
+      node.data("color") ||
+      CONDITIONAL_NODE_DEFAULT_COLOR
+    );
+  }
+
+  function getNextConditionalPaletteColour(
+    cy = cyRef.current,
+    excludeNodeId = ""
+  ) {
+    if (!cy) {
+      return CONDITIONAL_NODE_DEFAULT_COLOR;
+    }
+
+    const conditionalCount =
+      cy.nodes()
+        .filter(
+          node =>
+            !node.data("graphInternal") &&
+            node.id() !== excludeNodeId &&
+            normaliseNodeType(
+              node.data("nodeType"),
+              node.data("conditionOwnerId")
+            ) === "conditional"
+        )
+        .length;
+
+    return CONDITIONAL_NODE_MUTED_PALETTE[
+      conditionalCount %
+        CONDITIONAL_NODE_MUTED_PALETTE.length
+    ];
+  }
+
+  function syncConditionalDefaultBorders(
+    cy = cyRef.current
+  ) {
+    if (!cy) {
+      return;
+    }
+
+    const defaultBorder =
+      getConditionalDefaultBorderColour();
+
+    getConditionalNodes(cy).forEach(
+      node => {
+        if (
+          node.data("conditionBorderAuto") ===
+          true
+        ) {
+          node.data(
+            "borderColor",
+            defaultBorder
+          );
+        }
+      }
+    );
+  }
+
+  function syncImageNodeDefaultTextColours(
+    cy = cyRef.current
+  ) {
+    if (!cy) {
+      return;
+    }
+
+    const defaultTextColour =
+      getThemeContrastColour();
+
+    const automaticColourCandidates =
+      new Set([
+        "#ffffff",
+        "#fff",
+        "#111111",
+        "#111",
+        "#000000",
+        "#000",
+        String(
+          getThemeColour(
+            "--graph-node-text",
+            defaultTextColour
+          ) || ""
+        ).toLowerCase(),
+      ]);
+
+    cy.nodes()
+      .filter(
+        node =>
+          Boolean(node.data("imageSrc")) &&
+          !node.data("graphInternal")
+      )
+      .forEach(
+        node => {
+          if (
+            node.data("textColorUserSet") ===
+            true
+          ) {
+            return;
+          }
+
+          /*
+            Older saved graphs predate textColorUserSet. Preserve an
+            obviously custom colour, but treat the normal white/black
+            defaults as automatic so existing picture nodes migrate cleanly.
+          */
+          const currentTextColour =
+            String(
+              node.data("textColor") || ""
+            )
+              .trim()
+              .toLowerCase();
+
+          if (
+            currentTextColour &&
+            !automaticColourCandidates.has(
+              currentTextColour
+            )
+          ) {
+            node.data(
+              "textColorUserSet",
+              true
+            );
+            return;
+          }
+
+          node.data(
+            "textColor",
+            defaultTextColour
+          );
+        }
+      );
+  }
+
+  function measureEdgeLabelHalfWidth(
+    text,
+    fontSize = 12
+  ) {
+    const cleanText = String(text || "").trim();
+
+    if (!cleanText) {
+      return 0;
+    }
+
+    const canvas =
+      document.createElement("canvas");
+    const context =
+      canvas.getContext("2d");
+
+    if (!context) {
+      return cleanText.length *
+        fontSize * 0.28;
+    }
+
+    context.font =
+      `500 ${fontSize}px Inter, system-ui, sans-serif`;
+
+    return context.measureText(cleanText).width / 2;
+  }
+
+  function syncEdgeLabelGeometry(
+    cy = cyRef.current
+  ) {
+    if (!cy) {
+      return;
+    }
+
+    cy.edges()
+      .filter(
+        edge =>
+          !edge.data("graphInternal")
+      )
+      .forEach(
+        edge => {
+          const sourcePosition =
+            edge.source().position();
+          const targetPosition =
+            edge.target().position();
+
+          const deltaX =
+            targetPosition.x -
+            sourcePosition.x;
+          const deltaY =
+            targetPosition.y -
+            sourcePosition.y;
+
+          const absX = Math.abs(deltaX);
+          const absY = Math.abs(deltaY);
+
+          const isVertical =
+            absY > 30 &&
+            absX <=
+              Math.max(
+                24,
+                absY * 0.18
+              );
+
+          const classification =
+            normaliseEdgeClassification(
+              edge.data("classification")
+            );
+
+          const relationship =
+            String(
+              edge.data("displayLabel") ||
+                edge.data("relationship") ||
+                ""
+            );
+
+          const qualifier =
+            String(
+              edge.data("qualifier") ||
+                ""
+            );
+
+          let relationshipMarginX = 0;
+          let relationshipMarginY = -11;
+          let qualifierMarginX = 0;
+          let qualifierMarginY = 11;
+
+          if (
+            classification ===
+            "prerequisite"
+          ) {
+            relationshipMarginX = 0;
+            relationshipMarginY = 0;
+            qualifierMarginY = 18;
+          } else if (isVertical) {
+            /*
+              Keep vertical relationships horizontally readable.  The
+              relationship always lives to the left and the qualifier to
+              the right, regardless of arrow direction, so scanning stays
+              predictable throughout the graph.
+            */
+            relationshipMarginX =
+              -(
+                measureEdgeLabelHalfWidth(
+                  relationship,
+                  12
+                ) + 14
+              );
+
+            qualifierMarginX =
+              measureEdgeLabelHalfWidth(
+                qualifier,
+                9
+              ) + 14;
+
+            relationshipMarginY = 0;
+            qualifierMarginY = 0;
+          } else if (
+            classification === "negative"
+          ) {
+            /*
+              Keep negation labels centred on the red cross even when the
+              edge is diagonal. A normal vector moves relationship and
+              qualifier perpendicular to the edge instead of simply moving
+              them up/down in screen space, which caused the diagonal drift.
+            */
+            const edgeLength =
+              Math.max(
+                1,
+                Math.hypot(
+                  deltaX,
+                  deltaY
+                )
+              );
+
+            let normalX =
+              -deltaY / edgeLength;
+            let normalY =
+              deltaX / edgeLength;
+
+            /*
+              Relationship always occupies the visually upper side of a
+              non-vertical edge; qualifier mirrors it on the lower side.
+            */
+            if (
+              normalY > 0 ||
+              (
+                Math.abs(normalY) < 0.001 &&
+                normalX > 0
+              )
+            ) {
+              normalX *= -1;
+              normalY *= -1;
+            }
+
+            const negationLabelOffset = 19;
+
+            relationshipMarginX =
+              normalX *
+              negationLabelOffset;
+            relationshipMarginY =
+              normalY *
+              negationLabelOffset;
+
+            qualifierMarginX =
+              -normalX *
+              negationLabelOffset;
+            qualifierMarginY =
+              -normalY *
+              negationLabelOffset;
+          }
+
+          edge.data({
+            labelOrientation:
+              isVertical
+                ? "vertical"
+                : "standard",
+            relationshipMarginX,
+            relationshipMarginY,
+            qualifierMarginX,
+            qualifierMarginY,
+          });
+
+          const qualifierAnnotation =
+            cy.getElementById(
+              `__edge-qualifier__${edge.id()}`
+            );
+
+          if (
+            qualifierAnnotation &&
+            !qualifierAnnotation.empty()
+          ) {
+            qualifierAnnotation.data({
+              labelOrientation:
+                isVertical
+                  ? "vertical"
+                  : "standard",
+              qualifierMarginX,
+              qualifierMarginY,
+            });
+          }
+        }
+      );
+  }
+
+  function isSemanticOwnerGroupNode(node) {
+    return (
+      node?.data?.("graphInternal") ===
+      "semantic-owner-group"
+    );
+  }
+
+  function clearSemanticOwnerCompounds(
+    cy = cyRef.current
+  ) {
+    if (!cy) {
+      return;
+    }
+
+    const ownerGroups =
+      cy.nodes().filter(
+        node =>
+          isSemanticOwnerGroupNode(node)
+      );
+
+    /*
+      Never remove a compound parent while real semantic nodes are still
+      children of it. Cytoscape would remove the descendants as well.
+      Move the semantic nodes back to the graph root first, then discard
+      only the renderer-only parent.
+    */
+    ownerGroups.forEach(
+      group => {
+        const children =
+          group.children();
+
+        if (!children.empty()) {
+          children.move({
+            parent: null,
+          });
+        }
+      }
+    );
+
+    ownerGroups.remove();
+  }
+
+  function getConditionsForOwner(
+    ownerId,
+    cy = cyRef.current
+  ) {
+    if (!cy || !ownerId) {
+      return [];
+    }
+
+    return getConditionalNodes(cy)
+      .filter(
+        conditionNode =>
+          String(
+            conditionNode.data(
+              "conditionOwnerId"
+            ) || ""
+          ).trim() === String(ownerId)
+      )
+      .sort(
+        (first, second) =>
+          first.id().localeCompare(
+            second.id()
+          )
+      );
+  }
+
+  function positionSemanticOwnerGroup(
+    ownerNode,
+    cy = cyRef.current
+  ) {
+    if (
+      !cy ||
+      !ownerNode ||
+      ownerNode.empty()
+    ) {
+      return;
+    }
+
+    const conditions =
+      getConditionsForOwner(
+        ownerNode.id(),
+        cy
+      );
+
+    if (conditions.length === 0) {
+      return;
+    }
+
+    const ownerPosition =
+      ownerNode.position();
+
+    const ownerWidth =
+      Number(ownerNode.outerWidth()) ||
+      110;
+
+    const ownerHeight =
+      Number(ownerNode.outerHeight()) ||
+      52;
+
+    conditions.forEach(
+      (conditionNode, index) => {
+        const savedOffsetX = Number(
+          conditionNode.data(
+            "conditionOffsetX"
+          )
+        );
+
+        const savedOffsetY = Number(
+          conditionNode.data(
+            "conditionOffsetY"
+          )
+        );
+
+        const placementMode = String(
+          conditionNode.data(
+            "conditionPlacement"
+          ) ||
+            "auto"
+        ).toLowerCase();
+
+        const hasSavedOffset =
+          Number.isFinite(savedOffsetX) &&
+          Number.isFinite(savedOffsetY);
+
+        let offsetX;
+        let offsetY;
+
+        /*
+          A manually dragged conditional keeps its exact relative offset.
+          This lets users nudge conditions around the owner while the whole
+          cluster can still move as one semantic compound.
+        */
+        if (
+          placementMode === "manual" &&
+          hasSavedOffset
+        ) {
+          offsetX = savedOffsetX;
+          offsetY = savedOffsetY;
+        } else {
+          const conditionWidth =
+            Number(
+              conditionNode.outerWidth()
+            ) ||
+            110;
+
+          const conditionHeight =
+            Number(
+              conditionNode.outerHeight()
+            ) ||
+            52;
+
+          const slot =
+            CONDITION_AUTO_PLACEMENT_SLOTS[
+              index %
+                CONDITION_AUTO_PLACEMENT_SLOTS.length
+            ];
+
+          const ring =
+            Math.floor(
+              index /
+                CONDITION_AUTO_PLACEMENT_SLOTS.length
+            );
+
+          const horizontalRadius =
+            ownerWidth / 2 +
+            conditionWidth / 2 +
+            38 +
+            ring * 140;
+
+          const verticalRadius =
+            ownerHeight / 2 +
+            conditionHeight / 2 +
+            34 +
+            ring * 100;
+
+          offsetX =
+            slot.x * horizontalRadius;
+
+          offsetY =
+            slot.y * verticalRadius;
+
+          conditionNode.data({
+            conditionPlacement: "auto",
+            conditionOffsetX: offsetX,
+            conditionOffsetY: offsetY,
+          });
+        }
+
+        conditionNode.position({
+          x:
+            ownerPosition.x +
+            offsetX,
+          y:
+            ownerPosition.y +
+            offsetY,
+        });
+      }
+    );
+  }
+
+  function positionAllSemanticOwnerGroups(
+    cy = cyRef.current
+  ) {
+    if (!cy) {
+      return;
+    }
+
+    const positionedOwnerIds =
+      new Set();
+
+    getConditionalNodes(cy).forEach(
+      conditionNode => {
+        const ownerId = String(
+          conditionNode.data(
+            "conditionOwnerId"
+          ) || ""
+        ).trim();
+
+        if (
+          !ownerId ||
+          positionedOwnerIds.has(ownerId)
+        ) {
+          return;
+        }
+
+        const ownerNode =
+          cy.getElementById(ownerId);
+
+        if (
+          !ownerNode ||
+          ownerNode.empty() ||
+          ownerNode.id() ===
+            conditionNode.id()
+        ) {
+          return;
+        }
+
+        positionedOwnerIds.add(
+          ownerId
+        );
+
+        positionSemanticOwnerGroup(
+          ownerNode,
+          cy
+        );
+      }
+    );
+  }
+
+  function syncSemanticOwnerCompounds(
+    cy = cyRef.current
+  ) {
+    if (!cy) {
+      return;
+    }
+
+    clearSemanticOwnerCompounds(cy);
+
+    /*
+      The old invisible owner -> condition layout edge is unnecessary in
+      semantic mode once both nodes share an actual compound parent.
+    */
+    cy.edges()
+      .filter(
+        edge =>
+          isInternalConditionOwnerEdge(edge)
+      )
+      .remove();
+
+    const conditionsByOwner =
+      new Map();
+
+    getConditionalNodes(cy).forEach(
+      conditionNode => {
+        const ownerId = String(
+          conditionNode.data(
+            "conditionOwnerId"
+          ) || ""
+        ).trim();
+
+        if (!ownerId) {
+          return;
+        }
+
+        const ownerNode =
+          cy.getElementById(ownerId);
+
+        if (
+          !ownerNode ||
+          ownerNode.empty() ||
+          ownerNode.id() ===
+            conditionNode.id() ||
+          ownerNode.data(
+            "graphInternal"
+          )
+        ) {
+          return;
+        }
+
+        if (!conditionsByOwner.has(ownerId)) {
+          conditionsByOwner.set(
+            ownerId,
+            []
+          );
+        }
+
+        conditionsByOwner
+          .get(ownerId)
+          .push(conditionNode);
+      }
+    );
+
+    conditionsByOwner.forEach(
+      (conditionNodes, ownerId) => {
+        const ownerNode =
+          cy.getElementById(ownerId);
+
+        if (!ownerNode || ownerNode.empty()) {
+          return;
+        }
+
+        const groupId =
+          `__semantic-owner-group__${ownerId}`;
+
+        const ownerGroup =
+          cy.add({
+            group: "nodes",
+            data: {
+              id: groupId,
+              label: "",
+              graphInternal:
+                "semantic-owner-group",
+              semanticOwnerId:
+                ownerId,
+            },
+            selectable: false,
+            grabbable: false,
+          });
+
+        ownerNode.move({
+          parent: ownerGroup.id(),
+        });
+
+        conditionNodes.forEach(
+          conditionNode => {
+            conditionNode.move({
+              parent: ownerGroup.id(),
+            });
+          }
+        );
+
+        positionSemanticOwnerGroup(
+          ownerNode,
+          cy
+        );
+      }
+    );
+
+    cy.style().update();
+  }
+
+  function getConditionPropositionEdges(
+    conditionNode
+  ) {
+    if (!conditionNode || conditionNode.empty()) {
+      return [];
+    }
+
+    return conditionNode
+      .connectedEdges()
+      .filter(
+        edge =>
+          !isInternalConditionOwnerEdge(edge) &&
+          normaliseEdgeRole(
+            edge.data("edgeRole"),
+            edge.data("isReification") === true ||
+              edge.data("reification") === true
+          ) !== "reification"
+      );
+  }
+
+  function getConditionChildIds(
+    conditionNode
+  ) {
+    const childIds = new Set();
+
+    getConditionPropositionEdges(
+      conditionNode
+    ).forEach(
+      edge => {
+        const sourceId = edge.source().id();
+        const targetId = edge.target().id();
+
+        const otherId =
+          sourceId === conditionNode.id()
+            ? targetId
+            : sourceId;
+
+        if (
+          otherId &&
+          otherId !==
+            conditionNode.data("conditionOwnerId")
+        ) {
+          childIds.add(otherId);
+        }
+      }
+    );
+
+    return childIds;
+  }
+
+  function findConditionForReificationEdge(
+    edge,
+    conditionNodes = getConditionalNodes()
+  ) {
+    if (!edge || edge.empty()) {
+      return null;
+    }
+
+    const currentRole =
+      normaliseEdgeRole(
+        edge.data("edgeRole"),
+        edge.data("isReification") === true ||
+          edge.data("reification") === true
+      );
+
+    /*
+      Auto edges must remain genuinely auto-detected.  A conditionId
+      cached from a previous pass must not make the result sticky if
+      the graph is edited later.
+    */
+    const explicitConditionId =
+      currentRole === "auto"
+        ? ""
+        : String(
+            edge.data("conditionId") || ""
+          ).trim();
+
+    if (explicitConditionId) {
+      const explicitCondition =
+        edge.cy().getElementById(
+          explicitConditionId
+        );
+
+      if (
+        explicitCondition &&
+        !explicitCondition.empty() &&
+        normaliseNodeType(
+          explicitCondition.data("nodeType"),
+          explicitCondition.data(
+            "conditionOwnerId"
+          )
+        ) === "conditional"
+      ) {
+        return explicitCondition;
+      }
+    }
+
+    const sourceId = edge.source().id();
+    const targetId = edge.target().id();
+
+    for (
+      let index = 0;
+      index < conditionNodes.length;
+      index += 1
+    ) {
+      const conditionNode =
+        conditionNodes[index];
+
+      const childIds =
+        getConditionChildIds(
+          conditionNode
+        );
+
+      if (
+        childIds.has(sourceId) &&
+        childIds.has(targetId)
+      ) {
+        return conditionNode;
+      }
+    }
+
+    return null;
+  }
+
+  function findConditionPropositionEdge(
+    conditionNode,
+    childNodeId
+  ) {
+    if (
+      !conditionNode ||
+      conditionNode.empty() ||
+      !childNodeId
+    ) {
+      return null;
+    }
+
+    const candidate =
+      getConditionPropositionEdges(
+        conditionNode
+      )
+        .filter(
+          edge => {
+            const sourceId = edge.source().id();
+            const targetId = edge.target().id();
+
+            return (
+              (sourceId === conditionNode.id() &&
+                targetId === childNodeId) ||
+              (targetId === conditionNode.id() &&
+                sourceId === childNodeId)
+            );
+          }
+        );
+
+    return candidate.length > 0
+      ? candidate[0]
+      : null;
+  }
+
+  function getEdgeDisplayLabel(edge) {
+    if (!edge || edge.empty()) {
+      return "";
+    }
+
+    const relationship = String(
+      edge.data("relationship") || ""
+    ).trim();
+
+    if (!relationship) {
+      return "";
+    }
+
+    if (
+      edge.data("resolvedEdgeRole") ===
+      "reification"
+    ) {
+      return relationship.toUpperCase();
+    }
+
+    const sourceNode = edge.source();
+    const targetNode = edge.target();
+
+    const sourceIsConditional =
+      normaliseNodeType(
+        sourceNode.data("nodeType"),
+        sourceNode.data("conditionOwnerId")
+      ) === "conditional";
+
+    const targetIsConditional =
+      normaliseNodeType(
+        targetNode.data("nodeType"),
+        targetNode.data("conditionOwnerId")
+      ) === "conditional";
+
+    const conditionNode =
+      sourceIsConditional
+        ? sourceNode
+        : targetIsConditional
+          ? targetNode
+          : null;
+
+    if (!conditionNode) {
+      return relationship;
+    }
+
+    const ownerId = String(
+      conditionNode.data(
+        "conditionOwnerId"
+      ) || ""
+    ).trim();
+
+    const ownerNode = ownerId
+      ? edge.cy().getElementById(ownerId)
+      : null;
+
+    if (!ownerNode || ownerNode.empty()) {
+      return relationship;
+    }
+
+    const ownerLabel = String(
+      ownerNode.data("label") ||
+        ownerNode.id()
+    ).trim();
+
+    if (!ownerLabel) {
+      return relationship;
+    }
+
+    if (
+      relationship
+        .toLowerCase()
+        .startsWith(
+          ownerLabel.toLowerCase()
+        )
+    ) {
+      return relationship;
+    }
+
+    return `${ownerLabel} ${relationship}`;
+  }
+
+
+  function isEdgeAnnotationElement(element) {
+    const internalType = String(
+      element?.data?.("graphInternal") ||
+        ""
+    );
+
+    return (
+      internalType ===
+        "edge-qualifier-label" ||
+      internalType ===
+        "edge-negative-mark" ||
+      internalType ===
+        "edge-prerequisite-tag"
+    );
+  }
+
+  function clearEdgeAnnotationPresentation(
+    cy = cyRef.current
+  ) {
+    if (!cy) {
+      return;
+    }
+
+    cy.edges()
+      .filter(
+        edge =>
+          isEdgeAnnotationElement(
+            edge
+          )
+      )
+      .remove();
+  }
+
+  function syncEdgeAnnotationPresentation(
+    cy = cyRef.current
+  ) {
+    if (!cy) {
+      return;
+    }
+
+    clearEdgeAnnotationPresentation(cy);
+
+    const annotationEdges = [];
+
+    cy.edges()
+      .filter(
+        edge =>
+          !edge.data("graphInternal")
+      )
+      .forEach(
+        edge => {
+          const qualifier = String(
+            edge.data("qualifier") ||
+              ""
+          ).trim();
+
+          const classification =
+            normaliseEdgeClassification(
+              edge.data("classification")
+            );
+
+          if (qualifier) {
+            annotationEdges.push({
+              group: "edges",
+              data: {
+                id:
+                  `__edge-qualifier__${edge.id()}`,
+                source:
+                  edge.source().id(),
+                target:
+                  edge.target().id(),
+                displayLabel:
+                  qualifier,
+                graphInternal:
+                  "edge-qualifier-label",
+                semanticEdgeId:
+                  edge.id(),
+              },
+              selectable: false,
+            });
+          }
+
+          if (
+            classification ===
+            "prerequisite"
+          ) {
+            const badgeColour =
+              edge.data(
+                "prerequisiteBadgeColor"
+              ) ||
+              getThemeColour(
+                "--graph-node-bg",
+                "#6366F1"
+              );
+
+            annotationEdges.push({
+              group: "edges",
+              data: {
+                id:
+                  `__edge-prerequisite-tag__${edge.id()}`,
+                source:
+                  edge.source().id(),
+                target:
+                  edge.target().id(),
+                displayLabel:
+                  "requires",
+                graphInternal:
+                  "edge-prerequisite-tag",
+                semanticEdgeId:
+                  edge.id(),
+                prerequisiteBadgeColor:
+                  badgeColour,
+                prerequisiteBadgeTextColor:
+                  edge.data(
+                    "prerequisiteBadgeTextColor"
+                  ) ||
+                  getReadableTextColour(
+                    badgeColour
+                  ),
+              },
+              selectable: false,
+            });
+          }
+
+          if (
+            classification ===
+            "negative"
+          ) {
+            annotationEdges.push({
+              group: "edges",
+              data: {
+                id:
+                  `__edge-negative__${edge.id()}`,
+                source:
+                  edge.source().id(),
+                target:
+                  edge.target().id(),
+                displayLabel: "×",
+                graphInternal:
+                  "edge-negative-mark",
+                semanticEdgeId:
+                  edge.id(),
+              },
+              selectable: false,
+            });
+          }
+        }
+      );
+
+    if (annotationEdges.length > 0) {
+      cy.add(annotationEdges);
+    }
+
+    syncEdgeLabelGeometry(cy);
+  }
+
+  function getVisibleGraphElements(
+    cy = cyRef.current
+  ) {
+    if (!cy) {
+      return null;
+    }
+
+    return cy.elements().filter(
+      element => element.visible()
+    );
+  }
+
+  function fitVisibleGraph(
+    cy = cyRef.current,
+    padding = 50
+  ) {
+    if (!cy) {
+      return;
+    }
+
+    const elements =
+      getVisibleGraphElements(cy);
+
+    if (!elements || elements.empty()) {
+      return;
+    }
+
+    cy.fit(elements, padding);
+
+    if (cy.zoom() > 1.35) {
+      cy.zoom(1.35);
+      cy.center(elements);
+    }
+  }
+
+  function syncConditionalGraphSemantics(
+    cy = cyRef.current
+  ) {
+    if (!cy) {
+      return;
+    }
+
+    /*
+      Rebuild renderer-only semantic helpers from the real saved graph.
+      Conditional nodes and their semantic owner share an invisible
+      Cytoscape compound parent; annotation edges are presentation-only.
+    */
+    clearEdgeAnnotationPresentation(cy);
+    clearSemanticOwnerCompounds(cy);
+    syncSemanticOwnerCompounds(cy);
+
+    const conditionalNodes =
+      getConditionalNodes(cy);
+
+    conditionalNodes.forEach(
+      (conditionNode, conditionIndex) => {
+        const existingConditionColour =
+          conditionNode.data(
+            "conditionColor"
+          );
+
+        const existingNodeColour =
+          conditionNode.data("color");
+
+        const hadConditionColour =
+          Boolean(
+            existingConditionColour ||
+            existingNodeColour
+          );
+
+        const conditionColour =
+          hadConditionColour
+            ? (
+                existingConditionColour ||
+                existingNodeColour
+              )
+            : CONDITIONAL_NODE_MUTED_PALETTE[
+                conditionIndex %
+                  CONDITIONAL_NODE_MUTED_PALETTE.length
+              ];
+
+        const existingBorder =
+          conditionNode.data(
+            "borderColor"
+          );
+
+        const borderAutoSetting =
+          conditionNode.data(
+            "conditionBorderAuto"
+          );
+
+        /*
+          Older GraphPanel builds defaulted the border to the same colour
+          as the conditional fill. Treat that combination as the legacy
+          automatic border unless the user has explicitly customised it.
+        */
+        const looksLikeLegacyAutoBorder =
+          borderAutoSetting == null &&
+          (
+            !existingBorder ||
+            existingBorder ===
+              existingConditionColour ||
+            existingBorder ===
+              conditionColour
+          );
+
+        const useAutomaticBorder =
+          borderAutoSetting === true ||
+          looksLikeLegacyAutoBorder;
+
+        conditionNode.data({
+          nodeType: "conditional",
+          conditionColor:
+            conditionColour,
+          color:
+            conditionColour,
+          conditionColorAuto:
+            hadConditionColour
+              ? Boolean(
+                  conditionNode.data(
+                    "conditionColorAuto"
+                  )
+                )
+              : true,
+          textColor:
+            conditionNode.data("textColor") ||
+            CONDITIONAL_NODE_DEFAULT_TEXT_COLOR,
+          borderColor:
+            useAutomaticBorder
+              ? getConditionalDefaultBorderColour()
+              : existingBorder,
+          conditionBorderAuto:
+            useAutomaticBorder,
+        });
+      }
+    );
+
+    cy.edges().forEach(
+      edge => {
+        if (
+          edge.data("graphInternal")
+        ) {
+          return;
+        }
+
+        const requestedRole =
+          normaliseEdgeRole(
+            edge.data("edgeRole"),
+            edge.data("isReification") === true ||
+              edge.data("reification") === true
+          );
+
+        edge.data("edgeRole", requestedRole);
+
+        const inferredCondition =
+          findConditionForReificationEdge(
+            edge,
+            conditionalNodes
+          );
+
+        const resolvedRole =
+          requestedRole === "reification"
+            ? "reification"
+            : requestedRole === "standard"
+              ? "standard"
+              : inferredCondition
+                ? "reification"
+                : "standard";
+
+        edge.data(
+          "resolvedEdgeRole",
+          resolvedRole
+        );
+
+        const resolvedClassification =
+          normaliseEdgeClassification(
+            edge.data("classification")
+          );
+
+        edge.data(
+          "resolvedClassification",
+          resolvedClassification
+        );
+
+        if (
+          resolvedClassification ===
+          "prerequisite"
+        ) {
+          const badgeColour =
+            edge.data("badgeColor") ||
+            edge.data("edgeColor") ||
+            getThemeColour(
+              "--graph-node-bg",
+              "#6366F1"
+            );
+
+          edge.data({
+            prerequisiteBadgeColor:
+              badgeColour,
+            prerequisiteBadgeTextColor:
+              getReadableTextColour(
+                badgeColour
+              ),
+          });
+        } else {
+          edge.removeData(
+            "prerequisiteBadgeColor"
+          );
+          edge.removeData(
+            "prerequisiteBadgeTextColor"
+          );
+        }
+
+        const sourceNode = edge.source();
+        const targetNode = edge.target();
+
+        const sourceIsConditional =
+          normaliseNodeType(
+            sourceNode.data("nodeType"),
+            sourceNode.data("conditionOwnerId")
+          ) === "conditional";
+
+        const targetIsConditional =
+          normaliseNodeType(
+            targetNode.data("nodeType"),
+            targetNode.data("conditionOwnerId")
+          ) === "conditional";
+
+        const directConditionNode =
+          sourceIsConditional
+            ? sourceNode
+            : targetIsConditional
+              ? targetNode
+              : null;
+
+        if (directConditionNode) {
+          edge.data(
+            "conditionEdge",
+            true
+          );
+
+          if (!edge.data("conditionId")) {
+            edge.data(
+              "conditionId",
+              directConditionNode.id()
+            );
+          }
+        } else {
+          edge.removeData(
+            "conditionEdge"
+          );
+
+          if (
+            requestedRole === "auto" &&
+            !inferredCondition
+          ) {
+            edge.removeData(
+              "conditionId"
+            );
+          }
+        }
+
+        if (resolvedRole === "reification") {
+          /*
+            Preserve explicit proposition-edge IDs supplied by the AI.
+            This matters when streamed edges arrive out of order or when a
+            condition contains multiple proposition edges involving the same
+            visible node. Missing IDs are still inferred below as a fallback.
+          */
+          const suppliedFromEdgeId = String(
+            edge.data("fromEdgeId") || ""
+          ).trim();
+
+          const suppliedToEdgeId = String(
+            edge.data("toEdgeId") || ""
+          ).trim();
+
+          const conditionNode =
+            inferredCondition ||
+            (edge.data("conditionId")
+              ? cy.getElementById(
+                  String(
+                    edge.data("conditionId")
+                  )
+                )
+              : null);
+
+          if (
+            conditionNode &&
+            !conditionNode.empty()
+          ) {
+            const conditionColour =
+              getConditionalNodeColour(
+                conditionNode
+              );
+
+            edge.data({
+              conditionId:
+                conditionNode.id(),
+              conditionColor:
+                conditionColour,
+            });
+
+            const fromProposition =
+              findConditionPropositionEdge(
+                conditionNode,
+                sourceNode.id()
+              );
+
+            const toProposition =
+              findConditionPropositionEdge(
+                conditionNode,
+                targetNode.id()
+              );
+
+            if (suppliedFromEdgeId) {
+              edge.data(
+                "fromEdgeId",
+                suppliedFromEdgeId
+              );
+            } else if (fromProposition) {
+              edge.data(
+                "fromEdgeId",
+                fromProposition.id()
+              );
+            }
+
+            if (suppliedToEdgeId) {
+              edge.data(
+                "toEdgeId",
+                suppliedToEdgeId
+              );
+            } else if (toProposition) {
+              edge.data(
+                "toEdgeId",
+                toProposition.id()
+              );
+            }
+          } else {
+            edge.data(
+              "conditionColor",
+              CONDITIONAL_NODE_DEFAULT_COLOR
+            );
+          }
+        } else {
+          edge.removeData(
+            "conditionColor"
+          );
+
+          edge.removeData(
+            "fromEdgeId"
+          );
+
+          edge.removeData(
+            "toEdgeId"
+          );
+        }
+
+        edge.data(
+          "displayLabel",
+          getEdgeDisplayLabel(edge)
+        );
+      }
+    );
+
+    syncEdgeAnnotationPresentation(cy);
+    syncEdgeLabelGeometry(cy);
+
+    cy.style().update();
+  }
+
+  function placeConditionalNextToOwner(
+    conditionNode
+  ) {
+    if (
+      !conditionNode ||
+      conditionNode.empty()
+    ) {
+      return;
+    }
+
+    const ownerId = String(
+      conditionNode.data(
+        "conditionOwnerId"
+      ) || ""
+    ).trim();
+
+    if (!ownerId) {
+      return;
+    }
+
+    const ownerNode =
+      conditionNode.cy().getElementById(
+        ownerId
+      );
+
+    if (!ownerNode || ownerNode.empty()) {
+      return;
+    }
+
+    /*
+      Re-position the whole owner/condition cluster so multiple conditions
+      are stacked neatly instead of fighting for the same coordinates.
+    */
+    positionSemanticOwnerGroup(
+      ownerNode,
+      conditionNode.cy()
+    );
+  }
+
   function applyGraphTheme(
     cy = cyRef.current
   ) {
@@ -1407,6 +4118,14 @@ useEffect(() => {
     }
 
     const graphTheme = getGraphThemeTokens();
+
+    /*
+      Conditional borders use a theme-aware automatic default: white in
+      dark mode and black in light mode. User-customised borders are left
+      untouched.
+    */
+    syncConditionalDefaultBorders(cy);
+    syncImageNodeDefaultTextColours(cy);
 
     cy.style()
 
@@ -1448,6 +4167,99 @@ useEffect(() => {
       .selector("node[borderStyle]")
       .style({
         "border-style": "data(borderStyle)",
+      })
+
+      // =====================================================
+      // CONDITIONAL NODE
+      // =====================================================
+
+      .selector('node[nodeType = "conditional"]')
+      .style({
+        "background-color":
+          CONDITIONAL_NODE_DEFAULT_COLOR,
+      })
+
+      .selector(
+        'node[nodeType = "conditional"][conditionColor]'
+      )
+      .style({
+        "background-color":
+          "data(conditionColor)",
+      })
+
+      // =====================================================
+      // NODE IMAGE FILL
+      // =====================================================
+
+      .selector("node[imageSrc]")
+      .style({
+        "background-image": "data(imageSrc)",
+        "background-fit": "cover",
+        "background-clip": "node",
+        "background-opacity": 1,
+        color: getThemeContrastColour(),
+      })
+
+      .selector("node[imageSrc][imageFit]")
+      .style({
+        "background-fit": "data(imageFit)",
+      })
+
+      .selector(
+        "node[imageSrc][imagePositionX][imagePositionY]"
+      )
+      .style({
+        "background-position-x":
+          "data(imagePositionX)",
+        "background-position-y":
+          "data(imagePositionY)",
+      })
+
+      .selector("node.image-label-hidden")
+      .style({
+        label: "",
+      })
+
+      /*
+        When there is no explicitly chosen border colour, reuse the
+        old node fill colour as an accent around the image.
+      */
+      .selector("node[imageSrc][color]")
+      .style({
+        "border-color": "data(color)",
+        "border-width": 3,
+      })
+
+      .selector("node[imageSrc][borderColor]")
+      .style({
+        "border-color": "data(borderColor)",
+      })
+
+      .selector(
+        "node[imageSrc][textColor][textColorUserSet]"
+      )
+      .style({
+        color: "data(textColor)",
+      })
+
+      // =====================================================
+      // INVISIBLE SEMANTIC OWNER COMPOUND
+      // =====================================================
+
+      .selector(
+        'node[graphInternal = "semantic-owner-group"]'
+      )
+      .style({
+        "background-opacity": 0,
+        "border-width": 0,
+        "border-opacity": 0,
+        label: "",
+        "text-opacity": 0,
+        padding: 8,
+        "compound-sizing-wrt-label":
+          "exclude",
+        "overlay-opacity": 0,
+        events: "no",
       })
 
       // =====================================================
@@ -1497,8 +4309,33 @@ useEffect(() => {
         "target-arrow-color": graphTheme.edgeArrow,
         "target-arrow-shape": "triangle",
         "line-style": "solid",
+        "curve-style": "straight",
         color: graphTheme.edgeLabel,
         opacity: 0.8,
+        label: "data(displayLabel)",
+        "font-size": "12px",
+        "font-weight": "500",
+        "text-margin-x": 0,
+        "text-margin-y": -11,
+        "text-rotation": "autorotate",
+        "text-events": "yes",
+      })
+
+      .selector(
+        "edge[relationshipMarginX][relationshipMarginY]"
+      )
+      .style({
+        "text-margin-x":
+          "data(relationshipMarginX)",
+        "text-margin-y":
+          "data(relationshipMarginY)",
+      })
+
+      .selector(
+        'edge[labelOrientation = "vertical"]'
+      )
+      .style({
+        "text-rotation": "none",
       })
 
       // =====================================================
@@ -1523,6 +4360,162 @@ useEffect(() => {
       .selector("edge[lineStyle]")
       .style({
         "line-style": "data(lineStyle)",
+      })
+
+      // =====================================================
+      // CONDITIONAL / REIFICATION EDGES
+      // =====================================================
+
+      .selector(
+        'edge[graphInternal = "condition-owner"]'
+      )
+      .style({
+        width: 0.1,
+        opacity: 0,
+        "target-arrow-shape": "none",
+        label: "",
+      })
+
+      .selector("edge[conditionEdge]")
+      .style({
+        "line-style": "dashed",
+      })
+
+      .selector(
+        'edge[resolvedClassification = "prerequisite"]'
+      )
+      .style({
+        "line-style": "dashed",
+        "text-rotation": "none",
+        "text-background-color":
+          "data(prerequisiteBadgeColor)",
+        "text-background-opacity": 1,
+        "text-background-padding": 5,
+        "text-background-shape":
+          "roundrectangle",
+        "text-border-color":
+          "data(prerequisiteBadgeColor)",
+        "text-border-width": 1,
+        "text-border-opacity": 1,
+        color:
+          "data(prerequisiteBadgeTextColor)",
+        "font-weight": "650",
+      })
+
+      .selector(
+        'edge[graphInternal = "edge-qualifier-label"]'
+      )
+      .style({
+        width: 0.1,
+        "line-opacity": 0,
+        "target-arrow-shape": "none",
+        "source-arrow-shape": "none",
+        opacity: 1,
+        label: "data(displayLabel)",
+        color: graphTheme.edgeLabel,
+        "text-opacity": 0.62,
+        "font-size": "9px",
+        "font-weight": "400",
+        "text-margin-x":
+          "data(qualifierMarginX)",
+        "text-margin-y":
+          "data(qualifierMarginY)",
+        "text-rotation": "autorotate",
+        events: "no",
+      })
+
+      .selector(
+        'edge[graphInternal = "edge-qualifier-label"][labelOrientation = "vertical"]'
+      )
+      .style({
+        "text-rotation": "none",
+      })
+
+      .selector(
+        'edge[graphInternal = "edge-prerequisite-tag"]'
+      )
+      .style({
+        width: 0.1,
+        "line-opacity": 0,
+        "target-arrow-shape": "none",
+        "source-arrow-shape": "none",
+        opacity: 1,
+        label: "data(displayLabel)",
+        color:
+          "data(prerequisiteBadgeTextColor)",
+        "font-size": "8px",
+        "font-weight": "700",
+        "text-margin-y": -15,
+        "text-rotation": "none",
+        "text-background-color":
+          "data(prerequisiteBadgeColor)",
+        "text-background-opacity": 1,
+        "text-background-padding": 1,
+        "text-background-shape":
+          "roundrectangle",
+        "text-border-color":
+          "data(prerequisiteBadgeColor)",
+        "text-border-width": 1,
+        "text-border-opacity": 1,
+        events: "no",
+      })
+
+      .selector(
+        'edge[graphInternal = "edge-negative-mark"]'
+      )
+      .style({
+        width: 0.1,
+        "line-opacity": 0,
+        "target-arrow-shape": "none",
+        "source-arrow-shape": "none",
+        opacity: 1,
+        label: "data(displayLabel)",
+        color: "#ef4444",
+        "font-size": "16px",
+        "font-weight": "800",
+        "text-margin-y": 0,
+        "text-rotation": "none",
+        "text-outline-color": "#111827",
+        "text-outline-width": 2,
+        events: "no",
+      })
+
+      .selector(
+        'edge[resolvedEdgeRole = "reification"]'
+      )
+      .style({
+        width: 4,
+        "line-color":
+          CONDITIONAL_NODE_DEFAULT_COLOR,
+        "target-arrow-color":
+          CONDITIONAL_NODE_DEFAULT_COLOR,
+        "target-arrow-shape": "triangle",
+        "line-style": "solid",
+        "arrow-scale": 1.25,
+        color:
+          CONDITIONAL_NODE_DEFAULT_COLOR,
+        "font-weight": "700",
+        opacity: 1,
+      })
+
+      .selector(
+        'edge[resolvedEdgeRole = "reification"][conditionColor]'
+      )
+      .style({
+        "line-color":
+          "data(conditionColor)",
+        "target-arrow-color":
+          "data(conditionColor)",
+        color:
+          "data(conditionColor)",
+      })
+
+      /* Classification wins over user/role line style. */
+      .selector(
+        'edge[resolvedClassification = "prerequisite"]'
+      )
+      .style({
+        "line-style": "dashed",
       })
 
       // =====================================================
@@ -1553,6 +4546,11 @@ useEffect(() => {
     ) {
       return false;
     }
+
+    edgeData =
+      normaliseIncomingEdgeData(
+        edgeData
+      );
 
     const sourceId =
       String(
@@ -1633,6 +4631,8 @@ useEffect(() => {
         target: targetId,
       });
 
+      syncConditionalGraphSemantics(cy);
+
       return true;
     }
 
@@ -1652,6 +4652,8 @@ useEffect(() => {
           targetId,
       },
     });
+
+    syncConditionalGraphSemantics(cy);
 
     return true;
   }
@@ -1863,7 +4865,10 @@ useEffect(() => {
 
       case "node": {
 
-        const nodeData = event.data;
+        const nodeData =
+          normaliseIncomingNodeData(
+            event.data || {}
+          );
 
         if (!nodeData?.id) {
           console.warn("Streamed node has no id:", event);
@@ -1931,6 +4936,8 @@ useEffect(() => {
         */
         flushPendingStreamEdges();
 
+        syncConditionalGraphSemantics(cy);
+
         cy.style().update();
 
         /*
@@ -1949,60 +4956,59 @@ useEffect(() => {
 
       case "edge": {
 
-        const edgeData = event.data;
+        const incomingEdgeData =
+          event.data;
 
-        if (!edgeData) {
+        if (!incomingEdgeData) {
           break;
         }
 
-        const added = addStreamEdge(edgeData);
+        const expandedEdges =
+          expandIncomingEdgeData(
+            incomingEdgeData
+          );
 
-        /*
-          If the required nodes have not arrived yet,
-          hold this edge temporarily.
-        */
+        for (const edgeData of expandedEdges) {
+          const added = addStreamEdge(edgeData);
 
-        if (!added) {
+          /*
+            If the required nodes have not arrived yet,
+            hold this edge temporarily.
+          */
+          if (!added) {
+            const pendingId = edgeData.id;
 
-          const pendingId = edgeData.id;
+            const alreadyWaiting =
+              pendingStreamEdgesRef.current
+                .some(
+                  (edge) =>
+                    pendingId &&
+                    edge.id === pendingId
+                );
 
-          const alreadyWaiting =
-            pendingStreamEdgesRef.current
-              .some(
-                (edge) =>
-                  pendingId &&
-                  edge.id === pendingId
+            if (!alreadyWaiting) {
+              pendingStreamEdgesRef.current.push(
+                edgeData
               );
+            }
 
-          if (!alreadyWaiting) {
-            pendingStreamEdgesRef.current.push(edgeData);
+            continue;
           }
 
-        } else {
           const sourceNode =
             cy.getElementById(
-              String(
-                edgeData.source
-              )
+              String(edgeData.source)
             );
 
           const targetNode =
             cy.getElementById(
-              String(
-                edgeData.target
-              )
+              String(edgeData.target)
             );
 
           if (
             !sourceNode.empty() &&
             !targetNode.empty()
           ) {
-
-            /*
-              A Cytoscape collection containing both
-              endpoints lets the camera centre between them.
-            */
-
             const connectedNodes =
               sourceNode.union(
                 targetNode
@@ -2011,9 +5017,10 @@ useEffect(() => {
             focusStreamElements(
               connectedNodes
             );
-
           }
         }
+
+        syncConditionalGraphSemantics(cy);
 
         break;
       }
@@ -2054,6 +5061,8 @@ useEffect(() => {
 
         }
 
+        syncConditionalGraphSemantics(cy);
+
         /*
           Final layout now that the complete graph
           has arrived.
@@ -2076,31 +5085,29 @@ useEffect(() => {
 
               cy.resize();
 
-              const elements = cy.elements();
+              positionAllSemanticOwnerGroups(cy);
 
-              if (elements.empty()) {
-                return;
-              }
-
-              cy.fit(elements, 50);
-
-              /*
-                Keep the same maximum automatic zoom
-                you've already been using.
-              */
-
-              if (cy.zoom() > 1.35) {
-                cy.zoom(1.35);
-                cy.center(elements);
-              }
+              fitVisibleGraph(cy, 50);
 
             }
           );
           finalLayout.run();
         }
 
+        const semanticNodeCount =
+          cy.nodes().filter(
+            node =>
+              !node.data("graphInternal")
+          ).length;
+
+        const semanticEdgeCount =
+          cy.edges().filter(
+            edge =>
+              !edge.data("graphInternal")
+          ).length;
+
         showGraphFeedback(
-          `Graph generated: ${cy.nodes().length} nodes, ${cy.edges().length} links`,
+          `Graph generated: ${semanticNodeCount} nodes, ${semanticEdgeCount} links`,
           "success"
         );
 
@@ -2360,6 +5367,27 @@ useEffect(() => {
         },
 
         /* =====================================================
+          INVISIBLE SEMANTIC OWNER COMPOUND
+          ===================================================== */
+
+        {
+          selector:
+            'node[graphInternal = "semantic-owner-group"]',
+          style: {
+            "background-opacity": 0,
+            "border-width": 0,
+            "border-opacity": 0,
+            label: "",
+            "text-opacity": 0,
+            padding: 8,
+            "compound-sizing-wrt-label":
+              "exclude",
+            "overlay-opacity": 0,
+            events: "no",
+          },
+        },
+
+        /* =====================================================
           SAVED NODE BORDER COLOUR
           ===================================================== */
 
@@ -2469,6 +5497,93 @@ useEffect(() => {
         },
 
         /* =====================================================
+          CONDITIONAL NODE
+          ===================================================== */
+
+        {
+          selector: 'node[nodeType = "conditional"]',
+          style: {
+            "background-color":
+              CONDITIONAL_NODE_DEFAULT_COLOR,
+          },
+        },
+
+        {
+          selector:
+            'node[nodeType = "conditional"][conditionColor]',
+          style: {
+            "background-color":
+              "data(conditionColor)",
+          },
+        },
+
+        /* =====================================================
+          NODE IMAGE FILL
+          ===================================================== */
+
+        {
+          selector: "node[imageSrc]",
+          style: {
+            "background-image":
+              "data(imageSrc)",
+            "background-fit":
+              "cover",
+            "background-clip":
+              "node",
+            "background-opacity":
+              1,
+            color:
+              getThemeContrastColour(),
+          },
+        },
+
+        {
+          selector:
+            "node[imageSrc][imageFit]",
+          style: {
+            "background-fit":
+              "data(imageFit)",
+          },
+        },
+
+        {
+          selector:
+            "node.image-label-hidden",
+          style: {
+            label: "",
+          },
+        },
+
+        {
+          selector:
+            "node[imageSrc][color]",
+          style: {
+            "border-color":
+              "data(color)",
+            "border-width":
+              3,
+          },
+        },
+
+        {
+          selector:
+            "node[imageSrc][borderColor]",
+          style: {
+            "border-color":
+              "data(borderColor)",
+          },
+        },
+
+        {
+          selector:
+            "node[imageSrc][textColor][textColorUserSet]",
+          style: {
+            color:
+              "data(textColor)",
+          },
+        },
+
+        /* =====================================================
           DEFAULT EDGE
           ===================================================== */
 
@@ -2481,7 +5596,7 @@ useEffect(() => {
             "target-arrow-color": graphTheme.edgeArrow,
             "target-arrow-shape": "triangle",
 
-            "curve-style": "bezier",
+            "curve-style": "straight",
 
             opacity: 0.8,
 
@@ -2491,7 +5606,7 @@ useEffect(() => {
               Relationship label
             */
             label:
-              "data(relationship)",
+              "data(displayLabel)",
 
             color:
               graphTheme.edgeLabel,
@@ -2512,8 +5627,16 @@ useEffect(() => {
               Lift the label slightly above the edge
               rather than drawing the line through it.
             */
+            "text-margin-x":
+              0,
             "text-margin-y":
-              -9,
+              -11,
+
+            /*
+              Keep relationship text parallel to the edge.
+            */
+            "text-rotation":
+              "autorotate",
 
             /*
               Allows clicking/double-clicking the
@@ -2522,6 +5645,26 @@ useEffect(() => {
             */
             "text-events":
               "yes",
+          },
+        },
+
+        {
+          selector:
+            "edge[relationshipMarginX][relationshipMarginY]",
+          style: {
+            "text-margin-x":
+              "data(relationshipMarginX)",
+            "text-margin-y":
+              "data(relationshipMarginY)",
+          },
+        },
+
+        {
+          selector:
+            'edge[labelOrientation = "vertical"]',
+          style: {
+            "text-rotation":
+              "none",
           },
         },
 
@@ -2586,6 +5729,193 @@ useEffect(() => {
           style: {
             "line-style":
               "data(lineStyle)",
+          },
+        },
+
+        /* =====================================================
+          CONDITIONAL / REIFICATION EDGES
+          ===================================================== */
+
+        {
+          selector:
+            'edge[graphInternal = "condition-owner"]',
+          style: {
+            width: 0.1,
+            opacity: 0,
+            "target-arrow-shape": "none",
+            label: "",
+          },
+        },
+
+        {
+          selector: "edge[conditionEdge]",
+          style: {
+            "line-style": "dashed",
+          },
+        },
+
+        {
+          selector:
+            'edge[resolvedClassification = "prerequisite"]',
+          style: {
+            "line-style":
+              "dashed",
+            "text-rotation":
+              "none",
+            "text-background-color":
+              "data(prerequisiteBadgeColor)",
+            "text-background-opacity":
+              1,
+            "text-background-padding":
+              5,
+            "text-background-shape":
+              "roundrectangle",
+            "text-border-color":
+              "data(prerequisiteBadgeColor)",
+            "text-border-width":
+              1,
+            "text-border-opacity":
+              1,
+            color:
+              "data(prerequisiteBadgeTextColor)",
+            "font-weight":
+              "650",
+          },
+        },
+
+        {
+          selector:
+            'edge[graphInternal = "edge-qualifier-label"]',
+          style: {
+            width: 0.1,
+            "line-opacity": 0,
+            "target-arrow-shape":
+              "none",
+            "source-arrow-shape":
+              "none",
+            opacity: 1,
+            label:
+              "data(displayLabel)",
+            color:
+              graphTheme.edgeLabel,
+            "text-opacity": 0.62,
+            "font-size": "9px",
+            "font-weight": "400",
+            "text-margin-x":
+              "data(qualifierMarginX)",
+            "text-margin-y":
+              "data(qualifierMarginY)",
+            "text-rotation":
+              "autorotate",
+            events: "no",
+          },
+        },
+
+        {
+          selector:
+            'edge[graphInternal = "edge-qualifier-label"][labelOrientation = "vertical"]',
+          style: {
+            "text-rotation":
+              "none",
+          },
+        },
+
+        {
+          selector:
+            'edge[graphInternal = "edge-prerequisite-tag"]',
+          style: {
+            width: 0.1,
+            "line-opacity": 0,
+            "target-arrow-shape":
+              "none",
+            "source-arrow-shape":
+              "none",
+            opacity: 1,
+            label:
+              "data(displayLabel)",
+            color:
+              "data(prerequisiteBadgeTextColor)",
+            "font-size": "8px",
+            "font-weight": "700",
+            "text-margin-y": -15,
+            "text-rotation": "none",
+            "text-background-color":
+              "data(prerequisiteBadgeColor)",
+            "text-background-opacity": 1,
+            "text-background-padding": 1,
+            "text-background-shape":
+              "roundrectangle",
+            "text-border-color":
+              "data(prerequisiteBadgeColor)",
+            "text-border-width": 1,
+            "text-border-opacity": 1,
+            events: "no",
+          },
+        },
+
+        {
+          selector:
+            'edge[graphInternal = "edge-negative-mark"]',
+          style: {
+            width: 0.1,
+            "line-opacity": 0,
+            "target-arrow-shape":
+              "none",
+            "source-arrow-shape":
+              "none",
+            opacity: 1,
+            label:
+              "data(displayLabel)",
+            color: "#ef4444",
+            "font-size": "16px",
+            "font-weight": "800",
+            "text-margin-y": 0,
+            "text-rotation": "none",
+            "text-outline-color":
+              "#111827",
+            "text-outline-width": 2,
+            events: "no",
+          },
+        },
+
+        {
+          selector:
+            'edge[resolvedEdgeRole = "reification"]',
+          style: {
+            width: 4,
+            "line-color":
+              CONDITIONAL_NODE_DEFAULT_COLOR,
+            "target-arrow-color":
+              CONDITIONAL_NODE_DEFAULT_COLOR,
+            "target-arrow-shape": "triangle",
+            "line-style": "solid",
+            "arrow-scale": 1.25,
+            color:
+              CONDITIONAL_NODE_DEFAULT_COLOR,
+            "font-weight": "700",
+            opacity: 1,
+          },
+        },
+
+        {
+          selector:
+            'edge[resolvedEdgeRole = "reification"][conditionColor]',
+          style: {
+            "line-color":
+              "data(conditionColor)",
+            "target-arrow-color":
+              "data(conditionColor)",
+            color:
+              "data(conditionColor)",
+          },
+        },
+
+        {
+          selector:
+            'edge[resolvedClassification = "prerequisite"]',
+          style: {
+            "line-style":
+              "dashed",
           },
         },
 
@@ -2702,6 +6032,15 @@ useEffect(() => {
                   getThemeColour(
                     "--graph-node-bg",
                     "#6366F1"
+                  ),
+
+                borderColor:
+                  currentCyNode.data(
+                    "borderColor"
+                  ) ||
+                  getThemeColour(
+                    "--graph-node-border",
+                    "#818CF8"
                   ),
               };
             }
@@ -3118,8 +6457,21 @@ useEffect(() => {
 
           target:
             targetId,
+
+          relationship: "",
+          qualifier: "",
+          classification: "",
+
+          /*
+            Manual edges start in Auto mode. If both endpoints
+            are proposition targets of the same conditional node,
+            TreeNotes will render this as a reification edge.
+          */
+          edgeRole: "auto",
         },
       });
+
+      syncConditionalGraphSemantics(cy);
 
 
       sourceNode.removeClass(
@@ -3393,6 +6745,7 @@ cy.on(
   "node",
   () => {
     syncRelationshipOverlay();
+    syncEdgeLabelGeometry(cy);
   }
 );
 
@@ -3412,8 +6765,107 @@ cy.on(
       syncRenameOverlay();
     }
 
+    /*
+      Dragging a semantic owner moves its conditional companions with it.
+      The invisible compound keeps them structurally grouped, while this
+      small positional rule preserves the clean side-by-side mind-map look.
+    */
+    if (
+      !event.target.data(
+        "graphInternal"
+      ) &&
+      normaliseNodeType(
+        event.target.data("nodeType"),
+        event.target.data(
+          "conditionOwnerId"
+        )
+      ) !== "conditional"
+    ) {
+      positionSemanticOwnerGroup(
+        event.target,
+        cy
+      );
+    }
+
   }
 );
+
+cy.on(
+  "free",
+  "node",
+  (event) => {
+    if (
+      event.target.data(
+        "graphInternal"
+      )
+    ) {
+      return;
+    }
+
+    const releasedNode =
+      event.target;
+
+    const releasedIsConditional =
+      normaliseNodeType(
+        releasedNode.data("nodeType"),
+        releasedNode.data(
+          "conditionOwnerId"
+        )
+      ) === "conditional";
+
+    if (releasedIsConditional) {
+      const ownerId = String(
+        releasedNode.data(
+          "conditionOwnerId"
+        ) || ""
+      ).trim();
+
+      const ownerNode = ownerId
+        ? cy.getElementById(ownerId)
+        : null;
+
+      /*
+        Do not snap a conditional back to its automatic slot. Capture the
+        user's new offset instead. Moving the owner later will preserve this
+        relative placement, giving the cluster a flexible mind-map feel.
+      */
+      if (
+        ownerNode &&
+        !ownerNode.empty()
+      ) {
+        const conditionPosition =
+          releasedNode.position();
+
+        const ownerPosition =
+          ownerNode.position();
+
+        releasedNode.data({
+          conditionPlacement:
+            "manual",
+          conditionOffsetX:
+            conditionPosition.x -
+            ownerPosition.x,
+          conditionOffsetY:
+            conditionPosition.y -
+            ownerPosition.y,
+        });
+      }
+    } else {
+      /*
+        If the semantic owner itself moved, keep all conditional companions
+        at their saved automatic/manual offsets around it.
+      */
+      positionSemanticOwnerGroup(
+        releasedNode,
+        cy
+      );
+    }
+
+    syncRelationshipOverlay();
+    syncEdgeLabelGeometry(cy);
+  }
+);
+
 
 return () => {
   themeObserver.disconnect();
@@ -3440,14 +6892,84 @@ useEffect(() => {
 
   const nodes =
     Array.isArray(graphData?.nodes)
-      ? graphData.nodes
+      ? graphData.nodes.map(
+          nodeElement => {
+            const rawData =
+              nodeElement?.data ??
+              nodeElement ??
+              {};
+
+            return nodeElement?.data
+              ? {
+                  ...nodeElement,
+                  data:
+                    normaliseIncomingNodeData(
+                      rawData
+                    ),
+                }
+              : {
+                  group: "nodes",
+                  data:
+                    normaliseIncomingNodeData(
+                      rawData
+                    ),
+                };
+          }
+        )
       : [];
 
 
-  const edges =
+  const rawEdges =
     Array.isArray(graphData?.edges)
       ? graphData.edges
       : [];
+
+  const edgeMap = new Map();
+
+  rawEdges.forEach(
+    edgeElement => {
+      const rawData =
+        edgeElement?.data ??
+        edgeElement ??
+        {};
+
+      expandIncomingEdgeData(
+        rawData
+      ).forEach(
+        expandedData => {
+          const edgeId = String(
+            expandedData.id ||
+              `loaded-edge-${expandedData.source}-${expandedData.target}-${expandedData.relationship || "link"}`
+          );
+
+          edgeMap.set(
+            edgeId,
+            edgeElement?.data
+              ? {
+                  ...edgeElement,
+                  group: "edges",
+                  data: {
+                    ...expandedData,
+                    id: edgeId,
+                  },
+                }
+              : {
+                  group: "edges",
+                  data: {
+                    ...expandedData,
+                    id: edgeId,
+                  },
+                }
+          );
+        }
+      );
+    }
+  );
+
+  const edges =
+    Array.from(
+      edgeMap.values()
+    );
 
 
   /*
@@ -3505,9 +7027,15 @@ useEffect(() => {
         node
       );
 
+      syncImageNodePresentation(
+        node
+      );
+
     }
   );
 
+
+  syncConditionalGraphSemantics(cy);
 
   applyGraphTheme(cy);
 
@@ -3526,7 +7054,8 @@ useEffect(() => {
   /*
     Saved graphs retain their positions.
 
-    Fresh AI graphs get automatically arranged.
+    Fresh AI graphs get automatically arranged. Renderer-only semantic
+    owner compounds are rebuilt from conditionOwnerId before layout.
   */
 
   const layout =
@@ -3552,38 +7081,9 @@ useEffect(() => {
 
       cy.resize();
 
+      positionAllSemanticOwnerGroups(cy);
 
-      const elements =
-        cy.elements();
-
-
-      if (elements.empty()) {
-        return;
-      }
-
-
-      cy.fit(
-        elements,
-        50
-      );
-
-
-      /*
-        Preserve your existing protection against
-        tiny graphs being zoomed ridiculously large.
-      */
-
-      if (cy.zoom() > 1.35) {
-
-        cy.zoom(
-          1.35
-        );
-
-        cy.center(
-          elements
-        );
-
-      }
+      fitVisibleGraph(cy, 50);
 
     }
   );
@@ -3633,6 +7133,9 @@ function addSelectedTextNode() {
 
         label:
           selectedText,
+
+        nodeType:
+          "standard",
       },
 
       position: {
@@ -3656,28 +7159,85 @@ useEffect(() =>
          [addNodeTrigger]);
 
 // getting latest graph with all the chnages
-function getEditedGraphData() {
+function getEditedGraphData({
+  includeNodeImages = true,
+} = {}) {
   if (!cyRef.current) {
     return null;
   }
 
   const cy = cyRef.current;
 
-  const nodes = cy.nodes().map((node) => ({
-    data: {
+  const nodes = cy.nodes()
+    .filter(
+      node =>
+        !node.data("graphInternal")
+    )
+    .map((node) => {
+    const data = {
       ...node.data(),
-    },
-    position: {
-      x: node.position("x"),
-      y: node.position("y"),
-    },
-  }));
+    };
 
-  const edges = cy.edges().map((edge) => ({
-    data: {
-      ...edge.data(),
-    },
-  }));
+    /*
+      Cytoscape stores compound membership in data.parent. The invisible
+      semantic owner group is presentation-only, so never persist that
+      renderer-only ID in graph_json. conditionOwnerId remains the semantic
+      source of truth and rebuilds the grouping when the graph loads.
+    */
+    delete data.parent;
+    delete data.graphInternal;
+
+    /*
+      Semantic graph search only needs conceptual graph data.
+      Never send large base64 image payloads to the embedding/search
+      endpoint. Saving still uses the default includeNodeImages=true.
+    */
+    if (!includeNodeImages) {
+      delete data.imageSrc;
+      delete data.imageMime;
+      delete data.imageName;
+      delete data.imageWidth;
+      delete data.imageHeight;
+      delete data.imageOriginalWidth;
+      delete data.imageOriginalHeight;
+      delete data.imageStoredBytes;
+      delete data.imageFit;
+    }
+
+    return {
+      data,
+      position: {
+        x: node.position("x"),
+        y: node.position("y"),
+      },
+    };
+  });
+
+  const edges = cy.edges()
+    .filter(
+      edge =>
+        !edge.data("graphInternal")
+    )
+    .map((edge) => {
+      const data = {
+        ...edge.data(),
+      };
+
+      /*
+        These fields are renderer/layout derivatives. Rebuild them
+        when the graph loads so saved JSON remains semantic and clean.
+      */
+      delete data.displayLabel;
+      delete data.resolvedEdgeRole;
+      delete data.resolvedClassification;
+      delete data.conditionColor;
+      delete data.conditionEdge;
+      delete data.graphInternal;
+
+      return {
+        data,
+      };
+    });
 
   return {
     nodes,
@@ -3794,7 +7354,10 @@ function createLinkedTextNode(label, linkColor) {
           newNodeId,
 
         label:
-          selectedText,
+          label,
+
+        nodeType:
+          "standard",
       },
 
       position: {
@@ -4166,8 +7729,26 @@ function changeSelectedNodeColor(newColor) {
         newColor
       );
 
+      if (
+        normaliseNodeType(
+          node.data("nodeType"),
+          node.data("conditionOwnerId")
+        ) === "conditional"
+      ) {
+        node.data({
+          conditionColor:
+            newColor,
+          conditionColorAuto:
+            false,
+        });
+      }
+
       node.updateStyle();
     }
+  );
+
+  syncConditionalGraphSemantics(
+    cyRef.current
   );
 
   /*
@@ -4185,6 +7766,563 @@ function changeSelectedNodeColor(newColor) {
         : current
   );
 
+}
+
+function getSingleNodeForImageEdit(
+  nodeId = null
+) {
+  const cy = cyRef.current;
+
+  if (!cy) {
+    return null;
+  }
+
+  if (nodeId) {
+    const node =
+      cy.getElementById(
+        String(nodeId)
+      );
+
+    return (
+      node && !node.empty()
+        ? node
+        : null
+    );
+  }
+
+  const selected =
+    cy.$(":selected");
+
+  if (
+    selected.length !== 1 ||
+    !selected[0]?.isNode?.()
+  ) {
+    return null;
+  }
+
+  return selected[0];
+}
+
+
+async function attachImageToNode(
+  file,
+  nodeId = null
+) {
+  const targetNode =
+    getSingleNodeForImageEdit(
+      nodeId
+    );
+
+  if (!targetNode) {
+    showGraphFeedback(
+      "Select exactly one node before attaching an image.",
+      "error"
+    );
+
+    return false;
+  }
+
+  const targetNodeId =
+    targetNode.id();
+
+  const targetNoteId =
+    loadedGraphNoteIdRef.current;
+
+  showGraphFeedback(
+    "Processing node image...",
+    "info"
+  );
+
+  try {
+    const processed =
+      await processNodeImageFile(
+        file
+      );
+
+    const cy = cyRef.current;
+
+    if (
+      !cy ||
+      loadedGraphNoteIdRef.current !==
+        targetNoteId
+    ) {
+      return false;
+    }
+
+    const node =
+      cy.getElementById(
+        targetNodeId
+      );
+
+    if (!node || node.empty()) {
+      showGraphFeedback(
+        "That node no longer exists.",
+        "error"
+      );
+
+      return false;
+    }
+
+    node.data({
+      imageSrc:
+        processed.dataUrl,
+      imageMime:
+        processed.mime,
+      imageName:
+        file.name ||
+        "Pasted image",
+      imageWidth:
+        processed.width,
+      imageHeight:
+        processed.height,
+      imageOriginalWidth:
+        processed.originalWidth,
+      imageOriginalHeight:
+        processed.originalHeight,
+      imageStoredBytes:
+        processed.storedBytes,
+      imageFit:
+        node.data("imageFit") ||
+        "cover",
+      imageSize:
+        node.data("imageSize") ||
+        NODE_IMAGE_DEFAULT_SIZE,
+      imagePositionX:
+        `${
+          getImagePositionPercent(
+            node.data("imagePositionX"),
+            NODE_IMAGE_DEFAULT_POSITION_X
+          )
+        }%`,
+      imagePositionY:
+        `${
+          getImagePositionPercent(
+            node.data("imagePositionY"),
+            NODE_IMAGE_DEFAULT_POSITION_Y
+          )
+        }%`,
+      showImageLabel:
+        node.data("showImageLabel") !==
+          false,
+    });
+
+    resizeNodeToLabel(
+      node
+    );
+
+    syncImageNodePresentation(
+      node
+    );
+
+    syncImageNodeDefaultTextColours(
+      cy
+    );
+
+    node.updateStyle();
+    cy.style().update();
+
+    if (node.selected()) {
+      syncGraphSelectionState(
+        node
+      );
+    }
+
+    showGraphFeedback(
+      `Image attached to ${
+        node.data("label") ||
+        "node"
+      } (${formatNodeImageBytes(processed.storedBytes)})`,
+      "success"
+    );
+
+    return true;
+  } catch (error) {
+    console.error(
+      "Unable to attach node image:",
+      error
+    );
+
+    showGraphFeedback(
+      error?.message ||
+        "Unable to attach that image.",
+      "error"
+    );
+
+    return false;
+  }
+}
+
+
+function openNodeImageModal() {
+  const node =
+    getSingleNodeForImageEdit();
+
+  if (!node) {
+    showGraphFeedback(
+      "Select exactly one node before editing its image.",
+      "error"
+    );
+
+    return;
+  }
+
+  setShapeMenuOpen(false);
+  setNodeBorderStyleMenuOpen(false);
+  setEdgeStyleMenuOpen(false);
+  setArrowShapeMenuOpen(false);
+  setGraphColorPicker(null);
+  setNodeImageModalOpen(true);
+}
+
+function closeNodeImageModal() {
+  setNodeImageModalOpen(false);
+}
+
+function changeSelectedNodeImageFit(imageFit) {
+  const node = getSingleNodeForImageEdit();
+
+  if (!node || !node.data("imageSrc") || !["cover", "contain"].includes(imageFit)) {
+    return;
+  }
+
+  node.data("imageFit", imageFit);
+
+  node.updateStyle();
+  cyRef.current?.style().update();
+
+  syncGraphSelectionState(node);
+}
+
+
+function changeSelectedNodeImageSize(imageSize) {
+  const node = getSingleNodeForImageEdit();
+
+  if (!node || !node.data("imageSrc") || !NODE_IMAGE_SIZE_PRESETS[imageSize]) {
+    return;
+  }
+
+  node.data("imageSize", imageSize);
+
+  resizeNodeToLabel(node);
+
+  node.updateStyle();
+  cyRef.current?.style().update();
+
+  syncGraphSelectionState(node);
+}
+
+function changeSelectedNodeImagePosition(
+  x,
+  y
+) {
+  const node =
+    getSingleNodeForImageEdit();
+
+  if (
+    !node ||
+    !node.data("imageSrc")
+  ) {
+    return;
+  }
+
+  const safeX =
+    clampImagePosition(x);
+
+  const safeY =
+    clampImagePosition(y);
+
+  node.data({
+    imagePositionX:
+      `${safeX}%`,
+
+    imagePositionY:
+      `${safeY}%`,
+  });
+
+  node.updateStyle();
+
+  cyRef.current
+    ?.style()
+    .update();
+
+  syncGraphSelectionState(
+    node
+  );
+}
+
+
+function resetSelectedNodeImagePosition() {
+  changeSelectedNodeImagePosition(
+    NODE_IMAGE_DEFAULT_POSITION_X,
+    NODE_IMAGE_DEFAULT_POSITION_Y
+  );
+}
+
+function changeSelectedNodeImageLabelVisibility(visible) {
+  const node = getSingleNodeForImageEdit();
+
+  if (!node || !node.data("imageSrc")) {
+    return;
+  }
+
+  node.data("showImageLabel", Boolean(visible));
+
+  syncImageNodePresentation(node);
+
+  node.updateStyle();
+  cyRef.current?.style().update();
+
+  syncGraphSelectionState(node);
+}
+
+
+function openNodeImagePicker() {
+  const node = getSingleNodeForImageEdit();
+
+  if (!node) {
+    showGraphFeedback(
+      "Select exactly one node before attaching an image.",
+      "error"
+    );
+
+    return;
+  }
+
+  nodeImageTargetIdRef.current = node.id();
+
+  nodeImageInputRef.current
+    ?.click();
+}
+
+
+function handleNodeImageFileChange(event) {
+  const file =
+    event.target.files?.[0] ??
+    null;
+
+  const targetNodeId =  nodeImageTargetIdRef.current;
+
+  nodeImageTargetIdRef.current = null;
+
+  /*
+    Reset the native input so choosing the same file again still
+    fires a change event after a remove/replace operation.
+  */
+  event.target.value = "";
+
+  if (!file || !targetNodeId) {
+    return;
+  }
+
+  void attachImageToNode(
+    file,
+    targetNodeId
+  );
+}
+
+
+function removeImageFromSelectedNode() {
+  const node = getSingleNodeForImageEdit();
+
+  if (!node) {
+    showGraphFeedback(
+      "Select exactly one node before removing an image.",
+      "error"
+    );
+
+    return;
+  }
+
+  if (!node.data("imageSrc")) {
+    return;
+  }
+
+  [
+    "imageSrc",
+    "imageMime",
+    "imageName",
+    "imageWidth",
+    "imageHeight",
+    "imageOriginalWidth",
+    "imageOriginalHeight",
+    "imageStoredBytes",
+    "imageFit",
+    "imageSize",
+    "showImageLabel",
+  ].forEach(
+    key =>
+      node.removeData(key)
+  );
+
+  resizeNodeToLabel(node);
+
+  syncImageNodePresentation(node);
+
+  node.updateStyle();
+  cyRef.current?.style().update();
+
+  syncGraphSelectionState(node);
+
+  showGraphFeedback(
+    `Removed image from ${
+      node.data("label") ||
+      "node"
+    }`,
+    "success"
+  );
+}
+
+function handleNodeRenameImagePaste(event) {
+  const imageFile = getClipboardImageFile(event);
+
+  if (!imageFile) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  void attachImageToNode(
+    imageFile,
+    editingNodeIdRef.current ||
+      editingNodeId
+  );
+}
+
+function startNodeImagePreviewDrag(event) {
+  if (
+    event.button !== 0 ||
+    !selectedNode?.imageSrc ||
+    selectedNode.imageFit === "contain"
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+
+  const target =
+    event.currentTarget;
+
+  const bounds =
+    target.getBoundingClientRect();
+
+  const startX =
+    getImagePositionPercent(
+      selectedNode.imagePositionX,
+      NODE_IMAGE_DEFAULT_POSITION_X
+    );
+
+  const startY =
+    getImagePositionPercent(
+      selectedNode.imagePositionY,
+      NODE_IMAGE_DEFAULT_POSITION_Y
+    );
+
+  imagePreviewDragRef.current = {
+    pointerId:
+      event.pointerId,
+
+    startClientX:
+      event.clientX,
+
+    startClientY:
+      event.clientY,
+
+    startX,
+    startY,
+
+    width:
+      Math.max(
+        1,
+        bounds.width
+      ),
+
+    height:
+      Math.max(
+        1,
+        bounds.height
+      ),
+  };
+
+  target.setPointerCapture?.(
+    event.pointerId
+  );
+
+  setImagePreviewDragging(true);
+}
+
+function moveNodeImagePreviewDrag(event) {
+  const drag = imagePreviewDragRef.current;
+
+  if (
+    !drag ||
+    drag.pointerId !==
+      event.pointerId
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+
+  /*
+    With cover, increasing background-position
+    shifts the visible crop toward the opposite
+    side of the oversized image.
+
+    Subtracting the drag delta makes this behave
+    like physically grabbing the photograph.
+  */
+  const deltaX =
+    (
+      event.clientX -
+      drag.startClientX
+    ) /
+    drag.width *
+    100;
+
+  const deltaY =
+    (
+      event.clientY -
+      drag.startClientY
+    ) /
+    drag.height *
+    100;
+
+  changeSelectedNodeImagePosition(
+    drag.startX -
+      deltaX,
+
+    drag.startY -
+      deltaY
+  );
+}
+
+
+function finishNodeImagePreviewDrag(event) {
+  const drag = imagePreviewDragRef.current;
+
+  if (!drag) {
+    return;
+  }
+
+  if (
+    event.currentTarget
+      .hasPointerCapture?.(
+        event.pointerId
+      )
+  ) {
+    event.currentTarget
+      .releasePointerCapture(
+        event.pointerId
+      );
+  }
+
+  imagePreviewDragRef.current =
+    null;
+
+  setImagePreviewDragging(
+    false
+  );
 }
 
 function changeSelectedNodeShape(newShape) {
@@ -4253,6 +8391,18 @@ function changeSelectedNodeBorderColor(newColor) {
         "borderColor",
         newColor
       );
+
+      if (
+        normaliseNodeType(
+          node.data("nodeType"),
+          node.data("conditionOwnerId")
+        ) === "conditional"
+      ) {
+        node.data(
+          "conditionBorderAuto",
+          false
+        );
+      }
 
       node.updateStyle();
 
@@ -4344,6 +8494,14 @@ function changeSelectedEdgeColor(colour) {
               colour,
           }
         : current
+  );
+
+  /*
+    Prerequisite badges inherit the selected edge colour, so refresh the
+    derived badge and annotation presentation immediately.
+  */
+  syncConditionalGraphSemantics(
+    cyRef.current
   );
 
 }
@@ -4461,6 +8619,512 @@ function changeSelectedArrowShape(shape) {
 
 }
 
+/* =========================================================
+   NODE / EDGE SEMANTIC PROPERTIES
+   ========================================================= */
+
+function getNodePropertyOptions(
+  excludedNodeId = ""
+) {
+  const cy = cyRef.current;
+
+  if (!cy) {
+    return [];
+  }
+
+  return cy.nodes()
+    .filter(
+      node =>
+        !node.data("graphInternal") &&
+        node.id() !== excludedNodeId &&
+        normaliseNodeType(
+          node.data("nodeType"),
+          node.data("conditionOwnerId")
+        ) !== "conditional"
+    )
+    .map(
+      node => ({
+        id: node.id(),
+        label:
+          node.data("label") ||
+          node.id(),
+      })
+    )
+    .sort(
+      (a, b) =>
+        a.label.localeCompare(b.label)
+    );
+}
+
+function getConditionalPropertyOptions() {
+  return getConditionalNodes()
+    .map(
+      node => ({
+        id: node.id(),
+        label:
+          node.data("label") ||
+          node.id(),
+      })
+    )
+    .sort(
+      (a, b) =>
+        a.label.localeCompare(b.label)
+    );
+}
+
+function getSingleSelectedEdgeForProperties(
+  edgeId = ""
+) {
+  const cy = cyRef.current;
+
+  if (!cy) {
+    return null;
+  }
+
+  if (edgeId) {
+    const edge =
+      cy.getElementById(edgeId);
+
+    return (
+      edge &&
+      !edge.empty() &&
+      edge.isEdge() &&
+      !isInternalConditionOwnerEdge(edge)
+    )
+      ? edge
+      : null;
+  }
+
+  const selectedEdges =
+    cy.edges(":selected")
+      .filter(
+        edge =>
+          !isInternalConditionOwnerEdge(edge)
+      );
+
+  return selectedEdges.length === 1
+    ? selectedEdges[0]
+    : null;
+}
+
+function closeNodePropertiesModal() {
+  setNodePropertiesModalOpen(false);
+  setPropertyDropdownOpen(null);
+  setNodeOwnerSearch("");
+}
+
+function closeEdgePropertiesModal() {
+  setEdgePropertiesModalOpen(false);
+  setPropertyDropdownOpen(null);
+  setEdgeConditionSearch("");
+}
+
+function openNodePropertiesModal() {
+  const node =
+    getSingleNodeForImageEdit();
+
+  if (!node) {
+    showGraphFeedback(
+      "Select exactly one node before editing node properties.",
+      "error"
+    );
+    return;
+  }
+
+  setShapeMenuOpen(false);
+  setNodeBorderStyleMenuOpen(false);
+  setEdgeStyleMenuOpen(false);
+  setArrowShapeMenuOpen(false);
+  setGraphColorPicker(null);
+  setEdgePropertiesModalOpen(false);
+
+  setPropertyDropdownOpen(null);
+  setNodeOwnerSearch("");
+
+  setNodePropertiesDraft({
+    nodeId: node.id(),
+    nodeType:
+      normaliseNodeType(
+        node.data("nodeType"),
+        node.data("conditionOwnerId")
+      ),
+    conditionOwnerId:
+      String(
+        node.data("conditionOwnerId") ||
+          ""
+      ),
+  });
+
+  setNodePropertiesModalOpen(true);
+}
+
+function saveNodeProperties() {
+  const cy = cyRef.current;
+
+  if (!cy) {
+    return;
+  }
+
+  const node =
+    cy.getElementById(
+      nodePropertiesDraft.nodeId
+    );
+
+  if (!node || node.empty()) {
+    closeNodePropertiesModal();
+    return;
+  }
+
+  const nextNodeType =
+    normaliseNodeType(
+      nodePropertiesDraft.nodeType
+    );
+
+  const ownerId = String(
+    nodePropertiesDraft.conditionOwnerId ||
+      ""
+  ).trim();
+
+  if (
+    nextNodeType === "conditional" &&
+    !ownerId
+  ) {
+    showGraphFeedback(
+      "Choose a parent / owner node for this conditional.",
+      "error"
+    );
+    return;
+  }
+
+  if (
+    nextNodeType === "conditional" &&
+    ownerId === node.id()
+  ) {
+    showGraphFeedback(
+      "A conditional node cannot use itself as its parent.",
+      "error"
+    );
+    return;
+  }
+
+  if (nextNodeType === "conditional") {
+    const ownerNode =
+      cy.getElementById(ownerId);
+
+    if (!ownerNode || ownerNode.empty()) {
+      showGraphFeedback(
+        "That parent node no longer exists.",
+        "error"
+      );
+      return;
+    }
+
+    const wasConditional =
+      normaliseNodeType(
+        node.data("nodeType"),
+        node.data("conditionOwnerId")
+      ) === "conditional";
+
+    const previousOwnerId = String(
+      node.data("conditionOwnerId") ||
+        ""
+    ).trim();
+
+    if (
+      !wasConditional ||
+      previousOwnerId !== ownerId
+    ) {
+      node.data(
+        "conditionPlacement",
+        "auto"
+      );
+      node.removeData(
+        "conditionOffsetX"
+      );
+      node.removeData(
+        "conditionOffsetY"
+      );
+    }
+
+    const conditionColour =
+      wasConditional
+        ? getConditionalNodeColour(node)
+        : getNextConditionalPaletteColour(
+            cy,
+            node.id()
+          );
+
+    const useAutomaticBorder =
+      !wasConditional ||
+      node.data(
+        "conditionBorderAuto"
+      ) === true ||
+      !node.data("borderColor");
+
+    node.data({
+      nodeType: "conditional",
+      conditionOwnerId: ownerId,
+      conditionColor:
+        conditionColour,
+      conditionColorAuto:
+        wasConditional
+          ? Boolean(
+              node.data(
+                "conditionColorAuto"
+              )
+            )
+          : true,
+      color:
+        conditionColour,
+      textColor:
+        wasConditional
+          ? node.data("textColor") ||
+            CONDITIONAL_NODE_DEFAULT_TEXT_COLOR
+          : CONDITIONAL_NODE_DEFAULT_TEXT_COLOR,
+      borderColor:
+        useAutomaticBorder
+          ? getConditionalDefaultBorderColour()
+          : node.data("borderColor"),
+      conditionBorderAuto:
+        useAutomaticBorder,
+    });
+
+    syncConditionalGraphSemantics(cy);
+    placeConditionalNextToOwner(node);
+  } else {
+    const oldConditionColour =
+      node.data("conditionColor");
+
+    const oldConditionBorderWasAuto =
+      node.data(
+        "conditionBorderAuto"
+      ) === true;
+
+    node.data(
+      "nodeType",
+      "standard"
+    );
+
+    node.removeData(
+      "conditionOwnerId"
+    );
+
+    node.removeData(
+      "conditionColor"
+    );
+
+    node.removeData(
+      "conditionColorAuto"
+    );
+
+    node.removeData(
+      "conditionBorderAuto"
+    );
+
+    node.removeData(
+      "conditionPlacement"
+    );
+    node.removeData(
+      "conditionOffsetX"
+    );
+    node.removeData(
+      "conditionOffsetY"
+    );
+
+    if (
+      oldConditionColour &&
+      node.data("color") ===
+        oldConditionColour
+    ) {
+      node.data(
+        "color",
+        getThemeColour(
+          "--graph-node-bg",
+          "#6366F1"
+        )
+      );
+    }
+
+    if (
+      oldConditionBorderWasAuto ||
+      (
+        oldConditionColour &&
+        node.data("borderColor") ===
+          oldConditionColour
+      )
+    ) {
+      node.data(
+        "borderColor",
+        getThemeColour(
+          "--graph-node-border",
+          "#818CF8"
+        )
+      );
+    }
+
+    if (
+      node.data("textColor") ===
+      CONDITIONAL_NODE_DEFAULT_TEXT_COLOR
+    ) {
+      node.data(
+        "textColor",
+        getThemeColour(
+          "--graph-node-text",
+          "#ffffff"
+        )
+      );
+    }
+
+    syncConditionalGraphSemantics(cy);
+  }
+
+  resizeNodeToLabel(node);
+  node.updateStyle();
+
+  syncGraphSelectionState(node);
+
+  setNodePropertiesModalOpen(false);
+
+  showGraphFeedback(
+    nextNodeType === "conditional"
+      ? "Conditional node properties saved"
+      : "Node properties saved",
+    "success"
+  );
+}
+
+function openEdgePropertiesModal() {
+  const edge =
+    getSingleSelectedEdgeForProperties();
+
+  if (!edge) {
+    showGraphFeedback(
+      "Select exactly one edge before editing edge properties.",
+      "error"
+    );
+    return;
+  }
+
+  syncConditionalGraphSemantics(
+    edge.cy()
+  );
+
+  setShapeMenuOpen(false);
+  setNodeBorderStyleMenuOpen(false);
+  setEdgeStyleMenuOpen(false);
+  setArrowShapeMenuOpen(false);
+  setGraphColorPicker(null);
+  setNodePropertiesModalOpen(false);
+
+  setPropertyDropdownOpen(null);
+  setEdgeConditionSearch("");
+
+  setEdgePropertiesDraft({
+    edgeId: edge.id(),
+    relationship:
+      String(
+        edge.data("relationship") ||
+          ""
+      ),
+    qualifier:
+      String(
+        edge.data("qualifier") ||
+          ""
+      ),
+    classification:
+      normaliseEdgeClassification(
+        edge.data("classification")
+      ),
+    edgeRole:
+      normaliseEdgeRole(
+        edge.data("edgeRole"),
+        edge.data("isReification") === true ||
+          edge.data("reification") === true
+      ),
+    conditionId:
+      String(
+        edge.data("conditionId") ||
+          ""
+      ),
+  });
+
+  setEdgePropertiesModalOpen(true);
+}
+
+function saveEdgeProperties() {
+  const edge =
+    getSingleSelectedEdgeForProperties(
+      edgePropertiesDraft.edgeId
+    );
+
+  if (!edge) {
+    closeEdgePropertiesModal();
+    return;
+  }
+
+  const nextRole =
+    normaliseEdgeRole(
+      edgePropertiesDraft.edgeRole
+    );
+
+  edge.data({
+    relationship:
+      edgePropertiesDraft.relationship.trim(),
+    qualifier:
+      edgePropertiesDraft.qualifier.trim(),
+    classification:
+      edgePropertiesDraft.classification === "normal"
+        ? ""
+        : normaliseEdgeClassification(
+            edgePropertiesDraft.classification
+          ),
+    edgeRole:
+      nextRole,
+  });
+
+  const selectedConditionId = String(
+    edgePropertiesDraft.conditionId ||
+      ""
+  ).trim();
+
+  if (
+    selectedConditionId &&
+    nextRole !== "standard"
+  ) {
+    edge.data(
+      "conditionId",
+      selectedConditionId
+    );
+  } else {
+    edge.removeData(
+      "conditionId"
+    );
+  }
+
+  /*
+    Legacy backend flags are converted into edgeRole once the user edits
+    the edge, preventing two sources of truth from fighting each other.
+  */
+  edge.removeData("isReification");
+  edge.removeData("reification");
+
+  syncConditionalGraphSemantics(
+    edge.cy()
+  );
+
+  syncGraphSelectionState(edge);
+
+  setEdgePropertiesModalOpen(false);
+
+  showGraphFeedback(
+    edge.data("resolvedEdgeRole") ===
+      "reification"
+      ? "Reification edge properties saved"
+      : "Edge properties saved",
+    "success"
+  );
+}
+
 function showGraphFeedback(
   message,
   type = "success"
@@ -4506,6 +9170,8 @@ function deleteSelectedElement() {
   */
 
   selected.remove();
+
+  syncConditionalGraphSemantics(cy);
 
   setSelectedNode(null);
 
@@ -4568,6 +9234,7 @@ function createManualNode() {
     data: {
       id: nodeId,
       label: "New Node",
+      nodeType: "standard",
       color: 
         getThemeColour(
           "--graph-node-bg",
@@ -4639,6 +9306,10 @@ function finishNodeRename({
       node.data(
         "label",
         cleanLabel
+      );
+
+      syncConditionalGraphSemantics(
+        cyRef.current
       );
 
       /*
@@ -4763,6 +9434,10 @@ function finishEdgeRelationship({
 
   }
 
+  syncConditionalGraphSemantics(
+    cyRef.current
+  );
+
   /*
     Keep React's Selected Edge card in sync.
   */
@@ -4822,10 +9497,12 @@ function changeSelectedNodeTextColor(newColor) {
   nodes.forEach(
     node => {
 
-      node.data(
-        "textColor",
-        newColor
-      );
+      node.data({
+        textColor:
+          newColor,
+        textColorUserSet:
+          true,
+      });
 
       node.updateStyle();
 
@@ -4876,8 +9553,9 @@ async function handleSemanticSearch() {
       await semanticSearchGraph(
         noteId,
         query,
-        getEditedGraphData() ??
-          graphData
+        getEditedGraphData({
+          includeNodeImages: false,
+        }) ?? graphData
       );
 
     if (!result?.match) {
@@ -4975,6 +9653,89 @@ useEffect(() => {
     );
   };
 }, []);
+
+/* =========================================================
+   CLIPBOARD IMAGE -> SELECTED NODE
+   ========================================================= */
+
+useEffect(() => {
+  function handleGraphImagePaste(
+    event
+  ) {
+    if (!graphEditorActive) {
+      return;
+    }
+
+    const imageFile =
+      getClipboardImageFile(
+        event
+      );
+
+    if (!imageFile) {
+      return;
+    }
+
+    const target = event.target;
+
+    /*
+      Normal text fields keep normal paste behaviour. The inline node
+      rename field has its own image-paste handler so it can target the
+      node being edited directly.
+    */
+    if (
+      target instanceof Element
+    ) {
+      if (
+        target.closest(
+          ".graph-inline-rename"
+        )
+      ) {
+        return;
+      }
+
+      if (
+        target.closest(
+          'input, textarea, [contenteditable="true"]'
+        )
+      ) {
+        return;
+      }
+    }
+
+    event.preventDefault();
+
+    const node =
+      getSingleNodeForImageEdit();
+
+    if (!node) {
+      showGraphFeedback(
+        "Select exactly one node before pasting an image.",
+        "error"
+      );
+
+      return;
+    }
+
+    event.stopPropagation();
+
+    void attachImageToNode(
+      imageFile,
+      node.id()
+    );
+  }
+
+  document.addEventListener(
+    "paste",
+    handleGraphImagePaste
+  );
+
+  return () => {
+    document.removeEventListener(
+      "paste",
+      handleGraphImagePaste
+    );
+  };
+}, [graphEditorActive]);
 
 /* =========================================================
    KEYBOARD DELETE
@@ -5154,6 +9915,16 @@ useEffect(() => {
 
     setArrowShapeMenuOpen(false);
 
+    setNodeImageModalOpen(false);
+
+    setNodePropertiesModalOpen(false);
+
+    setEdgePropertiesModalOpen(false);
+
+    setPropertyDropdownOpen(null);
+    setNodeOwnerSearch("");
+    setEdgeConditionSearch("");
+
 
     if (linkModeRef.current) {
       cancelLinkMode();
@@ -5309,6 +10080,11 @@ const CurrentNodeBorderStyleIcon =
   currentNodeBorderStyle?.Icon ||
   Square;
 
+const imagePreviewCanDrag =
+  Boolean(
+    selectedNode?.imageSrc &&
+    selectedNode?.imageFit !== "contain"
+  );
 
 const currentArrowShape =
   ARROW_SHAPES.find(
@@ -5328,6 +10104,125 @@ const currentArrowShape =
 const CurrentArrowShapeIcon =
   currentArrowShape?.Icon ||
   Triangle;
+
+const nodePropertiesDisplayName = (() => {
+  const cy = cyRef.current;
+
+  if (!cy || !nodePropertiesDraft.nodeId) {
+    return selectedNode?.label || "";
+  }
+
+  const node =
+    cy.getElementById(
+      nodePropertiesDraft.nodeId
+    );
+
+  return !node.empty()
+    ? node.data("label") || node.id()
+    : selectedNode?.label || "";
+})();
+
+const edgePropertiesDisplayName = (() => {
+  const cy = cyRef.current;
+
+  if (!cy || !edgePropertiesDraft.edgeId) {
+    return "";
+  }
+
+  const edge =
+    cy.getElementById(
+      edgePropertiesDraft.edgeId
+    );
+
+  if (!edge || edge.empty()) {
+    return "";
+  }
+
+  const sourceLabel =
+    edge.source().data("label") ||
+    edge.source().id();
+
+  const targetLabel =
+    edge.target().data("label") ||
+    edge.target().id();
+
+  return `${sourceLabel} → ${targetLabel}`;
+})();
+
+const edgePropertiesRoleStatus = (() => {
+  const requestedRole =
+    normaliseEdgeRole(
+      edgePropertiesDraft.edgeRole
+    );
+
+  const requestedLabel =
+    EDGE_ROLES.find(
+      option =>
+        option.value === requestedRole
+    )?.label || "Auto-detect";
+
+  if (requestedRole !== "auto") {
+    return requestedLabel;
+  }
+
+  const cy = cyRef.current;
+
+  if (!cy || !edgePropertiesDraft.edgeId) {
+    return requestedLabel;
+  }
+
+  const edge =
+    cy.getElementById(
+      edgePropertiesDraft.edgeId
+    );
+
+  if (!edge || edge.empty()) {
+    return requestedLabel;
+  }
+
+  const resolvedRole =
+    normaliseEdgeRole(
+      edge.data("resolvedEdgeRole")
+    );
+
+  const resolvedLabel =
+    EDGE_ROLES.find(
+      option =>
+        option.value === resolvedRole
+    )?.label ||
+    (
+      resolvedRole === "reification"
+        ? "Reification"
+        : "Standard"
+    );
+
+  return `${requestedLabel} → ${resolvedLabel}`;
+})();
+
+const nodePropertyOwnerOptions = [
+  {
+    value: "",
+    label: "Select parent node...",
+  },
+  ...getNodePropertyOptions(
+    nodePropertiesDraft.nodeId
+  ).map(option => ({
+    value: option.id,
+    label: option.label,
+  })),
+];
+
+const conditionalPropertyOptions = [
+  {
+    value: "",
+    label: "Auto / none",
+  },
+  ...getConditionalPropertyOptions()
+    .map(option => ({
+      value: option.id,
+      label: option.label,
+    })),
+];
 
 
 /* =========================================================
@@ -5472,6 +10367,42 @@ const CurrentArrowShapeIcon =
                 strokeWidth={2.5}
               />
 
+            </span>
+          </button>
+
+          {/* NODE PROPERTIES */}
+
+          <button
+            type="button"
+            className={`graph-toolbar-button ${
+              nodePropertiesModalOpen
+                ? "graph-toolbar-button-active"
+                : ""
+            }`}
+            disabled={!selectedNode}
+            onClick={openNodePropertiesModal}
+            data-tooltip={
+              selectedNode
+                ? "Node properties"
+                : "Select a node first"
+            }
+            aria-label="Node properties"
+            aria-haspopup="dialog"
+            aria-expanded={
+              nodePropertiesModalOpen
+            }
+          >
+            <span className="graph-create-action-icon">
+              <Squircle
+                size={18}
+                strokeWidth={1.8}
+              />
+
+              <Settings
+                className="graph-create-action-plus"
+                size={10}
+                strokeWidth={2.2}
+              />
             </span>
           </button>
 
@@ -5678,6 +10609,48 @@ const CurrentArrowShapeIcon =
             />
 
           </div>
+
+          {/* NODE IMAGE FILL */}
+
+          <input
+            ref={nodeImageInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            hidden
+            onChange={handleNodeImageFileChange}
+          />
+
+          <button
+            type="button"
+            className={`graph-toolbar-button ${
+              nodeImageModalOpen
+                ? "graph-toolbar-button-active"
+                : ""
+            }`}
+            disabled={!selectedNode}
+            onClick={openNodeImageModal}
+            data-tooltip={
+              selectedNode
+                ? selectedNode.imageSrc
+                  ? "Edit node image"
+                  : "Add node image"
+                : "Select a node first"
+            }
+            aria-label={
+              selectedNode?.imageSrc
+                ? "Edit node image"
+                : "Add node image"
+            }
+            aria-haspopup="dialog"
+            aria-expanded={
+              nodeImageModalOpen
+            }
+          >
+            <ImageIcon
+              size={19}
+              strokeWidth={1.8}
+            />
+          </button>
 
           {/* NODE TEXT COLOUR */}
 
@@ -5992,6 +10965,42 @@ const CurrentArrowShapeIcon =
             </span>
           </button>
 
+          {/* EDGE PROPERTIES */}
+
+          <button
+            type="button"
+            className={`graph-toolbar-button ${
+              edgePropertiesModalOpen
+                ? "graph-toolbar-button-active"
+                : ""
+            }`}
+            disabled={!selectedEdge}
+            onClick={openEdgePropertiesModal}
+            data-tooltip={
+              selectedEdge
+                ? "Edge properties"
+                : "Select an edge first"
+            }
+            aria-label="Edge properties"
+            aria-haspopup="dialog"
+            aria-expanded={
+              edgePropertiesModalOpen
+            }
+          >
+            <span className="graph-create-action-icon">
+              <MoveUpRight
+                size={18}
+                strokeWidth={1.8}
+              />
+
+              <Settings
+                className="graph-create-action-plus"
+                size={10}
+                strokeWidth={2.2}
+              />
+            </span>
+          </button>
+
           {/* EDGE STYLE */}
 
           <div
@@ -6156,13 +11165,9 @@ const CurrentArrowShapeIcon =
             </button>
 
             <TreeNotesColorPicker
-              open={
-                graphColorPicker === "edge"
-              }
+              open={graphColorPicker === "edge"}
 
-              anchorRef={
-                edgeColorButtonRef
-              }
+              anchorRef={edgeColorButtonRef}
 
               value={
                 selectedEdge?.edgeColor ||
@@ -6172,9 +11177,7 @@ const CurrentArrowShapeIcon =
                 )
               }
 
-              onChange={
-                changeSelectedEdgeColor
-              }
+              onChange={changeSelectedEdgeColor}
 
               onClose={() =>
                 setGraphColorPicker(null)
@@ -6199,20 +11202,12 @@ const CurrentArrowShapeIcon =
                   : ""
               }`}
 
-              disabled={
-                !selectedEdge
-              }
+              disabled={!selectedEdge}
 
               onClick={() => {
-                setArrowShapeMenuOpen(
-                  current => !current
-                );
-                setShapeMenuOpen(
-                  false
-                );
-                setEdgeStyleMenuOpen(
-                  false
-                );
+                setArrowShapeMenuOpen(current => !current);
+                setShapeMenuOpen(false);
+                setEdgeStyleMenuOpen(false);
               }}
 
               data-tooltip={
@@ -6276,9 +11271,7 @@ const CurrentArrowShapeIcon =
                       }`}
 
                       onClick={() =>
-                        changeSelectedArrowShape(
-                          value
-                        )
+                        changeSelectedArrowShape(value)
                       }
 
                       data-tooltip={label}
@@ -6327,9 +11320,7 @@ const CurrentArrowShapeIcon =
               disabled={!selectedEdge}
 
               onClick={() =>
-                toggleGraphColorPicker(
-                  "arrow"
-                )
+                toggleGraphColorPicker("arrow")
               }
 
               data-tooltip={
@@ -6340,9 +11331,7 @@ const CurrentArrowShapeIcon =
 
               aria-label="Arrow colour"
               aria-haspopup="dialog"
-              aria-expanded={
-                graphColorPicker === "arrow"
-              }
+              aria-expanded={graphColorPicker === "arrow"}
             >
               <span className="graph-toolbar-color-icon">
 
@@ -6367,13 +11356,9 @@ const CurrentArrowShapeIcon =
             </button>
 
             <TreeNotesColorPicker
-              open={
-                graphColorPicker === "arrow"
-              }
+              open={graphColorPicker === "arrow"}
 
-              anchorRef={
-                arrowColorButtonRef
-              }
+              anchorRef={arrowColorButtonRef}
 
               value={
                 selectedEdge?.arrowColor ||
@@ -6383,9 +11368,7 @@ const CurrentArrowShapeIcon =
                 )
               }
 
-              onChange={
-                changeSelectedArrowColor
-              }
+              onChange={changeSelectedArrowColor}
 
               onClose={() =>
                 setGraphColorPicker(null)
@@ -6486,6 +11469,741 @@ const CurrentArrowShapeIcon =
             </div>
           )}
 
+          {nodeImageModalOpen && selectedNode && (
+            <div
+              className="graph-image-modal-backdrop"
+              onPointerDown={(event) => {
+                if (event.target === event.currentTarget) {
+                  closeNodeImageModal();
+                }
+              }}
+            >
+              <div
+                className="graph-image-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="graph-image-modal-title"
+                onPointerDown={(event) =>
+                  event.stopPropagation()
+                }
+              >
+                <div className="graph-image-modal-header">
+                  <div
+                    id="graph-image-modal-title"
+                    className="graph-image-modal-title"
+                  >
+                    <ImageIcon
+                      size={18}
+                      strokeWidth={1.8}
+                    />
+                    <span>
+                      Node Image · {
+                        selectedNode.label ||
+                        "Selected node"
+                      }
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="graph-image-modal-close"
+                    onClick={closeNodeImageModal}
+                    aria-label="Close node image settings"
+                  >
+                    <X
+                      size={17}
+                      strokeWidth={1.9}
+                    />
+                  </button>
+                </div>
+
+                <div className="graph-image-modal-body">
+                  <div className="graph-image-preview-shell">
+                    {selectedNode.imageSrc ? (() => {
+                      const previewSize =
+                        getNodeImagePreviewSize(
+                          selectedNode.imageWidth,
+                          selectedNode.imageHeight,
+                          selectedNode.shape ||
+                            "round-rectangle",
+                          selectedNode.imageSize ||
+                            NODE_IMAGE_DEFAULT_SIZE
+                        );
+
+                      const positionX =
+                        getImagePositionPercent(
+                          selectedNode.imagePositionX,
+                          NODE_IMAGE_DEFAULT_POSITION_X
+                        );
+
+                      const positionY =
+                        getImagePositionPercent(
+                          selectedNode.imagePositionY,
+                          NODE_IMAGE_DEFAULT_POSITION_Y
+                        );
+
+                      return (
+                        <div
+                          className="graph-image-preview-tooltip-anchor"
+
+                          data-tooltip={
+                            imagePreviewCanDrag
+                              ? "Drag to reposition image. Double-click to centre."
+                              : "Fit mode displays the entire image."
+                          }
+                        >
+                          <div
+                            className={`graph-image-preview-node ${
+                              imagePreviewCanDrag
+                                ? "graph-image-preview-node-draggable"
+                                : ""
+                            } ${
+                              imagePreviewDragging
+                                ? "graph-image-preview-node-dragging"
+                                : ""
+                            }`}
+
+                            style={{
+                              width:
+                                `${previewSize.width}px`,
+
+                              height:
+                                `${previewSize.height}px`,
+
+                              clipPath:
+                                getNodeImagePreviewClipPath(
+                                  selectedNode.shape ||
+                                    "round-rectangle"
+                                ),
+
+                              borderRadius:
+                                selectedNode.shape ===
+                                "round-rectangle"
+                                  ? "14px"
+                                  : selectedNode.shape ===
+                                      "rectangle"
+                                    ? "2px"
+                                    : undefined,
+                            }}
+
+                            onPointerDown={startNodeImagePreviewDrag}
+
+                            onPointerMove={moveNodeImagePreviewDrag}
+
+                            onPointerUp={finishNodeImagePreviewDrag}
+
+                            onPointerCancel={finishNodeImagePreviewDrag}
+
+                            onDoubleClick={resetSelectedNodeImagePosition}
+                          >
+                            <img
+                              src={selectedNode.imageSrc}
+                              alt=""
+                              className="graph-image-preview"
+                              draggable={false}
+
+                              style={{
+                                objectFit:
+                                  selectedNode.imageFit ===
+                                  "contain"
+                                    ? "contain"
+                                    : "cover",
+
+                                objectPosition:
+                                  `${positionX}% ${positionY}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })() : (
+                      <div className="graph-image-preview-empty">
+                        <ImageIcon
+                          size={38}
+                          strokeWidth={1.35}
+                        />
+                        <span>
+                          No image attached to this node yet.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {selectedNode.imageSrc && (
+                    <div className="graph-image-modal-meta">
+                      {
+                        selectedNode.imageWidth ||
+                        "?"
+                      } × {
+                        selectedNode.imageHeight ||
+                        "?"
+                      } px
+                      {selectedNode.imageStoredBytes
+                        ? ` · ${formatNodeImageBytes(
+                            selectedNode.imageStoredBytes
+                          )}`
+                        : ""}
+                    </div>
+                  )}
+
+                  <div className="graph-image-modal-actions">
+                    <button
+                      type="button"
+                      className="graph-image-modal-action primary"
+                      onClick={openNodeImagePicker}
+                    >
+                      <ImagePlus
+                        size={16}
+                        strokeWidth={1.9}
+                      />
+                      {selectedNode.imageSrc
+                        ? "Replace image"
+                        : "Choose image"}
+                    </button>
+
+                    {selectedNode.imageSrc && (
+                      <button
+                        type="button"
+                        className="graph-image-modal-action danger"
+                        onClick={removeImageFromSelectedNode}
+                      >
+                        <Trash2
+                          size={16}
+                          strokeWidth={1.9}
+                        />
+                        Remove
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="graph-image-modal-hint">
+                    You can also copy an image and press Ctrl+V while this node is selected.
+                  </div>
+
+                  {selectedNode.imageSrc && (
+                    <>
+                      <div className="graph-image-control">
+                        <div className="graph-image-control-heading">
+                          <span>Image fit</span>
+                          <span>
+                            {selectedNode.imageFit ===
+                            "contain"
+                              ? "Fit"
+                              : "Fill"}
+                          </span>
+                        </div>
+
+                        <div className="graph-image-segmented">
+                          <button
+                            type="button"
+                            className={
+                              (
+                                selectedNode.imageFit ||
+                                "cover"
+                              ) === "cover"
+                                ? "active"
+                                : ""
+                            }
+                            onClick={() =>
+                              changeSelectedNodeImageFit("cover")
+                            }
+                          >
+                            Fill
+                          </button>
+
+                          <button
+                            type="button"
+                            className={
+                              selectedNode.imageFit ===
+                              "contain"
+                                ? "active"
+                                : ""
+                            }
+                            onClick={() =>
+                              changeSelectedNodeImageFit("contain")
+                            }
+                          >
+                            Fit
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="graph-image-control">
+                        <div className="graph-image-control-heading">
+                          <span>Node size</span>
+                          <span>
+                            {
+                              (
+                                selectedNode.imageSize ||
+                                NODE_IMAGE_DEFAULT_SIZE
+                              )
+                                .charAt(0)
+                                .toUpperCase() +
+                              (
+                                selectedNode.imageSize ||
+                                NODE_IMAGE_DEFAULT_SIZE
+                              ).slice(1)
+                            }
+                          </span>
+                        </div>
+
+                        <div className="graph-image-segmented">
+                          {[
+                            "small",
+                            "medium",
+                            "large",
+                          ].map((size) => (
+                            <button
+                              key={size}
+                              type="button"
+                              className={
+                                (
+                                  selectedNode.imageSize ||
+                                  NODE_IMAGE_DEFAULT_SIZE
+                                ) === size
+                                  ? "active"
+                                  : ""
+                              }
+                              onClick={() =>
+                                changeSelectedNodeImageSize(
+                                  size
+                                )
+                              }
+                            >
+                              {
+                                size.charAt(0).toUpperCase() +
+                                size.slice(1)
+                              }
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <label className="graph-image-toggle-row">
+                        <span>Show node name</span>
+                        <input
+                          type="checkbox"
+                          checked={selectedNode.showImageLabel !== false}
+                          onChange={(event) =>
+                            changeSelectedNodeImageLabelVisibility(event.target.checked)
+                          }
+                        />
+                      </label>
+
+                      {![
+                        "rectangle",
+                        "round-rectangle",
+                      ].includes(
+                        selectedNode.shape ||
+                        "round-rectangle"
+                      ) && (
+                        <div className="graph-image-modal-hint">
+                          Geometric node shapes crop the image to their silhouette. Rectangle and Rounded Rectangle preserve the most readable picture area.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* NODE PROPERTIES MODAL */}
+
+          {nodePropertiesModalOpen && (
+            <div
+              className="graph-image-modal-backdrop"
+              onPointerDown={(event) => {
+                if (event.target === event.currentTarget) {
+                  closeNodePropertiesModal();
+                }
+              }}
+            >
+              <div
+                className="graph-image-modal graph-property-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="graph-node-properties-title"
+                onPointerDown={(event) =>
+                  event.stopPropagation()
+                }
+              >
+                <div className="graph-image-modal-header">
+                  <div
+                    id="graph-node-properties-title"
+                    className="graph-image-modal-title"
+                  >
+                    <span className="graph-property-modal-title-icon graph-create-action-icon">
+                      <Squircle
+                        size={18}
+                        strokeWidth={1.8}
+                      />
+
+                      <Settings
+                        className="graph-create-action-plus"
+                        size={10}
+                        strokeWidth={2.2}
+                      />
+                    </span>
+
+                    <span className="graph-property-modal-title-text">
+                      Node Properties
+                      {nodePropertiesDisplayName
+                        ? ` · ${nodePropertiesDisplayName}`
+                        : ""}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="graph-image-modal-close"
+                    onClick={closeNodePropertiesModal}
+                    aria-label="Close node properties"
+                  >
+                    <X
+                      size={17}
+                      strokeWidth={1.9}
+                    />
+                  </button>
+                </div>
+
+                <div className="graph-image-modal-body graph-property-modal-body">
+                  <GraphSegmentedControl
+                    label="Node type"
+                    value={nodePropertiesDraft.nodeType}
+                    options={NODE_TYPES}
+                    statusText={
+                      NODE_TYPES.find(
+                        option =>
+                          option.value ===
+                          nodePropertiesDraft.nodeType
+                      )?.label || "Standard"
+                    }
+                    onChange={(nextValue) =>
+                      setNodePropertiesDraft(
+                        current => ({
+                          ...current,
+                          nodeType: nextValue,
+                          conditionOwnerId:
+                            nextValue ===
+                            "conditional"
+                              ? current.conditionOwnerId
+                              : "",
+                        })
+                      )
+                    }
+                    ariaLabel="Node type"
+                  />
+
+                  {nodePropertiesDraft.nodeType ===
+                    "conditional" && (
+                    <div className="graph-image-control graph-property-dropdown-control">
+                      <div className="graph-image-control-heading">
+                        <span>
+                          Parent / owner node
+                        </span>
+                      </div>
+
+                      <GraphPropertyDropdown
+                        value={nodePropertiesDraft.conditionOwnerId}
+                        options={nodePropertyOwnerOptions}
+                        placeholder="Select parent node..."
+                        isOpen={propertyDropdownOpen === "nodeOwner"}
+                        onToggle={() => {
+                          setNodeOwnerSearch("");
+                          setPropertyDropdownOpen(
+                            current =>
+                              current === "nodeOwner"
+                                ? null
+                                : "nodeOwner"
+                          );
+                        }}
+                        onSelect={(nextValue) => {
+                          setNodePropertiesDraft(
+                            current => ({
+                              ...current,
+                              conditionOwnerId:
+                                nextValue,
+                            })
+                          );
+                          setPropertyDropdownOpen(null);
+                          setNodeOwnerSearch("");
+                        }}
+                        searchable
+                        searchValue={nodeOwnerSearch}
+                        onSearchChange={setNodeOwnerSearch}
+                        searchPlaceholder="Search graph nodes..."
+                        emptyMessage="No matching graph nodes"
+                        ariaLabel="Parent or owner node"
+                      />
+                    </div>
+                  )}
+
+                  <div className="graph-image-modal-hint">
+                    Conditional nodes stay associated with their parent for layout. Links from the conditional define the propositions in that condition&apos;s scope.
+                  </div>
+
+                  <div className="graph-image-modal-actions">
+                    <button
+                      type="button"
+                      className="graph-image-modal-action"
+                      onClick={closeNodePropertiesModal}
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      className="graph-image-modal-action primary"
+                      onClick={saveNodeProperties}
+                    >
+                      <Check
+                        size={16}
+                        strokeWidth={1.9}
+                      />
+                      Save properties
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* EDGE PROPERTIES MODAL */}
+
+          {edgePropertiesModalOpen && (
+            <div
+              className="graph-image-modal-backdrop"
+              onPointerDown={(event) => {
+                if (event.target === event.currentTarget) {
+                  closeEdgePropertiesModal();
+                }
+              }}
+            >
+              <div
+                className="graph-image-modal graph-property-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="graph-edge-properties-title"
+                onPointerDown={(event) =>
+                  event.stopPropagation()
+                }
+              >
+                <div className="graph-image-modal-header">
+                  <div
+                    id="graph-edge-properties-title"
+                    className="graph-image-modal-title"
+                  >
+                    <span className="graph-property-modal-title-icon graph-create-action-icon">
+                      <MoveUpRight
+                        size={18}
+                        strokeWidth={1.8}
+                      />
+
+                      <Settings
+                        className="graph-create-action-plus"
+                        size={10}
+                        strokeWidth={2.2}
+                      />
+                    </span>
+
+                    <span className="graph-property-modal-title-text">
+                      Edge Properties
+                      {edgePropertiesDisplayName
+                        ? ` · ${edgePropertiesDisplayName}`
+                        : ""}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="graph-image-modal-close"
+                    onClick={closeEdgePropertiesModal}
+                    aria-label="Close edge properties"
+                  >
+                    <X
+                      size={17}
+                      strokeWidth={1.9}
+                    />
+                  </button>
+                </div>
+
+                <div className="graph-image-modal-body graph-property-modal-body">
+                  {[
+                    {
+                      key: "relationship",
+                      label: "Relationship",
+                      placeholder: "allows, gains, basks on...",
+                    },
+                    {
+                      key: "qualifier",
+                      label: "Qualifier",
+                      placeholder: "without, during, when...",
+                    },
+                  ].map(field => (
+                    <label
+                      key={field.key}
+                      className="graph-image-control graph-property-text-control"
+                    >
+                      <div className="graph-image-control-heading">
+                        <span>{field.label}</span>
+                      </div>
+
+                      <input
+                        type="text"
+                        className="graph-property-input"
+                        value={
+                          edgePropertiesDraft[
+                            field.key
+                          ]
+                        }
+                        placeholder={field.placeholder}
+                        onChange={(event) =>
+                          setEdgePropertiesDraft(
+                            current => ({
+                              ...current,
+                              [field.key]:
+                                event.target.value,
+                            })
+                          )
+                        }
+                      />
+                    </label>
+                  ))}
+
+                  <GraphSegmentedControl
+                    label="Classification"
+                    value={normaliseEdgeClassification(edgePropertiesDraft.classification)}
+                    options={[
+                      {
+                        value: "normal",
+                        label: "Normal",
+                      },
+                      {
+                        value: "negative",
+                        label: "Negative",
+                      },
+                      {
+                        value: "prerequisite",
+                        label: "Prerequisite",
+                      },
+                    ]}
+                    statusText={
+                      {
+                        normal: "Normal",
+                        negative: "Negative",
+                        prerequisite: "Prerequisite",
+                      }[
+                        normaliseEdgeClassification(
+                          edgePropertiesDraft.classification
+                        )
+                      ]
+                    }
+                    onChange={(nextValue) =>
+                      setEdgePropertiesDraft(
+                        current => ({
+                          ...current,
+                          classification:
+                            nextValue,
+                        })
+                      )
+                    }
+                    ariaLabel="Edge classification"
+                  />
+
+                  <GraphSegmentedControl
+                    label="Edge role"
+                    value={edgePropertiesDraft.edgeRole}
+                    options={EDGE_ROLES}
+                    statusText={edgePropertiesRoleStatus}
+                    onChange={(nextValue) =>
+                      setEdgePropertiesDraft(
+                        current => ({
+                          ...current,
+                          edgeRole: nextValue,
+                        })
+                      )
+                    }
+                    ariaLabel="Edge role"
+                  />
+
+                  {edgePropertiesDraft.edgeRole !==
+                    "standard" && (
+                    <div className="graph-image-control graph-property-dropdown-control">
+                      <div className="graph-image-control-heading">
+                        <span>
+                          Conditional scope
+                        </span>
+                      </div>
+
+                      <GraphPropertyDropdown
+                        value={edgePropertiesDraft.conditionId}
+                        options={conditionalPropertyOptions}
+                        placeholder="Auto / none"
+                        isOpen={
+                          propertyDropdownOpen ===
+                          "edgeCondition"
+                        }
+                        onToggle={() => {
+                          setEdgeConditionSearch("");
+                          setPropertyDropdownOpen(
+                            current =>
+                              current === "edgeCondition"
+                                ? null
+                                : "edgeCondition"
+                          );
+                        }}
+                        onSelect={(nextValue) => {
+                          setEdgePropertiesDraft(
+                            current => ({
+                              ...current,
+                              conditionId:
+                                nextValue,
+                            })
+                          );
+                          setPropertyDropdownOpen(null);
+                          setEdgeConditionSearch("");
+                        }}
+                        searchable
+                        searchValue={edgeConditionSearch}
+                        onSearchChange={setEdgeConditionSearch}
+                        searchPlaceholder="Search conditions..."
+                        emptyMessage="No matching conditions"
+                        ariaLabel="Conditional scope"
+                      />
+                    </div>
+                  )}
+
+                  <div className="graph-image-modal-hint">
+                    Auto-detect resolves this edge to <strong>{edgePropertiesRoleStatus.replace("Auto-detect → ", "")}</strong> using the current graph semantics. Reification edges use the conditional colour, a thicker arrow, and a bold relationship label.
+                  </div>
+
+                  <div className="graph-image-modal-actions">
+                    <button
+                      type="button"
+                      className="graph-image-modal-action"
+                      onClick={closeEdgePropertiesModal}
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      className="graph-image-modal-action primary"
+                      onClick={saveEdgeProperties}
+                    >
+                      <Check
+                        size={16}
+                        strokeWidth={1.9}
+                      />
+                      Save properties
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {editingNodeId && (
             <input
               className="graph-inline-rename"
@@ -6497,19 +12215,38 @@ const CurrentArrowShapeIcon =
                 top: `${renamePosition.y}px`,
                 width: `${
                   (
-                    selectedNode?.nodeWidth ||
-                    110
+                    selectedNode?.imageSrc
+                      ? Math.max(
+                          selectedNode?.nodeTextMaxWidth ||
+                            150,
+                          selectedNode?.nodeWidth ||
+                            110
+                        )
+                      : (
+                          selectedNode?.nodeWidth ||
+                          110
+                        )
                   ) * renameZoom
                 }px`,
 
                 height: `${
                   (
-                    selectedNode?.nodeHeight ||
-                    52
+                    selectedNode?.imageSrc
+                      ? 36
+                      : (
+                          selectedNode?.nodeHeight ||
+                          52
+                        )
                   ) * renameZoom
                 }px`,
                 fontSize: `${15 * renameZoom}px`,
-                lineHeight: `${52 * renameZoom}px`,
+                lineHeight: `${
+                  (
+                    selectedNode?.imageSrc
+                      ? 34
+                      : 52
+                  ) * renameZoom
+                }px`,
                 color:
                   selectedNode?.textColor ||
                   getThemeColour(
@@ -6520,22 +12257,20 @@ const CurrentArrowShapeIcon =
               onChange={(event) =>
                 setRenameValue(event.target.value)
               }
+              onPaste={handleNodeRenameImagePaste}
+
               onBlur={() =>
                 finishNodeRename()
               }
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
-
                   finishNodeRename();
                 }
 
                 if (event.key === "Escape") {
                   event.preventDefault();
-
-                  finishNodeRename({
-                    cancel: true,
-                  });
+                  finishNodeRename({cancel: true,});
                 }
               }}
             />
@@ -6547,9 +12282,7 @@ const CurrentArrowShapeIcon =
 
               type="text"
 
-              value={
-                relationshipValue
-              }
+              value={relationshipValue}
 
               autoFocus
 
@@ -6610,29 +12343,14 @@ const CurrentArrowShapeIcon =
               onKeyDown={
                 event => {
 
-                  if (
-                    event.key ===
-                    "Enter"
-                  ) {
-
+                  if (event.key ==="Enter") {
                     event.preventDefault();
-
                     finishEdgeRelationship();
-
                   }
 
-
-                  if (
-                    event.key ===
-                    "Escape"
-                  ) {
-
+                  if (event.key ==="Escape") {
                     event.preventDefault();
-
-                    finishEdgeRelationship({
-                      cancel: true,
-                    });
-
+                    finishEdgeRelationship({cancel: true,});
                   }
 
                 }
@@ -6818,7 +12536,6 @@ const CurrentArrowShapeIcon =
 
                 </div>
 
-
                 <button
                   type="button"
                   onClick={cancelLinkMode}
@@ -6833,12 +12550,9 @@ const CurrentArrowShapeIcon =
               </div>
             )}
 
-
-
             </div>
 
           )}
-
 
           {/* GRAPH FEEDBACK */}
 
@@ -6889,7 +12603,6 @@ const CurrentArrowShapeIcon =
                   strokeWidth={1.8}
                   className="graph-semantic-search-icon"
                 />
-
 
                 <input
                   type="text"
@@ -6965,8 +12678,6 @@ const CurrentArrowShapeIcon =
                 />
 
               </button>
-
-              
 
             )}
 
