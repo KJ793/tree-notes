@@ -435,10 +435,7 @@ export async function semanticSearchGraph(noteId, query, graphData) {
         credentials: "include", // Assumes authentication currently uses the user's session cookie.
 
         // IMPORTANT: The graph is sent alongside the query so the semantic-search backend can reason about both node meaning AND node relationships.
-        body: JSON.stringify({
-            query: query.trim(),
-            graph: searchGraph,
-        })
+        body: JSON.stringify({ query: query.trim(), graph: searchGraph })
   });
 
   const data = await handleApiResponse(response, "Unable to search the graph.");

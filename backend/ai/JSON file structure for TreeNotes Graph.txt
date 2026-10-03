@@ -1,0 +1,266 @@
+// Standard node //
+
+{
+  "type": "node",
+  "data": {
+    "id": "lizards",
+    "label": "Lizards",
+    "nodeType": "standard"
+  }
+}
+
+Required:
+id
+label
+nodeType
+
+// Conditional node //
+
+{
+  "type": "node",
+  "data": {
+    "id": "condition-sunrise",
+    "label": "When the sun rises",
+    "nodeType": "conditional",
+    "conditionOwnerId": "lizards"
+  }
+}
+
+Required:
+id
+label
+nodeType = "conditional"
+conditionOwnerId
+
+// Standard edge //
+
+{
+  "type": "edge",
+  "data": {
+    "id": "lizards-eat-insects",
+    "source": "lizards",
+    "target": "insects",
+
+    "relationship": "eats",
+    "qualifier": "",
+    "classification": "",
+
+    "edgeRole": "standard"
+  }
+}
+
+The semantic fields are:
+relationship
+qualifier
+classification
+
+Ex line like "Lizards cannot move without energy."
+
+{
+  "type": "edge",
+  "data": {
+    "id": "lizards-require-energy",
+    "source": "lizards",
+    "target": "energy",
+
+    "relationship": "requires",
+    "qualifier": "without",
+    "classification": "negation",
+
+    "edgeRole": "standard"
+  }
+}
+
+Empty values for these should be:
+
+"qualifier": "",
+"classification": ""
+
+rather than null, just to keep things predictable
+
+// Edge belonging to a condition //
+
+For "When the sun rises, lizards bask on rocks."
+
+{
+  "type": "edge",
+  "data": {
+    "id": "sunrise-bask-rocks",
+
+    "source": "condition-sunrise",
+    "target": "rocks",
+
+    "relationship": "basks on",
+    "qualifier": "",
+    "classification": "",
+
+    "edgeRole": "standard",
+    "conditionId": "condition-sunrise"
+  }
+}
+
+Because condition-sunrise.conditionOwnerId = lizards, GraphPanel knows that this proposition actually means:
+
+Lizards basks on Rocks
+under the condition
+When the sun rises
+
+and can visually render: 
+
+Lizards [When the sun rises] - - Lizards basks on - -> Rocks
+
+The second proposition "lizards gain energy" becomes:
+
+{
+  "type": "edge",
+  "data": {
+    "id": "sunrise-gain-energy",
+
+    "source": "condition-sunrise",
+    "target": "energy",
+
+    "relationship": "gains",
+    "qualifier": "",
+    "classification": "",
+
+    "edgeRole": "standard",
+    "conditionId": "condition-sunrise"
+  }
+}
+
+So conditionId explicitly tells us which conditional scope that proposition belongs to.
+
+// Reification edge //
+
+For "basking on rocks allows lizards to gain energy", have AI send:
+
+{
+  "type": "edge",
+  "data": {
+    "id": "basking-allows-gaining",
+
+    "source": "rocks",
+    "target": "energy",
+
+    "relationship": "allows",
+    "qualifier": "",
+    "classification": "",
+
+    "edgeRole": "reification",
+
+    "conditionId": "condition-sunrise",
+
+    "fromEdgeId": "sunrise-bask-rocks",
+    "toEdgeId": "sunrise-gain-energy"
+  }
+}
+
+Cytoscape renders Rocks ── ALLOWS ──► Energy but TreeNotes understands the real semantic relationship as:
+
+"Lizards basks on Rocks"
+          │
+        ALLOWS
+          ▼
+"Lizards gains Energy"
+
+because of:
+
+"fromEdgeId": "sunrise-bask-rocks",
+"toEdgeId": "sunrise-gain-energy"
+
+// Complete Lizard Example JSON structure //
+
+{
+  "nodes": [
+    {
+      "type": "node",
+      "data": {
+        "id": "lizards",
+        "label": "Lizards",
+        "nodeType": "standard"
+      }
+    },
+
+    {
+      "type": "node",
+      "data": {
+        "id": "condition-sunrise",
+        "label": "When the sun rises",
+        "nodeType": "conditional",
+        "conditionOwnerId": "lizards"
+      }
+    },
+
+    {
+      "type": "node",
+      "data": {
+        "id": "rocks",
+        "label": "Rocks",
+        "nodeType": "standard"
+      }
+    },
+
+    {
+      "type": "node",
+      "data": {
+        "id": "energy",
+        "label": "Energy",
+        "nodeType": "standard"
+      }
+    }
+  ],
+
+  "edges": [
+    {
+      "type": "edge",
+      "data": {
+        "id": "sunrise-bask-rocks",
+        "source": "condition-sunrise",
+        "target": "rocks",
+
+        "relationship": "basks on",
+        "qualifier": "",
+        "classification": "",
+
+        "edgeRole": "standard",
+        "conditionId": "condition-sunrise"
+      }
+    },
+
+    {
+      "type": "edge",
+      "data": {
+        "id": "sunrise-gain-energy",
+        "source": "condition-sunrise",
+        "target": "energy",
+
+        "relationship": "gains",
+        "qualifier": "",
+        "classification": "",
+
+        "edgeRole": "standard",
+        "conditionId": "condition-sunrise"
+      }
+    },
+
+    {
+      "type": "edge",
+      "data": {
+        "id": "basking-allows-gaining",
+        "source": "rocks",
+        "target": "energy",
+
+        "relationship": "allows",
+        "qualifier": "",
+        "classification": "",
+
+        "edgeRole": "reification",
+
+        "conditionId": "condition-sunrise",
+
+        "fromEdgeId": "sunrise-bask-rocks",
+        "toEdgeId": "sunrise-gain-energy"
+      }
+    }
+  ]
+}

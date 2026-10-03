@@ -121,6 +121,7 @@ class NoteCreate(NoteBase):
     content: Optional[str] = None
     graph_json: Optional[CytoscapeGraph] = None
 
+
 class NoteUpdate(NoteBase):
     title: Optional[str] = Field(None, max_length = NOTE_TITLE_MAX_LENGTH)
     cue_section: Optional[str] = None
@@ -143,6 +144,7 @@ class NoteUpdate(NoteBase):
         if value is None:
             raise ValueError("title cannot be null; omit it to leave the title unchanged")
         return value
+
 
 class NoteResponse(NoteBase):
     id: int

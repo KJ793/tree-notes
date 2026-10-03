@@ -1095,41 +1095,19 @@ useEffect(() => {
       // START STREAMING REQUEST
       // =====================================================
 
-      const response =
-        await fetch(
-          "/api/graph/stream",
-          {
+      /* IMPORTANT:
+      rawNotes should already be the plain-text representation supplied by NoteWorkspace.
+      Do not send notes_section_html here. */
+      const response = await fetch("/api/graph/stream", {
             method: "POST",
-
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-
-            credentials:
-              "include",
-
-            signal:
-              controller.signal,
-
-            body:
-              JSON.stringify({
-                noteId:
-                  noteId ?? null,
-
-                /*
-                  IMPORTANT:
-
-                  rawNotes should already be the plain-text
-                  representation supplied by NoteWorkspace.
-
-                  Do not send notes_section_html here.
-                */
-                rawNotes:
-                  notes,
-              }),
-          }
-        );
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            signal: controller.signal,
+            body: JSON.stringify({
+              noteId: noteId ?? null,
+              rawNotes: notes
+            })
+      });
 
       // =====================================================
       // HTTP-LEVEL ERRORS
@@ -4842,79 +4820,47 @@ function changeSelectedNodeTextColor(newColor) {
 }
 
 async function handleSemanticSearch() {
-  const query =
-    semanticSearchQuery.trim();
+  const query = semanticSearchQuery.trim();
 
-  if (!query) {
-    return;
-  }
+  if (!query) { return; }
 
   // Collapse the search UI as soon as the search is submitted.
   setSemanticSearchOpen(false);
 
   if (!noteId) {
-    showGraphFeedback(
-      "Unable to search because no note is selected.",
-      "error"
-    );
+    showGraphFeedback("Unable to search because no note is selected.", "error");
     return;
   }
 
   setSemanticSearchLoading(true);
 
   try {
-    showGraphFeedback(
-      `Searching graph for "${query}"...`,
-      "info"
-    );
+    showGraphFeedback(`Searching graph for "${query}"...`, "info");
 
-    const result =
-      await semanticSearchGraph(
-        noteId,
-        query,
-        getEditedGraphData() ??
-          graphData
-      );
+    console.log(getEditedGraphData());
+
+    const result = await semanticSearchGraph(noteId, query, getEditedGraphData() ?? graphData);
 
     if (!result?.match) {
-      showGraphFeedback(
-        `No matching node found for "${query}".`,
-        "error"
-      );
+      showGraphFeedback(`No matching node found for "${query}".`, "error");
       return;
     }
 
     const match = result.match;
-
-    const found =
-      focusNode(match.node_id);
+    const found = focusNode(match.node_id);
 
     if (!found) {
-      showGraphFeedback(
-        "The matching node could not be found in the current graph.",
-        "error"
-      );
+      showGraphFeedback("The matching node could not be found in the current graph.", "error");
       return;
     }
 
-    showGraphFeedback(
-      `Closest match to "${query}": ${match.label}`,
-      "success"
-    );
-
+    showGraphFeedback(`Closest match to "${query}": ${match.label}`, "success");
     setSemanticSearchQuery("");
 
   } catch (error) {
-    console.error(
-      "Semantic graph search failed:",
-      error
-    );
+    console.error("Semantic graph search failed:", error);
 
-    showGraphFeedback(
-      "Unable to search the graph. Please try again.",
-      "error"
-    );
-
+    showGraphFeedback("Unable to search the graph. Please try again.", "error");
   } finally {
     setSemanticSearchLoading(false);
   }
