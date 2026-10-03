@@ -1,9 +1,9 @@
-import { 
+import {
   forwardRef,
   useEffect,
   useImperativeHandle,
   useRef,
-  useState, 
+  useState,
 } from "react";
 import usePageTitle from "../hooks/usePageTitle";
 import { updateNote } from "../api/notesApi";
@@ -22,7 +22,6 @@ import {
   Type,
   Highlighter,
   Unlink,
-  Eraser,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -34,9 +33,167 @@ import {
   X,
   ChevronRight,
   Replace,
+  Maximize2,
+  Minimize2,
+  Check,
+  Mic,
+  Square,
+  Trash2,
+  Plus,
+  FilePlus2,
+  Languages,
 } from "lucide-react";
 
+import {
+  LayoutBalancedIcon,
+  LayoutNotesPriorityIcon,
+  LayoutGraphPriorityIcon,
+  LayoutSummaryPriorityIcon,
+} from "./icons/WorkspaceLayoutIcons";
+
 import "./NoteWorkspace.css";
+
+// =========================================================
+// WORKSPACE LAYOUT PRESETS
+// =========================================================
+
+// Presets only provide useful starting arrangements. The
+// user can immediately drag any resize control afterwards;
+// once a value no longer matches a preset, the menu reports
+// the current arrangement as Custom.
+const WORKSPACE_LAYOUT_PRESETS = [
+  {
+    value: "balanced",
+    label: "Balanced",
+    Icon: LayoutBalancedIcon,
+    notesGraphSplit: 50,
+    topPanelsHeight: 480,
+    summaryPanelHeight: 264,
+  },
+  {
+    value: "notes-priority",
+    label: "Notes Priority",
+    Icon: LayoutNotesPriorityIcon,
+    notesGraphSplit: 70,
+    topPanelsHeight: 650,
+    summaryPanelHeight: 264,
+  },
+  {
+    value: "graph-priority",
+    label: "Graph Priority",
+    Icon: LayoutGraphPriorityIcon,
+    notesGraphSplit: 30,
+    topPanelsHeight: 650,
+    summaryPanelHeight: 264,
+  },
+  {
+    value: "summary-priority",
+    label: "Summary Priority",
+    Icon: LayoutSummaryPriorityIcon,
+    notesGraphSplit: 50,
+    topPanelsHeight: 480,
+    summaryPanelHeight: 600,
+  },
+];
+
+
+// =========================================================
+// TRANSCRIPTION AUDIO CAPTURE
+// =========================================================
+
+// The AudioWorklet converts the microphone's Float32 samples into
+// signed 16-bit PCM. Stage 4.1 keeps those PCM frames in the frontend
+// only; the next ASR stage can send the exact same frames over WebSocket.
+const TRANSCRIPTION_PCM_WORKLET_SOURCE = `
+class TreeNotesPcmCaptureProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.levelFrame = 0;
+  }
+
+  process(inputs) {
+    const channels = inputs[0];
+
+    if (!channels || channels.length === 0 || !channels[0]) {
+      return true;
+    }
+
+    const input = channels[0];
+    const pcm = new Int16Array(input.length);
+
+    let squareSum = 0;
+
+    for (let index = 0; index < input.length; index += 1) {
+      const sample = Math.max(-1, Math.min(1, input[index]));
+
+      squareSum += sample * sample;
+
+      pcm[index] =
+        sample < 0
+          ? sample * 0x8000
+          : sample * 0x7fff;
+    }
+
+    // AudioWorklet buffers are very small, so only send a level update
+    // every few frames while still forwarding every PCM frame.
+    this.levelFrame += 1;
+
+    const message = {
+      type: "pcm",
+      pcm: pcm.buffer,
+    };
+
+    if (this.levelFrame >= 4) {
+      message.level =
+        Math.min(
+          1,
+          Math.sqrt(squareSum / input.length) * 5
+        );
+
+      this.levelFrame = 0;
+    }
+
+    this.port.postMessage(
+      message,
+      [pcm.buffer]
+    );
+
+    return true;
+  }
+}
+
+registerProcessor(
+  "treenotes-pcm-capture",
+  TreeNotesPcmCaptureProcessor
+);
+`;
+
+// =========================================================
+// TRANSCRIPTION ASR WEBSOCKET
+// =========================================================
+
+// The frontend speaks the same small protocol as Vosk's reference
+// WebSocket server: JSON config first, binary PCM16 frames while
+// listening, then { "eof": 1 } when the session ends.
+function getTranscriptionAsrWebSocketUrl() {
+  const configuredUrl =
+    import.meta.env.VITE_ASR_WS_URL?.trim();
+
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+
+  if (typeof window === "undefined") {
+    return "ws://localhost:2700";
+  }
+
+  const protocol =
+    window.location.protocol === "https:"
+      ? "wss:"
+      : "ws:";
+
+  return `${protocol}//${window.location.hostname}:2700`;
+}
 
 const NoteWorkspace = forwardRef(function NoteWorkspace(
   { note, onNoteSaved },
@@ -44,8 +201,1809 @@ const NoteWorkspace = forwardRef(function NoteWorkspace(
 ) {
 // text editor refrence for saving
 const editorRef = useRef(null);
-// graph panel refrence for saving 
+// graph panel refrence for saving
 const graphPanelRef = useRef(null);
+
+// =========================================================
+// WORKSPACE LAYOUT MENU
+// =========================================================
+
+const layoutDropdownRef = useRef(null);
+const [layoutDropdownOpen, setLayoutDropdownOpen] = useState(false);
+
+// =========================================================
+// TRANSCRIPTION REVIEW MODAL
+// =========================================================
+
+// The modal is now backed by a real browser microphone capture pipeline.
+// Audio is captured as mono PCM16 samples so the next stage can forward the
+// same frames directly to the ASR WebSocket service.
+const transcriptionTextareaRef = useRef(null);
+const transcriptionModalOpenRef = useRef(false);
+const transcriptionStreamRef = useRef(null);
+const transcriptionAudioContextRef = useRef(null);
+const transcriptionAudioSourceRef = useRef(null);
+const transcriptionCaptureNodeRef = useRef(null);
+const transcriptionSilentGainRef = useRef(null);
+const transcriptionWorkletUrlRef = useRef(null);
+const transcriptionCaptureRequestRef = useRef(0);
+const transcriptionCapturedSamplesRef = useRef(0);
+const transcriptionCapturedBytesRef = useRef(0);
+const transcriptionCaptureSampleRateRef = useRef(0);
+const transcriptionLastLevelUpdateRef = useRef(0);
+const transcriptionLastCaptureInfoUpdateRef = useRef(0);
+const transcriptionAsrSocketRef = useRef(null);
+const transcriptionAsrCloseTimerRef = useRef(null);
+const transcriptionAsrExpectedCloseRef = useRef(false);
+const transcriptionAsrFinalSegmentsRef = useRef([]);
+const transcriptionAsrPartialRef = useRef("");
+const transcriptionAsrSessionBaseRef = useRef("");
+
+const [transcriptionModalOpen, setTranscriptionModalOpen] = useState(false);
+const [transcriptionListening, setTranscriptionListening] = useState(false);
+const [transcriptionMicRequesting, setTranscriptionMicRequesting] = useState(false);
+const [transcriptionMicError, setTranscriptionMicError] = useState("");
+const [transcriptionAudioLevel, setTranscriptionAudioLevel] = useState(0);
+const [transcriptionCaptureInfo, setTranscriptionCaptureInfo] = useState(null);
+const [transcriptionAsrState, setTranscriptionAsrState] = useState("idle");
+const [transcriptionAsrError, setTranscriptionAsrError] = useState("");
+const [transcriptionDraft, setTranscriptionDraft] = useState("");
+const [transcriptionTermInput, setTranscriptionTermInput] = useState("");
+const [transcriptionTerms, setTranscriptionTerms] = useState([]);
+
+function formatTranscriptionCaptureSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 KB";
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function openTranscriptionModal(event) {
+  event?.stopPropagation?.();
+
+  transcriptionModalOpenRef.current = true;
+
+  setLayoutDropdownOpen(false);
+  setTranscriptionMicError("");
+  setTranscriptionAsrError("");
+  setTranscriptionAsrState("idle");
+  setTranscriptionCaptureInfo(null);
+  setTranscriptionAudioLevel(0);
+  setTranscriptionModalOpen(true);
+}
+
+function buildLiveTranscriptionDraft() {
+  const base =
+    transcriptionAsrSessionBaseRef.current.trimEnd();
+
+  const finalText =
+    transcriptionAsrFinalSegmentsRef.current
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const partialText =
+    transcriptionAsrPartialRef.current
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const liveText =
+    [finalText, partialText]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+  if (base && liveText) {
+    return `${base}\n\n${liveText}`;
+  }
+
+  return base || liveText;
+}
+
+function updateLiveTranscriptionDraft() {
+  setTranscriptionDraft(
+    buildLiveTranscriptionDraft()
+  );
+}
+
+function clearTranscriptionAsrCloseTimer() {
+  if (transcriptionAsrCloseTimerRef.current) {
+    window.clearTimeout(
+      transcriptionAsrCloseTimerRef.current
+    );
+
+    transcriptionAsrCloseTimerRef.current = null;
+  }
+}
+
+function closeTranscriptionAsrSocket({
+  finalise = false,
+} = {}) {
+  const socket =
+    transcriptionAsrSocketRef.current;
+
+  clearTranscriptionAsrCloseTimer();
+
+  if (!socket) {
+    setTranscriptionAsrState("idle");
+    return;
+  }
+
+  transcriptionAsrExpectedCloseRef.current = true;
+
+  if (
+    finalise &&
+    socket.readyState === WebSocket.OPEN
+  ) {
+    setTranscriptionAsrState("finalising");
+
+    try {
+      socket.send(
+        JSON.stringify({ eof: 1 })
+      );
+
+      // Vosk normally returns its final result and then closes the
+      // connection itself. This timeout prevents a stuck socket if a
+      // proxy/backend fails to honour that convention.
+      transcriptionAsrCloseTimerRef.current =
+        window.setTimeout(() => {
+          if (
+            transcriptionAsrSocketRef.current === socket &&
+            socket.readyState !== WebSocket.CLOSED
+          ) {
+            socket.close(1000, "Transcription complete");
+          }
+        }, 2500);
+
+      return;
+    } catch {
+      // Fall through to a normal close.
+    }
+  }
+
+  if (
+    socket.readyState === WebSocket.OPEN ||
+    socket.readyState === WebSocket.CONNECTING
+  ) {
+    try {
+      socket.close(1000, "Transcription closed");
+    } catch {
+      // Ignore close failures during teardown.
+    }
+  }
+
+  if (transcriptionAsrSocketRef.current === socket) {
+    transcriptionAsrSocketRef.current = null;
+  }
+
+  setTranscriptionAsrState("idle");
+}
+
+function handleTranscriptionAsrMessage(event) {
+  if (typeof event.data !== "string") {
+    return;
+  }
+
+  let message;
+
+  try {
+    message = JSON.parse(event.data);
+  } catch {
+    return;
+  }
+
+  if (message?.error) {
+    setTranscriptionAsrError(
+      String(message.error)
+    );
+    setTranscriptionAsrState("error");
+    return;
+  }
+
+  // Native Vosk responses use `partial` for interim text and `text`
+  // for accepted/final segments. A future TreeNotes proxy may instead
+  // normalise these to { type: "partial|final", text }, so accept both.
+  const partialText =
+    typeof message.partial === "string"
+      ? message.partial
+      : message.type === "partial" &&
+          typeof message.text === "string"
+        ? message.text
+        : null;
+
+  if (partialText !== null) {
+    transcriptionAsrPartialRef.current =
+      partialText;
+
+    updateLiveTranscriptionDraft();
+    return;
+  }
+
+  const finalText =
+    message.type === "final" &&
+    typeof message.text === "string"
+      ? message.text
+      : typeof message.text === "string"
+        ? message.text
+        : "";
+
+  const cleanFinalText =
+    finalText
+      .replace(/\s+/g, " ")
+      .trim();
+
+  transcriptionAsrPartialRef.current = "";
+
+  if (cleanFinalText) {
+    const finalSegments =
+      transcriptionAsrFinalSegmentsRef.current;
+
+    if (
+      finalSegments[finalSegments.length - 1] !==
+      cleanFinalText
+    ) {
+      finalSegments.push(cleanFinalText);
+    }
+  }
+
+  updateLiveTranscriptionDraft();
+}
+
+function connectTranscriptionAsr(
+  sampleRate,
+  requestId
+) {
+  if (typeof WebSocket === "undefined") {
+    return Promise.reject(
+      new Error(
+        "This browser does not support WebSocket speech recognition."
+      )
+    );
+  }
+
+  closeTranscriptionAsrSocket();
+
+  const socketUrl =
+    getTranscriptionAsrWebSocketUrl();
+
+  setTranscriptionAsrError("");
+  setTranscriptionAsrState("connecting");
+  transcriptionAsrExpectedCloseRef.current = false;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let socket;
+
+    try {
+      socket = new WebSocket(socketUrl);
+    } catch (error) {
+      setTranscriptionAsrState("error");
+      reject(error);
+      return;
+    }
+
+    transcriptionAsrSocketRef.current = socket;
+    socket.binaryType = "arraybuffer";
+
+    const connectionTimeout =
+      window.setTimeout(() => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+
+        try {
+          socket.close();
+        } catch {
+          // Ignore timeout close errors.
+        }
+
+        reject(
+          new Error(
+            `Timed out connecting to the speech recognition service at ${socketUrl}.`
+          )
+        );
+      }, 5000);
+
+    socket.onopen = () => {
+      if (
+        requestId !==
+          transcriptionCaptureRequestRef.current ||
+        !transcriptionModalOpenRef.current
+      ) {
+        transcriptionAsrExpectedCloseRef.current = true;
+        socket.close();
+        return;
+      }
+
+      window.clearTimeout(connectionTimeout);
+
+      try {
+        socket.send(
+          JSON.stringify({
+            config: {
+              sample_rate: sampleRate,
+            },
+          })
+        );
+      } catch (error) {
+        if (!settled) {
+          settled = true;
+          reject(error);
+        }
+        return;
+      }
+
+      setTranscriptionAsrState("connected");
+
+      if (!settled) {
+        settled = true;
+        resolve(socket);
+      }
+    };
+
+    socket.onmessage =
+      handleTranscriptionAsrMessage;
+
+    socket.onerror = () => {
+      if (!settled) {
+        window.clearTimeout(connectionTimeout);
+        settled = true;
+
+        reject(
+          new Error(
+            `Unable to connect to the speech recognition service at ${socketUrl}.`
+          )
+        );
+      }
+    };
+
+    socket.onclose = () => {
+      window.clearTimeout(connectionTimeout);
+      clearTranscriptionAsrCloseTimer();
+
+      if (
+        transcriptionAsrSocketRef.current ===
+        socket
+      ) {
+        transcriptionAsrSocketRef.current = null;
+      }
+
+      const expectedClose =
+        transcriptionAsrExpectedCloseRef.current;
+
+      transcriptionAsrExpectedCloseRef.current = false;
+
+      if (!settled) {
+        settled = true;
+
+        reject(
+          new Error(
+            `The speech recognition service at ${socketUrl} closed before transcription could start.`
+          )
+        );
+
+        return;
+      }
+
+      if (expectedClose) {
+        setTranscriptionAsrState("idle");
+        return;
+      }
+
+      if (transcriptionStreamRef.current) {
+        setTranscriptionAsrError(
+          "The speech recognition connection closed unexpectedly. Start listening again to reconnect."
+        );
+        setTranscriptionAsrState("error");
+
+        releaseTranscriptionAudioResources({
+          keepCaptureSummary: true,
+        });
+      } else {
+        setTranscriptionAsrState("idle");
+      }
+    };
+  });
+}
+
+function releaseTranscriptionAudioResources({
+  keepCaptureSummary = true,
+  updateUi = true,
+} = {}) {
+  const sampleRate =
+    transcriptionCaptureSampleRateRef.current;
+
+  const capturedSamples =
+    transcriptionCapturedSamplesRef.current;
+
+  const capturedBytes =
+    transcriptionCapturedBytesRef.current;
+
+  const captureNode =
+    transcriptionCaptureNodeRef.current;
+
+  if (captureNode) {
+    try {
+      if ("port" in captureNode && captureNode.port) {
+        captureNode.port.onmessage = null;
+      }
+
+      if ("onaudioprocess" in captureNode) {
+        captureNode.onaudioprocess = null;
+      }
+
+      captureNode.disconnect();
+    } catch {
+      // The node may already have been disconnected.
+    }
+  }
+
+  if (transcriptionAudioSourceRef.current) {
+    try {
+      transcriptionAudioSourceRef.current.disconnect();
+    } catch {
+      // The source may already have been disconnected.
+    }
+  }
+
+  if (transcriptionSilentGainRef.current) {
+    try {
+      transcriptionSilentGainRef.current.disconnect();
+    } catch {
+      // The gain node may already have been disconnected.
+    }
+  }
+
+  if (transcriptionStreamRef.current) {
+    transcriptionStreamRef.current
+      .getTracks()
+      .forEach((track) => track.stop());
+  }
+
+  const audioContext =
+    transcriptionAudioContextRef.current;
+
+  if (
+    audioContext &&
+    audioContext.state !== "closed"
+  ) {
+    audioContext.close().catch(() => {});
+  }
+
+  if (transcriptionWorkletUrlRef.current) {
+    URL.revokeObjectURL(
+      transcriptionWorkletUrlRef.current
+    );
+  }
+
+  transcriptionStreamRef.current = null;
+  transcriptionAudioContextRef.current = null;
+  transcriptionAudioSourceRef.current = null;
+  transcriptionCaptureNodeRef.current = null;
+  transcriptionSilentGainRef.current = null;
+  transcriptionWorkletUrlRef.current = null;
+
+  if (updateUi) {
+    setTranscriptionListening(false);
+    setTranscriptionMicRequesting(false);
+    setTranscriptionAudioLevel(0);
+  }
+
+  if (
+    updateUi &&
+    keepCaptureSummary &&
+    sampleRate > 0 &&
+    capturedSamples > 0
+  ) {
+    setTranscriptionCaptureInfo({
+      durationSeconds:
+        capturedSamples / sampleRate,
+      sampleRate,
+      bytes: capturedBytes,
+      complete: true,
+    });
+  }
+}
+
+function stopTranscriptionCapture() {
+  // Invalidates a permission request that may still be waiting for the
+  // browser/user. If that old request resolves later it will clean itself up.
+  transcriptionCaptureRequestRef.current += 1;
+
+  releaseTranscriptionAudioResources({
+    keepCaptureSummary: true,
+  });
+
+  closeTranscriptionAsrSocket({
+    finalise: true,
+  });
+}
+
+function closeTranscriptionModal() {
+  transcriptionModalOpenRef.current = false;
+  transcriptionCaptureRequestRef.current += 1;
+
+  releaseTranscriptionAudioResources({
+    keepCaptureSummary: true,
+  });
+
+  closeTranscriptionAsrSocket();
+
+  setTranscriptionModalOpen(false);
+}
+
+function handleCapturedPcmChunk(
+  pcmChunk,
+  sampleRate,
+  level = null
+) {
+  if (!pcmChunk || pcmChunk.length === 0) {
+    return;
+  }
+
+  transcriptionCapturedSamplesRef.current +=
+    pcmChunk.length;
+
+  transcriptionCapturedBytesRef.current +=
+    pcmChunk.byteLength;
+
+  transcriptionCaptureSampleRateRef.current =
+    sampleRate;
+
+  const asrSocket =
+    transcriptionAsrSocketRef.current;
+
+  if (
+    asrSocket &&
+    asrSocket.readyState === WebSocket.OPEN
+  ) {
+    try {
+      asrSocket.send(
+        pcmChunk.buffer
+      );
+    } catch (error) {
+      console.error(
+        "Unable to stream transcription audio:",
+        error
+      );
+
+      setTranscriptionAsrError(
+        "Audio capture is active, but the speech recognition service stopped accepting audio."
+      );
+      setTranscriptionAsrState("error");
+    }
+  }
+
+  // PCM frames are streamed immediately and intentionally not retained
+  // in browser memory. This keeps long lecture sessions lightweight.
+
+  const now = performance.now();
+
+  if (
+    level !== null &&
+    now -
+      transcriptionLastLevelUpdateRef.current >=
+      45
+  ) {
+    setTranscriptionAudioLevel(
+      Math.max(
+        0,
+        Math.min(1, level)
+      )
+    );
+
+    transcriptionLastLevelUpdateRef.current = now;
+  }
+
+  if (
+    now -
+      transcriptionLastCaptureInfoUpdateRef.current >=
+      220
+  ) {
+    const capturedSamples =
+      transcriptionCapturedSamplesRef.current;
+
+    const capturedBytes =
+      transcriptionCapturedBytesRef.current;
+
+    setTranscriptionCaptureInfo({
+      durationSeconds:
+        sampleRate > 0
+          ? capturedSamples / sampleRate
+          : 0,
+      sampleRate,
+      bytes: capturedBytes,
+      complete: false,
+    });
+
+    transcriptionLastCaptureInfoUpdateRef.current = now;
+  }
+}
+
+function convertFloatSamplesToPcm(
+  floatSamples
+) {
+  const pcm = new Int16Array(
+    floatSamples.length
+  );
+
+  let squareSum = 0;
+
+  for (
+    let index = 0;
+    index < floatSamples.length;
+    index += 1
+  ) {
+    const sample =
+      Math.max(
+        -1,
+        Math.min(
+          1,
+          floatSamples[index]
+        )
+      );
+
+    squareSum += sample * sample;
+
+    pcm[index] =
+      sample < 0
+        ? sample * 0x8000
+        : sample * 0x7fff;
+  }
+
+  const level =
+    Math.min(
+      1,
+      Math.sqrt(
+        squareSum /
+        Math.max(
+          1,
+          floatSamples.length
+        )
+      ) * 5
+    );
+
+  return {
+    pcm,
+    level,
+  };
+}
+
+function getMicrophoneErrorMessage(error) {
+  switch (error?.name) {
+    case "NotAllowedError":
+    case "PermissionDeniedError":
+      return "Microphone permission was denied. Allow microphone access for TreeNotes in your browser and try again.";
+
+    case "NotFoundError":
+    case "DevicesNotFoundError":
+      return "No microphone was found. Connect or enable a microphone and try again.";
+
+    case "NotReadableError":
+    case "TrackStartError":
+      return "The microphone is already in use or could not be opened.";
+
+    case "OverconstrainedError":
+    case "ConstraintNotSatisfiedError":
+      return "The microphone could not satisfy the requested audio settings.";
+
+    case "SecurityError":
+      return "The browser blocked microphone access for this page.";
+
+    case "AbortError":
+      return "Microphone capture was interrupted before it could start.";
+
+    default:
+      return (
+        error?.message ||
+        "Unable to start microphone capture."
+      );
+  }
+}
+
+async function startTranscriptionCapture() {
+  if (
+    transcriptionListening ||
+    transcriptionMicRequesting
+  ) {
+    return;
+  }
+
+  if (
+    !navigator.mediaDevices?.getUserMedia
+  ) {
+    setTranscriptionMicError(
+      "Microphone access is unavailable. Use HTTPS or localhost in a browser that supports getUserMedia()."
+    );
+
+    return;
+  }
+
+  const AudioContextClass =
+    window.AudioContext ||
+    window.webkitAudioContext;
+
+  if (!AudioContextClass) {
+    setTranscriptionMicError(
+      "This browser does not support the Web Audio API required for microphone capture."
+    );
+
+    return;
+  }
+
+  const requestId =
+    transcriptionCaptureRequestRef.current + 1;
+
+  transcriptionCaptureRequestRef.current =
+    requestId;
+
+  setTranscriptionMicError("");
+  setTranscriptionAsrError("");
+  setTranscriptionAsrState("idle");
+  setTranscriptionMicRequesting(true);
+  setTranscriptionCaptureInfo(null);
+  setTranscriptionAudioLevel(0);
+
+  transcriptionAsrSessionBaseRef.current =
+    transcriptionDraft.trimEnd();
+  transcriptionAsrFinalSegmentsRef.current = [];
+  transcriptionAsrPartialRef.current = "";
+
+  transcriptionCapturedSamplesRef.current = 0;
+  transcriptionCapturedBytesRef.current = 0;
+  transcriptionCaptureSampleRateRef.current = 0;
+  transcriptionLastLevelUpdateRef.current = 0;
+  transcriptionLastCaptureInfoUpdateRef.current = 0;
+
+  let stream = null;
+  let audioContext = null;
+  let source = null;
+  let captureNode = null;
+  let silentGain = null;
+  let workletUrl = null;
+
+  try {
+    stream =
+      await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      });
+
+    if (
+      requestId !==
+        transcriptionCaptureRequestRef.current ||
+      !transcriptionModalOpenRef.current
+    ) {
+      stream
+        .getTracks()
+        .forEach((track) => track.stop());
+
+      return;
+    }
+
+    /*
+      Ask for 16 kHz because that is a common ASR rate. Browsers are
+      allowed to choose another hardware/context rate, so the actual
+      value is always read from audioContext.sampleRate and reported
+      to the future backend.
+    */
+    try {
+      audioContext =
+        new AudioContextClass({
+          sampleRate: 16000,
+        });
+    } catch {
+      audioContext =
+        new AudioContextClass();
+    }
+
+    await audioContext.resume();
+
+    await connectTranscriptionAsr(
+      audioContext.sampleRate,
+      requestId
+    );
+
+    source =
+      audioContext.createMediaStreamSource(
+        stream
+      );
+
+    silentGain =
+      audioContext.createGain();
+
+    silentGain.gain.value = 0;
+
+    const canUseAudioWorklet =
+      Boolean(audioContext.audioWorklet) &&
+      typeof AudioWorkletNode !==
+        "undefined";
+
+    if (canUseAudioWorklet) {
+      workletUrl =
+        URL.createObjectURL(
+          new Blob(
+            [
+              TRANSCRIPTION_PCM_WORKLET_SOURCE,
+            ],
+            {
+              type: "application/javascript",
+            }
+          )
+        );
+
+      await audioContext.audioWorklet.addModule(
+        workletUrl
+      );
+
+      captureNode =
+        new AudioWorkletNode(
+          audioContext,
+          "treenotes-pcm-capture",
+          {
+            numberOfInputs: 1,
+            numberOfOutputs: 1,
+            channelCount: 1,
+          }
+        );
+
+      captureNode.port.onmessage = (
+        event
+      ) => {
+        const data =
+          event.data ?? {};
+
+        if (
+          data.type !== "pcm" ||
+          !(data.pcm instanceof ArrayBuffer)
+        ) {
+          return;
+        }
+
+        handleCapturedPcmChunk(
+          new Int16Array(data.pcm),
+          audioContext.sampleRate,
+          Number.isFinite(data.level)
+            ? data.level
+            : null
+        );
+      };
+    } else {
+      /*
+        Older-browser fallback. ScriptProcessorNode is deprecated,
+        but it keeps the prototype functional where AudioWorklet is
+        unavailable. Modern Chromium/Firefox/Safari should take the
+        AudioWorklet path above.
+      */
+      captureNode =
+        audioContext.createScriptProcessor(
+          2048,
+          1,
+          1
+        );
+
+      captureNode.onaudioprocess = (
+        event
+      ) => {
+        const input =
+          event.inputBuffer
+            .getChannelData(0);
+
+        const {
+          pcm,
+          level,
+        } =
+          convertFloatSamplesToPcm(
+            input
+          );
+
+        handleCapturedPcmChunk(
+          pcm,
+          audioContext.sampleRate,
+          level
+        );
+      };
+    }
+
+    source.connect(captureNode);
+    captureNode.connect(silentGain);
+    silentGain.connect(
+      audioContext.destination
+    );
+
+    transcriptionStreamRef.current =
+      stream;
+
+    transcriptionAudioContextRef.current =
+      audioContext;
+
+    transcriptionAudioSourceRef.current =
+      source;
+
+    transcriptionCaptureNodeRef.current =
+      captureNode;
+
+    transcriptionSilentGainRef.current =
+      silentGain;
+
+    transcriptionWorkletUrlRef.current =
+      workletUrl;
+
+    transcriptionCaptureSampleRateRef.current =
+      audioContext.sampleRate;
+
+    setTranscriptionCaptureInfo({
+      durationSeconds: 0,
+      sampleRate:
+        audioContext.sampleRate,
+      bytes: 0,
+      complete: false,
+    });
+
+    setTranscriptionListening(true);
+  } catch (error) {
+    console.error(
+      "Unable to start microphone capture:",
+      error
+    );
+
+    if (captureNode) {
+      try {
+        if (
+          "port" in captureNode &&
+          captureNode.port
+        ) {
+          captureNode.port.onmessage = null;
+        }
+
+        if ("onaudioprocess" in captureNode) {
+          captureNode.onaudioprocess = null;
+        }
+
+        captureNode.disconnect();
+      } catch {
+        // Ignore partial setup cleanup failures.
+      }
+    }
+
+    if (source) {
+      try {
+        source.disconnect();
+      } catch {
+        // Ignore partial setup cleanup failures.
+      }
+    }
+
+    if (silentGain) {
+      try {
+        silentGain.disconnect();
+      } catch {
+        // Ignore partial setup cleanup failures.
+      }
+    }
+
+    if (stream) {
+      stream
+        .getTracks()
+        .forEach((track) => track.stop());
+    }
+
+    if (
+      audioContext &&
+      audioContext.state !== "closed"
+    ) {
+      audioContext.close().catch(() => {});
+    }
+
+    if (workletUrl) {
+      URL.revokeObjectURL(workletUrl);
+    }
+
+    closeTranscriptionAsrSocket();
+
+    if (
+      requestId ===
+      transcriptionCaptureRequestRef.current
+    ) {
+      const isAsrConnectionError =
+        /speech recognition service|WebSocket/i.test(
+          error?.message ?? ""
+        );
+
+      if (isAsrConnectionError) {
+        setTranscriptionAsrError(
+          error.message
+        );
+        setTranscriptionAsrState("error");
+      } else {
+        setTranscriptionMicError(
+          getMicrophoneErrorMessage(error)
+        );
+      }
+
+      setTranscriptionListening(false);
+    }
+  } finally {
+    if (
+      requestId ===
+      transcriptionCaptureRequestRef.current
+    ) {
+      setTranscriptionMicRequesting(false);
+    }
+  }
+}
+
+function toggleTranscriptionListening() {
+  if (transcriptionListening) {
+    stopTranscriptionCapture();
+    return;
+  }
+
+  startTranscriptionCapture();
+}
+
+function addTranscriptionTerm() {
+  const cleanTerm = transcriptionTermInput.trim();
+
+  if (!cleanTerm) {
+    return;
+  }
+
+  const alreadyAdded = transcriptionTerms.some(
+    (term) => term.toLocaleLowerCase() === cleanTerm.toLocaleLowerCase()
+  );
+
+  if (!alreadyAdded) {
+    setTranscriptionTerms((current) => [...current, cleanTerm]);
+  }
+
+  setTranscriptionTermInput("");
+}
+
+function removeTranscriptionTerm(termToRemove) {
+  setTranscriptionTerms((current) =>
+    current.filter((term) => term !== termToRemove)
+  );
+}
+
+function clearTranscriptionDraft() {
+  transcriptionAsrSessionBaseRef.current = "";
+  transcriptionAsrFinalSegmentsRef.current = [];
+  transcriptionAsrPartialRef.current = "";
+  setTranscriptionDraft("");
+}
+
+function appendTranscriptionToNotes() {
+  const cleanTranscript = transcriptionDraft.trim();
+  const editor = editorRef.current;
+
+  if (!cleanTranscript || !editor) {
+    return;
+  }
+
+  // Append fresh paragraph blocks so existing rich-text formatting
+  // and graph-linked spans remain untouched.
+  const paragraphBlocks = cleanTranscript
+    .split(/\n\s*\n/)
+    .filter((block) => block.trim().length > 0);
+
+  paragraphBlocks.forEach((block) => {
+    const paragraph = document.createElement("p");
+    const lines = block.split("\n");
+
+    lines.forEach((line, lineIndex) => {
+      if (lineIndex > 0) {
+        paragraph.appendChild(document.createElement("br"));
+      }
+
+      paragraph.appendChild(document.createTextNode(line));
+    });
+
+    editor.appendChild(paragraph);
+  });
+
+  updateRawNotes();
+
+  transcriptionModalOpenRef.current = false;
+  transcriptionCaptureRequestRef.current += 1;
+
+  releaseTranscriptionAudioResources({
+    keepCaptureSummary: true,
+  });
+  closeTranscriptionAsrSocket();
+
+  setTranscriptionDraft("");
+  setTranscriptionModalOpen(false);
+
+  requestAnimationFrame(() => {
+    editor.scrollTop = editor.scrollHeight;
+    editor.focus();
+  });
+}
+
+// Always release the physical microphone if the workspace unmounts.
+useEffect(() => {
+  return () => {
+    transcriptionModalOpenRef.current = false;
+    transcriptionCaptureRequestRef.current += 1;
+
+    releaseTranscriptionAudioResources({
+      keepCaptureSummary: false,
+      updateUi: false,
+    });
+
+    closeTranscriptionAsrSocket();
+  };
+}, []);
+
+// Escape closes transcription before it can affect workspace Focus
+// Mode. Body scrolling is locked while the modal is open.
+useEffect(() => {
+  if (!transcriptionModalOpen) {
+    return undefined;
+  }
+
+  const previousOverflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+
+  function handleTranscriptionEscape(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeTranscriptionModal();
+    }
+  }
+
+  window.addEventListener("keydown", handleTranscriptionEscape, true);
+
+  const focusFrame = requestAnimationFrame(() => {
+    transcriptionTextareaRef.current?.focus();
+  });
+
+  return () => {
+    cancelAnimationFrame(focusFrame);
+    document.body.style.overflow = previousOverflow;
+    window.removeEventListener("keydown", handleTranscriptionEscape, true);
+  };
+}, [transcriptionModalOpen]);
+
+// Match the Profile preferences dropdown behaviour: click
+// outside or press Escape to close the menu.
+useEffect(() => {
+  function handleLayoutPointerDown(event) {
+    if (layoutDropdownRef.current && !layoutDropdownRef.current.contains(event.target)) {
+      setLayoutDropdownOpen(false);
+    }
+  }
+
+  function handleLayoutEscape(event) {
+    if (event.key === "Escape") {
+      setLayoutDropdownOpen(false);
+    }
+  }
+
+  document.addEventListener(
+    "pointerdown",
+    handleLayoutPointerDown
+  );
+
+  document.addEventListener(
+    "keydown",
+    handleLayoutEscape
+  );
+
+  return () => {
+    document.removeEventListener(
+      "pointerdown",
+      handleLayoutPointerDown
+    );
+
+    document.removeEventListener(
+      "keydown",
+      handleLayoutEscape
+    );
+  };
+}, []);
+
+// =========================================================
+// PANEL FOCUS MODE
+// =========================================================
+
+// null = normal three-panel workspace
+// "notes" / "graph" / "summary" = focused application view
+const [focusedPanel, setFocusedPanel] = useState(null);
+const [focusedPanelHeight, setFocusedPanelHeight] = useState(null);
+
+function togglePanelFocus(panelName) {
+  setFocusedPanel((currentPanel) =>
+    currentPanel === panelName
+      ? null
+      : panelName
+  );
+}
+
+// Escape always restores the user's previous multi-panel layout.
+useEffect(() => {
+  if (!focusedPanel) {
+    return undefined;
+  }
+
+  function handleFocusEscape(event) {
+    if (
+      event.key === "Escape" &&
+      !layoutDropdownOpen &&
+      !transcriptionModalOpen
+    ) {
+      setFocusedPanel(null);
+    }
+  }
+
+  window.addEventListener(
+    "keydown",
+    handleFocusEscape
+  );
+
+  return () => {
+    window.removeEventListener(
+      "keydown",
+      handleFocusEscape
+    );
+  };
+}, [focusedPanel, layoutDropdownOpen, transcriptionModalOpen]);
+
+// Measure the remaining viewport underneath the note title so the
+// focused panel fills the application workspace without invoking
+// the browser Fullscreen API.
+useEffect(() => {
+  if (!focusedPanel) {
+    setFocusedPanelHeight(null);
+    return undefined;
+  }
+
+  let frameId = null;
+
+  function updateFocusedPanelHeight() {
+    if (frameId !== null) {
+      cancelAnimationFrame(frameId);
+    }
+
+    frameId = requestAnimationFrame(() => {
+      const targetShell =
+        focusedPanel === "summary"
+          ? summaryPanelShellRef.current
+          : topPanelsShellRef.current;
+
+      if (!targetShell) {
+        return;
+      }
+
+      const bounds = targetShell.getBoundingClientRect();
+
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+
+      const availableHeight = Math.max(420, viewportHeight - Math.max(bounds.top, 0) - 18);
+
+      setFocusedPanelHeight(Math.floor(availableHeight));
+
+      requestAnimationFrame(() => {
+        graphPanelRef.current
+          ?.resizeGraph?.();
+      });
+    });
+  }
+
+  updateFocusedPanelHeight();
+
+  window.addEventListener(
+    "resize",
+    updateFocusedPanelHeight
+  );
+
+  return () => {
+    if (frameId !== null) {
+      cancelAnimationFrame(frameId);
+    }
+
+    window.removeEventListener(
+      "resize",
+      updateFocusedPanelHeight
+    );
+  };
+}, [focusedPanel]);
+
+// =========================================================
+// WORKSPACE PANEL RESIZING
+// =========================================================
+
+// The desktop Raw Notes / Graph View row itself.
+const notesLayoutRef = useRef(null);
+
+// Pointer-drag state is kept in a ref so movement remains
+// reliable even between React state updates.
+const notesGraphDraggingRef = useRef(false);
+
+const NOTES_GRAPH_MIN_SPLIT = 20;
+const NOTES_GRAPH_MAX_SPLIT = 80;
+
+function clampNotesGraphSplit(value) {
+  return Math.min(
+    NOTES_GRAPH_MAX_SPLIT,
+    Math.max(
+      NOTES_GRAPH_MIN_SPLIT,
+      value
+    )
+  );
+}
+
+const [notesGraphSplit, setNotesGraphSplit] = useState(() => {
+  if (typeof window === "undefined") {
+    return 50;
+  }
+
+  const savedSplit = Number(
+    window.localStorage.getItem(
+      "treenotes-notes-graph-split"
+    )
+  );
+
+  return Number.isFinite(savedSplit)
+    ? clampNotesGraphSplit(savedSplit)
+    : 50;
+});
+
+const [isResizingNotesGraph, setIsResizingNotesGraph] = useState(false);
+
+// ---------------------------------------------------------
+// Shared Raw Notes + Graph View vertical resizing
+// ---------------------------------------------------------
+
+// Both upper panels always keep the same height. The user can
+// drag one shared grip beneath the row to gain more vertical
+// writing / graph space without stealing height from Summary.
+const topPanelsShellRef = useRef(null);
+const topPanelsDraggingRef = useRef(false);
+const topPanelsPointerOffsetRef = useRef(0);
+
+const TOP_PANELS_DEFAULT_HEIGHT = 480;
+const TOP_PANELS_MIN_HEIGHT = 480;
+const TOP_PANELS_MAX_HEIGHT = 1000;
+
+function clampTopPanelsHeight(value) {
+  return Math.min(
+    TOP_PANELS_MAX_HEIGHT,
+    Math.max(
+      TOP_PANELS_MIN_HEIGHT,
+      value
+    )
+  );
+}
+
+const [topPanelsHeight, setTopPanelsHeight] = useState(() => {
+  if (typeof window === "undefined") {
+    return TOP_PANELS_DEFAULT_HEIGHT;
+  }
+
+  const savedHeight = Number(window.localStorage.getItem("treenotes-top-panels-height"));
+
+  return Number.isFinite(savedHeight)
+    ? clampTopPanelsHeight(savedHeight)
+    : TOP_PANELS_DEFAULT_HEIGHT;
+});
+
+const [isResizingTopPanels, setIsResizingTopPanels] = useState(false);
+
+// Remember the user's preferred upper workspace height.
+useEffect(() => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(
+    "treenotes-top-panels-height",
+    String(topPanelsHeight)
+  );
+}, [topPanelsHeight]);
+
+// Remember the user's preferred desktop split.
+useEffect(() => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(
+    "treenotes-notes-graph-split",
+    String(notesGraphSplit)
+  );
+}, [notesGraphSplit]);
+
+// Tell Cytoscape its container changed size.
+// requestAnimationFrame waits until the new grid width has
+// reached the DOM before Cytoscape measures it.
+useEffect(() => {
+  const frame = requestAnimationFrame(() => {
+    graphPanelRef.current
+      ?.resizeGraph?.();
+  });
+
+  return () => {
+    cancelAnimationFrame(frame);
+  };
+}, [notesGraphSplit, topPanelsHeight, focusedPanel, focusedPanelHeight]);
+
+// Prevent accidental text selection while dragging the divider.
+useEffect(() => {
+  if (!isResizingNotesGraph) {
+    return undefined;
+  }
+
+  const previousCursor = document.body.style.cursor;
+  const previousUserSelect = document.body.style.userSelect;
+
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+
+  return () => {
+    document.body.style.cursor = previousCursor;
+    document.body.style.userSelect = previousUserSelect;
+  };
+}, [isResizingNotesGraph]);
+
+function updateNotesGraphSplit(clientX) {
+  const layout = notesLayoutRef.current;
+
+  if (!layout) {
+    return;
+  }
+
+  const bounds = layout.getBoundingClientRect();
+
+  if (bounds.width <= 0) {
+    return;
+  }
+
+  const pointerX = clientX - bounds.left;
+  const nextSplit = (pointerX / bounds.width) * 100;
+
+  setNotesGraphSplit(
+    clampNotesGraphSplit(nextSplit)
+  );
+}
+
+function finishNotesGraphResize(event) {
+  if (!notesGraphDraggingRef.current) {
+    return;
+  }
+
+  notesGraphDraggingRef.current = false;
+  setIsResizingNotesGraph(false);
+
+  if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+}
+
+function handleNotesGraphResizeKeyDown(event) {
+  let nextSplit = null;
+
+  if (event.key === "ArrowLeft") {
+    nextSplit = notesGraphSplit - 5;
+  } else if (event.key === "ArrowRight") {
+    nextSplit = notesGraphSplit + 5;
+  } else if (event.key === "Home") {
+    nextSplit = NOTES_GRAPH_MIN_SPLIT;
+  } else if (event.key === "End") {
+    nextSplit = NOTES_GRAPH_MAX_SPLIT;
+  }
+
+  if (nextSplit === null) {
+    return;
+  }
+
+  event.preventDefault();
+
+  setNotesGraphSplit(
+    clampNotesGraphSplit(nextSplit)
+  );
+}
+
+// Prevent text selection while dragging the shared bottom edge.
+useEffect(() => {
+  if (!isResizingTopPanels) {
+    return undefined;
+  }
+
+  const previousCursor = document.body.style.cursor;
+  const previousUserSelect = document.body.style.userSelect;
+
+  document.body.style.cursor = "row-resize";
+  document.body.style.userSelect = "none";
+
+  return () => {
+    document.body.style.cursor = previousCursor;
+    document.body.style.userSelect = previousUserSelect;
+  };
+}, [isResizingTopPanels]);
+
+function updateTopPanelsHeight(clientY) {
+  const shell = topPanelsShellRef.current;
+
+  if (!shell) {
+    return;
+  }
+
+  const bounds = shell.getBoundingClientRect();
+
+  const nextHeight =
+    clientY -
+    bounds.top -
+    topPanelsPointerOffsetRef.current;
+
+  setTopPanelsHeight(
+    clampTopPanelsHeight(nextHeight)
+  );
+}
+
+function finishTopPanelsResize(event) {
+  if (!topPanelsDraggingRef.current) {
+    return;
+  }
+
+  topPanelsDraggingRef.current = false;
+  setIsResizingTopPanels(false);
+
+  if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+}
+
+function handleTopPanelsResizeKeyDown(event) {
+  let nextHeight = null;
+
+  if (event.key === "ArrowUp") {
+    nextHeight = topPanelsHeight - 24;
+  } else if (event.key === "ArrowDown") {
+    nextHeight = topPanelsHeight + 24;
+  } else if (event.key === "PageUp") {
+    nextHeight = topPanelsHeight - 100;
+  } else if (event.key === "PageDown") {
+    nextHeight = topPanelsHeight + 100;
+  } else if (event.key === "Home") {
+    nextHeight = TOP_PANELS_MIN_HEIGHT;
+  } else if (event.key === "End") {
+    nextHeight = TOP_PANELS_MAX_HEIGHT;
+  }
+
+  if (nextHeight === null) {
+    return;
+  }
+
+  event.preventDefault();
+
+  setTopPanelsHeight(
+    clampTopPanelsHeight(nextHeight)
+  );
+}
+
+// ---------------------------------------------------------
+// Summary panel vertical resizing
+// ---------------------------------------------------------
+
+// The Summary keeps its current compact size by default, but the
+// user can pull its bottom edge downward whenever they want more
+// writing room. The textarea still keeps its own internal scrollbar.
+const summaryPanelShellRef = useRef(null);
+const summaryPanelDraggingRef = useRef(false);
+const summaryPanelPointerOffsetRef = useRef(0);
+
+const SUMMARY_PANEL_MIN_HEIGHT = 264;
+const SUMMARY_PANEL_MAX_HEIGHT = 1200;
+
+function clampSummaryPanelHeight(value) {
+  return Math.min(
+    SUMMARY_PANEL_MAX_HEIGHT,
+    Math.max(
+      SUMMARY_PANEL_MIN_HEIGHT,
+      value
+    )
+  );
+}
+
+const [summaryPanelHeight, setSummaryPanelHeight] = useState(() => {
+  if (typeof window === "undefined") {
+    return SUMMARY_PANEL_MIN_HEIGHT;
+  }
+
+  const savedHeight = Number(
+    window.localStorage.getItem(
+      "treenotes-summary-panel-height"
+    )
+  );
+
+  return Number.isFinite(savedHeight)
+    ? clampSummaryPanelHeight(savedHeight)
+    : SUMMARY_PANEL_MIN_HEIGHT;
+});
+
+const [isResizingSummaryPanel, setIsResizingSummaryPanel] = useState(false);
+
+// Remember the user's preferred Summary height.
+useEffect(() => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(
+    "treenotes-summary-panel-height",
+    String(summaryPanelHeight)
+  );
+}, [summaryPanelHeight]);
+
+// Prevent text selection while dragging the Summary edge.
+useEffect(() => {
+  if (!isResizingSummaryPanel) {
+    return undefined;
+  }
+
+  const previousCursor = document.body.style.cursor;
+  const previousUserSelect = document.body.style.userSelect;
+
+  document.body.style.cursor = "row-resize";
+  document.body.style.userSelect = "none";
+
+  return () => {
+    document.body.style.cursor = previousCursor;
+    document.body.style.userSelect = previousUserSelect;
+  };
+}, [isResizingSummaryPanel]);
+
+function updateSummaryPanelHeight(clientY) {
+  const shell = summaryPanelShellRef.current;
+
+  if (!shell) {
+    return;
+  }
+
+  const bounds = shell.getBoundingClientRect();
+
+  const nextHeight =
+    clientY -
+    bounds.top -
+    summaryPanelPointerOffsetRef.current;
+
+  setSummaryPanelHeight(
+    clampSummaryPanelHeight(nextHeight)
+  );
+}
+
+function finishSummaryPanelResize(event) {
+  if (!summaryPanelDraggingRef.current) {
+    return;
+  }
+
+  summaryPanelDraggingRef.current = false;
+  setIsResizingSummaryPanel(false);
+
+  if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+}
+
+function handleSummaryPanelResizeKeyDown(event) {
+  let nextHeight = null;
+
+  if (event.key === "ArrowUp") {
+    nextHeight = summaryPanelHeight - 24;
+  } else if (event.key === "ArrowDown") {
+    nextHeight = summaryPanelHeight + 24;
+  } else if (event.key === "PageUp") {
+    nextHeight = summaryPanelHeight - 100;
+  } else if (event.key === "PageDown") {
+    nextHeight = summaryPanelHeight + 100;
+  } else if (event.key === "Home") {
+    nextHeight = SUMMARY_PANEL_MIN_HEIGHT;
+  } else if (event.key === "End") {
+    nextHeight = SUMMARY_PANEL_MAX_HEIGHT;
+  }
+
+  if (nextHeight === null) {
+    return;
+  }
+
+  event.preventDefault();
+
+  setSummaryPanelHeight(
+    clampSummaryPanelHeight(nextHeight)
+  );
+}
+
+// ---------------------------------------------------------
+// Layout preset detection / application
+// ---------------------------------------------------------
+
+const activeLayoutPreset =
+  WORKSPACE_LAYOUT_PRESETS.find(
+    (preset) =>
+      Math.abs(
+        notesGraphSplit -
+        preset.notesGraphSplit
+      ) < 0.5 &&
+      Math.abs(
+        topPanelsHeight -
+        preset.topPanelsHeight
+      ) < 1 &&
+      Math.abs(
+        summaryPanelHeight -
+        preset.summaryPanelHeight
+      ) < 1
+  ) ?? null;
+
+const activeLayoutValue =
+  activeLayoutPreset?.value ??
+  "custom";
+
+const activeLayoutLabel =
+  activeLayoutPreset?.label ??
+  "Custom";
+
+// Focus Mode temporarily takes precedence over the underlying
+// preset/custom label. The stored draggable values stay untouched,
+// so restoring focus immediately reveals the correct layout again.
+const workspaceLayoutDisplayValue =
+  focusedPanel
+    ? "focused"
+    : activeLayoutValue;
+
+const workspaceLayoutDisplayLabel =
+  focusedPanel
+    ? "Focused"
+    : activeLayoutLabel;
+
+// Use the custom layout artwork for known presets. Custom keeps
+// the generic Cornell-style Balanced icon, while Focus Mode uses
+// Maximize2 because it is a temporary single-panel state rather
+// than another three-panel preset.
+const WorkspaceLayoutTriggerIcon =
+  focusedPanel
+    ? Maximize2
+    : activeLayoutPreset?.Icon ??
+      LayoutBalancedIcon;
+
+function applyWorkspaceLayout(preset) {
+  setNotesGraphSplit(
+    clampNotesGraphSplit(
+      preset.notesGraphSplit
+    )
+  );
+
+  setTopPanelsHeight(
+    clampTopPanelsHeight(
+      preset.topPanelsHeight
+    )
+  );
+
+  setSummaryPanelHeight(
+    clampSummaryPanelHeight(
+      preset.summaryPanelHeight
+    )
+  );
+
+  // A layout preset describes the multi-panel workspace,
+  // so selecting one also returns from Focus Mode.
+  setFocusedPanel(null);
+  setLayoutDropdownOpen(false);
+}
 
 // Stores the current text selection while using colour pickers
 const savedSelectionRef = useRef(null);
@@ -1765,7 +3723,7 @@ function inferGraphLinkPaletteSlot(
 
     span.dataset.graphLinkColor =
       color;
-      
+
     /*
     Automatic graph links remember their palette position.
 
@@ -2531,8 +4489,20 @@ function inferGraphLinkPaletteSlot(
   }));
 
   return (
-    <div 
-      className="note-workspace"
+    <div
+      className={`note-workspace ${
+        focusedPanel
+          ? `workspace-focus-mode focus-${focusedPanel}`
+          : ""
+      }`}
+      style={{
+        ...(focusedPanelHeight
+          ? {
+              "--focused-panel-height":
+                `${focusedPanelHeight}px`,
+            }
+          : {}),
+      }}
       onClick={() => {
         setContextMenu(null);
         setGraphNodeMenuOpen(false);
@@ -2541,18 +4511,192 @@ function inferGraphLinkPaletteSlot(
     >
 
     {/* << frontend dev >> */}
-    {/* Note title input */}
+    {/* Note title + workspace layout selector */}
 
-      <input
-        type="text"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        className="note-title"
-      />
+      <div className="note-title-panel">
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="note-title"
+        />
 
-      <div className="notes-layout">
+        <div
+          className="workspace-layout-dropdown"
+          ref={layoutDropdownRef}
+        >
+          <button
+            type="button"
+            className={`workspace-layout-trigger ${
+              layoutDropdownOpen
+                ? "workspace-layout-trigger-open"
+                : ""
+            }`}
+            aria-haspopup="listbox"
+            aria-expanded={layoutDropdownOpen}
+            aria-label={`Workspace layout: ${workspaceLayoutDisplayLabel}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setLayoutDropdownOpen(
+                (current) => !current
+              );
+            }}
+          >
+            <WorkspaceLayoutTriggerIcon
+              size={17}
+              strokeWidth={1.8}
+              className="workspace-layout-trigger-icon"
+              aria-hidden="true"
+            />
+
+            <span className="workspace-layout-trigger-label">
+              {workspaceLayoutDisplayLabel}
+            </span>
+
+            <ChevronDown
+              size={15}
+              strokeWidth={1.8}
+              className={`workspace-layout-chevron ${
+                layoutDropdownOpen
+                  ? "workspace-layout-chevron-open"
+                  : ""
+              }`}
+              aria-hidden="true"
+            />
+          </button>
+
+          {layoutDropdownOpen && (
+            <div
+              className="workspace-layout-menu"
+              role="listbox"
+              aria-label="Workspace layout"
+              onClick={(event) =>
+                event.stopPropagation()
+              }
+            >
+              {(workspaceLayoutDisplayValue === "custom" ||
+                workspaceLayoutDisplayValue === "focused") && (
+                <>
+                  <div
+                    className="workspace-layout-option workspace-layout-option-selected workspace-layout-status"
+                    role="option"
+                    aria-selected="true"
+                  >
+                    <span className="workspace-layout-option-main">
+                      {workspaceLayoutDisplayValue === "focused" ? (
+                        <Maximize2
+                          size={16}
+                          strokeWidth={1.8}
+                          className="workspace-layout-option-icon"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <LayoutBalancedIcon
+                          size={16}
+                          strokeWidth={1.8}
+                          className="workspace-layout-option-icon"
+                          aria-hidden="true"
+                        />
+                      )}
+
+                      <span>
+                        {workspaceLayoutDisplayLabel}
+                      </span>
+                    </span>
+
+                    <Check
+                      size={14}
+                      strokeWidth={2}
+                      aria-hidden="true"
+                    />
+                  </div>
+
+                  <div
+                    className="workspace-layout-menu-divider"
+                    aria-hidden="true"
+                  />
+                </>
+              )}
+
+              {WORKSPACE_LAYOUT_PRESETS.map(
+                (preset) => {
+                  const isSelected =
+                    workspaceLayoutDisplayValue ===
+                    preset.value;
+
+                  const PresetIcon = preset.Icon;
+
+                  return (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      className={`workspace-layout-option ${
+                        isSelected
+                          ? "workspace-layout-option-selected"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        applyWorkspaceLayout(
+                          preset
+                        )
+                      }
+                    >
+                      <span className="workspace-layout-option-main">
+                        <PresetIcon
+                          size={16}
+                          strokeWidth={1.8}
+                          className="workspace-layout-option-icon"
+                          aria-hidden="true"
+                        />
+
+                        <span>
+                          {preset.label}
+                        </span>
+                      </span>
+
+                      {isSelected && (
+                        <Check
+                          size={14}
+                          strokeWidth={2}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </button>
+                  );
+                }
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div
+        ref={topPanelsShellRef}
+        className={`notes-row-resizable-shell ${
+          isResizingTopPanels
+            ? "notes-row-resizing"
+            : ""
+        }`}
+        style={{
+          "--top-panels-height": `${topPanelsHeight}px`,
+        }}
+      >
+      <div
+        ref={notesLayoutRef}
+        className={`notes-layout ${
+          isResizingNotesGraph
+            ? "notes-layout-resizing"
+            : ""
+        }`}
+        style={{
+          "--notes-panel-fr": `${notesGraphSplit}fr`,
+          "--graph-panel-fr": `${100 - notesGraphSplit}fr`,
+        }}
+      >
         <section className="raw-notes">
-          
+
           <div className="raw-notes-heading">
 
             <div className="raw-notes-heading-title">
@@ -2565,17 +4709,56 @@ function inferGraphLinkPaletteSlot(
               />
             </div>
 
+            <div className="raw-notes-heading-actions">
+              <button
+                type="button"
+                className="panel-focus-button transcription-launch-button tooltip-align-right"
+                onClick={openTranscriptionModal}
+                aria-label="Open transcription review"
+                aria-pressed={transcriptionModalOpen}
+                data-tooltip="Transcribe with microphone"
+              >
+                <Mic size={18} strokeWidth={1.9} />
+              </button>
+
+              <button
+                type="button"
+                className="panel-focus-button tooltip-align-right"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  togglePanelFocus("notes");
+                }}
+                aria-label={
+                  focusedPanel === "notes"
+                    ? "Exit Raw Notes focus mode"
+                    : "Focus Raw Notes"
+                }
+                aria-pressed={focusedPanel === "notes"}
+                data-tooltip={
+                  focusedPanel === "notes"
+                    ? "Restore layout"
+                    : "Focus Raw Notes"
+                }
+              >
+                {focusedPanel === "notes" ? (
+                  <Minimize2 size={18} strokeWidth={1.9} />
+                ) : (
+                  <Maximize2 size={18} strokeWidth={1.9} />
+                )}
+              </button>
+            </div>
+
           </div>
-          
+
           <div className="raw-notes-editor">
-            
+
             <div
               className="raw-notes-toolbar"
               role="toolbar"
               aria-label="Text formatting"
             >
               {/* Headings */}
-              
+
               <button
                 type="button"
                 className={`toolbar-text-button ${
@@ -2591,7 +4774,7 @@ function inferGraphLinkPaletteSlot(
               >
                 H1
               </button>
-              
+
               <button
                 type="button"
                 className={`toolbar-text-button ${
@@ -2607,7 +4790,7 @@ function inferGraphLinkPaletteSlot(
               >
                 H2
               </button>
-              
+
               <button
                 type="button"
                 className={`toolbar-text-button ${
@@ -2623,12 +4806,12 @@ function inferGraphLinkPaletteSlot(
               >
                 H3
               </button>
-              
+
 
               <span className="toolbar-divider" />
-              
+
               {/* Font formatting */}
-              
+
               <button
                 type="button"
                 className={`toolbar-icon-button ${
@@ -2644,7 +4827,7 @@ function inferGraphLinkPaletteSlot(
               >
                 <Bold size={18} strokeWidth={2.2} />
               </button>
-              
+
               <button
                 type="button"
                 className={`toolbar-icon-button ${
@@ -2660,7 +4843,7 @@ function inferGraphLinkPaletteSlot(
               >
                 <Italic size={18} strokeWidth={2} />
               </button>
-              
+
               <button
                 type="button"
                 className={`toolbar-icon-button ${
@@ -2676,7 +4859,7 @@ function inferGraphLinkPaletteSlot(
               >
                 <Underline size={18} strokeWidth={2} />
               </button>
-              
+
               {/* Text Colour */}
 
               <div className="toolbar-color-wrapper">
@@ -2962,7 +5145,7 @@ function inferGraphLinkPaletteSlot(
               </div>
 
               <span className="toolbar-divider" />
-              
+
               {/* Paragraph Formatting */}
 
               <div
@@ -3228,9 +5411,9 @@ function inferGraphLinkPaletteSlot(
                 )}
 
               </div>
-              
+
               {/* Lists */}
-              
+
               <button
                 type="button"
                 className={`toolbar-icon-button ${
@@ -3246,7 +5429,7 @@ function inferGraphLinkPaletteSlot(
               >
                 <List size={19} strokeWidth={1.9} />
               </button>
-              
+
               <button
                 type="button"
                 className={`toolbar-icon-button ${
@@ -3262,13 +5445,13 @@ function inferGraphLinkPaletteSlot(
               >
                 <ListOrdered size={19} strokeWidth={1.9} />
               </button>
-              
-              
+
+
               <span className="toolbar-divider" />
-              
-              
+
+
               {/* Link */}
-              
+
               <button
                 type="button"
                 className="toolbar-icon-button"
@@ -3278,10 +5461,12 @@ function inferGraphLinkPaletteSlot(
               >
                 <Link size={19} strokeWidth={1.9} />
               </button>
-              
+
             </div>
 
-            {linkedTextNavigator && (
+            <div className="raw-notes-content-shell">
+
+              {linkedTextNavigator && (
               <div
                 className="linked-text-navigator"
                 role="group"
@@ -3380,7 +5565,7 @@ function inferGraphLinkPaletteSlot(
 
               </div>
             )}
-            
+
             <div
               ref={editorRef}
               className="text-area raw-notes-content"
@@ -3525,7 +5710,7 @@ function inferGraphLinkPaletteSlot(
                 });
 
               }}
-              
+
               onClick={(event) => {
 
                 const linkedText =
@@ -3646,6 +5831,8 @@ function inferGraphLinkPaletteSlot(
               onKeyUp={updateFormattingState}
               onFocus={updateFormattingState}
             >
+
+            </div>
 
             </div>
 
@@ -4130,11 +6317,61 @@ function inferGraphLinkPaletteSlot(
 
         </section>
 
+        <div
+          className="notes-graph-resizer"
+          role="separator"
+          aria-label="Resize Raw Notes and Graph View"
+          aria-orientation="vertical"
+          aria-valuemin={NOTES_GRAPH_MIN_SPLIT}
+          aria-valuemax={NOTES_GRAPH_MAX_SPLIT}
+          aria-valuenow={Math.round(notesGraphSplit)}
+          tabIndex={0}
+          onPointerDown={(event) => {
+            if (
+              typeof window !== "undefined" &&
+              window.matchMedia(
+                "(max-width: 1100px)"
+              ).matches
+            ) {
+              return;
+            }
+
+            notesGraphDraggingRef.current = true;
+            setIsResizingNotesGraph(true);
+
+            event.currentTarget
+              .setPointerCapture?.(
+                event.pointerId
+              );
+
+            updateNotesGraphSplit(
+              event.clientX
+            );
+          }}
+          onPointerMove={(event) => {
+            if (!notesGraphDraggingRef.current) {
+              return;
+            }
+
+            updateNotesGraphSplit(
+              event.clientX
+            );
+          }}
+          onPointerUp={finishNotesGraphResize}
+          onPointerCancel={finishNotesGraphResize}
+          onKeyDown={handleNotesGraphResizeKeyDown}
+        >
+          <span
+            className="notes-graph-resizer-line"
+            aria-hidden="true"
+          />
+        </div>
+
         {/* << GRAPH / AI CONNECTION >> */}
         {/* Provides current note text to GraphPanel */}
         {/* GraphPanel sends rawNotes to backend / AI */}
 
-        <GraphPanel 
+        <GraphPanel
         rawNotes={rawNotes}
         selectedText={selectedText}
         addNodeTrigger={addNodeTrigger}
@@ -4142,18 +6379,444 @@ function inferGraphLinkPaletteSlot(
         initialGraph={note.graph_json}
         ref={graphPanelRef}
         onNavigateLinkedText={openLinkedTextNavigator}
+        isFocused={focusedPanel === "graph"}
+        onToggleFocus={() =>
+          togglePanelFocus("graph")
+        }
         />
+      </div>
+
+        <div
+          className="top-panels-resizer"
+          role="separator"
+          aria-label="Resize Raw Notes and Graph View height"
+          aria-orientation="horizontal"
+          aria-valuemin={TOP_PANELS_MIN_HEIGHT}
+          aria-valuemax={TOP_PANELS_MAX_HEIGHT}
+          aria-valuenow={Math.round(topPanelsHeight)}
+          tabIndex={0}
+          onPointerDown={(event) => {
+            if (event.button !== 0) {
+              return;
+            }
+
+            if (
+              typeof window !== "undefined" &&
+              window.matchMedia(
+                "(max-width: 1100px)"
+              ).matches
+            ) {
+              return;
+            }
+
+            const shell = topPanelsShellRef.current;
+
+            if (!shell) {
+              return;
+            }
+
+            const bounds = shell.getBoundingClientRect();
+
+            topPanelsPointerOffsetRef.current =
+              event.clientY - bounds.bottom;
+
+            topPanelsDraggingRef.current = true;
+            setIsResizingTopPanels(true);
+
+            event.currentTarget
+              .setPointerCapture?.(
+                event.pointerId
+              );
+          }}
+          onPointerMove={(event) => {
+            if (!topPanelsDraggingRef.current) {
+              return;
+            }
+
+            updateTopPanelsHeight(
+              event.clientY
+            );
+          }}
+          onPointerUp={finishTopPanelsResize}
+          onPointerCancel={finishTopPanelsResize}
+          onKeyDown={handleTopPanelsResizeKeyDown}
+        >
+          <span
+            className="top-panels-resizer-grip"
+            aria-hidden="true"
+          />
+        </div>
       </div>
 
       {/* << SUMMARY / AI CONNECTION >> */  }
       {/* Provides current note text to SummaryPanel */}
       {/* SummaryPanel sends rawNotes to backend / AI */}
 
-      <SummaryPanel
-        rawNotes={rawNotes}
-        summary={summary}
-        onSummaryChange={setSummary}
-      />
+      <div
+        ref={summaryPanelShellRef}
+        className={`summary-resizable-shell ${
+          isResizingSummaryPanel
+            ? "summary-panel-resizing"
+            : ""
+        }`}
+        style={{
+          "--summary-panel-height": `${summaryPanelHeight}px`,
+        }}
+      >
+        <SummaryPanel
+          rawNotes={rawNotes}
+          summary={summary}
+          onSummaryChange={setSummary}
+          isFocused={focusedPanel === "summary"}
+          onToggleFocus={() =>
+            togglePanelFocus("summary")
+          }
+        />
+
+        <div
+          className="summary-panel-resizer"
+          role="separator"
+          aria-label="Resize Summary panel"
+          aria-orientation="horizontal"
+          aria-valuemin={SUMMARY_PANEL_MIN_HEIGHT}
+          aria-valuemax={SUMMARY_PANEL_MAX_HEIGHT}
+          aria-valuenow={Math.round(summaryPanelHeight)}
+          tabIndex={0}
+          onPointerDown={(event) => {
+            if (event.button !== 0) {
+              return;
+            }
+
+            const shell = summaryPanelShellRef.current;
+
+            if (!shell) {
+              return;
+            }
+
+            const bounds = shell.getBoundingClientRect();
+
+            summaryPanelPointerOffsetRef.current =
+              event.clientY - bounds.bottom;
+
+            summaryPanelDraggingRef.current = true;
+            setIsResizingSummaryPanel(true);
+
+            event.currentTarget
+              .setPointerCapture?.(
+                event.pointerId
+              );
+          }}
+          onPointerMove={(event) => {
+            if (!summaryPanelDraggingRef.current) {
+              return;
+            }
+
+            updateSummaryPanelHeight(
+              event.clientY
+            );
+          }}
+          onPointerUp={finishSummaryPanelResize}
+          onPointerCancel={finishSummaryPanelResize}
+          onKeyDown={handleSummaryPanelResizeKeyDown}
+        >
+          <span
+            className="summary-panel-resizer-grip"
+            aria-hidden="true"
+          />
+        </div>
+      </div>
+
+      {transcriptionModalOpen && (
+        <div
+          className="transcription-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeTranscriptionModal();
+            }
+          }}
+        >
+          <section
+            className="transcription-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="transcription-modal-title"
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="transcription-modal-header">
+              <div className="transcription-modal-heading">
+                <span
+                  className={`transcription-modal-icon ${
+                    transcriptionListening
+                      ? "transcription-modal-icon-listening"
+                      : ""
+                  }`}
+                  aria-hidden="true"
+                >
+                  <Mic size={21} strokeWidth={1.9} />
+                </span>
+
+                <div>
+                  <h2 id="transcription-modal-title">Live Transcription</h2>
+                  <p>Review and edit speech before adding it to Raw Notes.</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="transcription-modal-close"
+                onClick={closeTranscriptionModal}
+                aria-label="Close transcription"
+              >
+                <X size={18} strokeWidth={1.9} />
+              </button>
+            </header>
+
+            <div className="transcription-modal-body">
+              <div className="transcription-status-row">
+                <div className="transcription-language-badge">
+                  <Languages size={16} strokeWidth={1.8} aria-hidden="true" />
+                  <span>English</span>
+                </div>
+
+                <div
+                  className={`transcription-status ${
+                    transcriptionMicError || transcriptionAsrError
+                      ? "transcription-status-error"
+                      : transcriptionAsrState === "finalising"
+                        ? "transcription-status-finalising"
+                        : transcriptionAsrState === "connecting"
+                          ? "transcription-status-connecting"
+                          : transcriptionListening
+                            ? "transcription-status-listening"
+                            : transcriptionMicRequesting
+                              ? "transcription-status-requesting"
+                              : transcriptionCaptureInfo?.complete
+                                ? "transcription-status-captured"
+                                : ""
+                  }`}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className="transcription-status-dot" aria-hidden="true" />
+                  <span>
+                    {transcriptionMicError
+                      ? "Microphone error"
+                      : transcriptionAsrError
+                        ? "ASR connection error"
+                        : transcriptionAsrState === "finalising"
+                          ? "Finalising"
+                          : transcriptionAsrState === "connecting"
+                            ? "Connecting ASR"
+                            : transcriptionListening
+                              ? "Listening"
+                              : transcriptionMicRequesting
+                                ? "Requesting access"
+                                : transcriptionCaptureInfo?.complete
+                                  ? "Transcription ready"
+                                  : "Ready"}
+                  </span>
+                </div>
+              </div>
+
+              <div
+                className={`transcription-waveform ${
+                  transcriptionListening ? "transcription-waveform-active" : ""
+                }`}
+                aria-hidden="true"
+              >
+                {Array.from({ length: 13 }).map((_, index) => {
+                  const wavePattern =
+                    [0.42, 0.68, 0.9, 0.58, 0.82, 1, 0.72, 0.94, 0.62, 0.84, 0.52, 0.76, 0.46];
+
+                  const liveHeight =
+                    transcriptionListening
+                      ? 10 +
+                        transcriptionAudioLevel *
+                          42 *
+                          wavePattern[index]
+                      : 12;
+
+                  return (
+                    <span
+                      key={index}
+                      style={{
+                        height: `${liveHeight}px`,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+
+              {transcriptionMicError || transcriptionAsrError ? (
+                <p
+                  className="transcription-prototype-note transcription-microphone-error"
+                  role="alert"
+                >
+                  {transcriptionMicError || transcriptionAsrError}
+                </p>
+              ) : (
+                <p className="transcription-prototype-note">
+                  {transcriptionListening
+                    ? `Microphone active. Streaming mono PCM audio to speech recognition at ${transcriptionCaptureInfo?.sampleRate?.toLocaleString() ?? "the browser's"} Hz.`
+                    : transcriptionAsrState === "finalising"
+                      ? "Finishing the last spoken phrase before closing the transcription session..."
+                      : transcriptionCaptureInfo?.complete
+                        ? `Captured ${transcriptionCaptureInfo.durationSeconds.toFixed(1)} seconds of audio at ${transcriptionCaptureInfo.sampleRate.toLocaleString()} Hz (${formatTranscriptionCaptureSize(transcriptionCaptureInfo.bytes)}). Review the transcript below before adding it to Raw Notes.`
+                        : transcriptionAsrState === "connecting"
+                          ? "Microphone access granted. Connecting to the speech recognition service..."
+                          : transcriptionMicRequesting
+                            ? "Waiting for microphone permission from your browser..."
+                            : "Press Start Listening to begin live speech transcription."}
+                </p>
+              )}
+
+              <label
+                className="transcription-field"
+                htmlFor="transcription-review-text"
+              >
+                <span>Transcription</span>
+
+                <textarea
+                  ref={transcriptionTextareaRef}
+                  id="transcription-review-text"
+                  value={transcriptionDraft}
+                  onChange={(event) => setTranscriptionDraft(event.target.value)}
+                  readOnly={
+                    transcriptionListening ||
+                    transcriptionMicRequesting ||
+                    transcriptionAsrState === "finalising"
+                  }
+                  placeholder="Your speech transcript will appear here. You can edit it before adding it to Raw Notes."
+                  spellCheck
+                />
+              </label>
+
+              <div className="transcription-terms-section">
+                <div className="transcription-terms-copy">
+                  <strong>Custom terminology</strong>
+                  <span>Add jargon or names for your future personal ASR vocabulary.</span>
+                </div>
+
+                <div className="transcription-term-entry">
+                  <input
+                    type="text"
+                    value={transcriptionTermInput}
+                    onChange={(event) => setTranscriptionTermInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        addTranscriptionTerm();
+                      }
+                    }}
+                    placeholder="e.g. Kubernetes, TreeNotes, NumPy"
+                    aria-label="Custom transcription terminology"
+                  />
+
+                  <button
+                    type="button"
+                    className="transcription-term-add"
+                    onClick={addTranscriptionTerm}
+                    disabled={!transcriptionTermInput.trim()}
+                  >
+                    <Plus size={16} strokeWidth={2} aria-hidden="true" />
+                    <span>Add</span>
+                  </button>
+                </div>
+
+                {transcriptionTerms.length > 0 && (
+                  <div
+                    className="transcription-term-list"
+                    aria-label="Added custom terminology"
+                  >
+                    {transcriptionTerms.map((term) => (
+                      <span key={term} className="transcription-term-chip">
+                        <span>{term}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeTranscriptionTerm(term)}
+                          aria-label={`Remove ${term}`}
+                        >
+                          <X size={13} strokeWidth={2} aria-hidden="true" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <footer className="transcription-modal-footer">
+              <button
+                type="button"
+                className="transcription-footer-button transcription-clear-button"
+                onClick={clearTranscriptionDraft}
+                disabled={
+                  !transcriptionDraft ||
+                  transcriptionListening ||
+                  transcriptionMicRequesting ||
+                  transcriptionAsrState === "finalising"
+                }
+              >
+                <Trash2 size={16} strokeWidth={1.9} aria-hidden="true" />
+                <span>Clear</span>
+              </button>
+
+              <div className="transcription-modal-actions">
+                <button
+                  type="button"
+                  className={`transcription-footer-button transcription-listen-button ${
+                    transcriptionListening ? "transcription-listen-button-active" : ""
+                  }`}
+                  onClick={toggleTranscriptionListening}
+                  disabled={
+                    transcriptionMicRequesting ||
+                    transcriptionAsrState === "finalising"
+                  }
+                >
+                  {transcriptionListening ? (
+                    <Square
+                      size={15}
+                      strokeWidth={2}
+                      fill="currentColor"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Mic size={16} strokeWidth={1.9} aria-hidden="true" />
+                  )}
+                  <span>
+                    {transcriptionAsrState === "connecting"
+                      ? "Connecting..."
+                      : transcriptionMicRequesting
+                        ? "Requesting..."
+                        : transcriptionAsrState === "finalising"
+                          ? "Finalising..."
+                          : transcriptionListening
+                            ? "Stop"
+                            : "Start Listening"}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  className="transcription-footer-button transcription-append-button"
+                  onClick={appendTranscriptionToNotes}
+                  disabled={
+                    !transcriptionDraft.trim() ||
+                    transcriptionListening ||
+                    transcriptionMicRequesting ||
+                    transcriptionAsrState === "finalising"
+                  }
+                >
+                  <FilePlus2 size={17} strokeWidth={1.9} aria-hidden="true" />
+                  <span>Append to Raw Notes</span>
+                </button>
+              </div>
+            </footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 });

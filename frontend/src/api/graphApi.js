@@ -127,12 +127,12 @@ function prepareGraphForSearch(graphData) {
 
         return {
           id: data.id != null ? String(data.id) : null,
-          source:String(data.source),
+          source: String(data.source),
           target: String(data.target),
-
+          label: String(data.label)
           // Useful later if relationships receive names such as "uses", "contains", etc.
-          label: data.label ?? undefined,
-          type: data.type ?? undefined,
+          // label: data.label ?? undefined,
+          // type: data.type ?? undefined,
         };
       }) ?? [];
 
@@ -435,7 +435,10 @@ export async function semanticSearchGraph(noteId, query, graphData) {
         credentials: "include", // Assumes authentication currently uses the user's session cookie.
 
         // IMPORTANT: The graph is sent alongside the query so the semantic-search backend can reason about both node meaning AND node relationships.
-        body: JSON.stringify({ query: query.trim(), graph: searchGraph })
+        body: JSON.stringify({
+            query: query.trim(),
+            graph: searchGraph,
+        })
   });
 
   const data = await handleApiResponse(response, "Unable to search the graph.");

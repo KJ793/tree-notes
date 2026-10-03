@@ -3,9 +3,9 @@
 }
 
 body{
-  background: 
+  background:
     linear-gradient(
-      180deg, 
+      180deg,
       var(--bg-page-start) 0%,
       var(--bg-page-mid) 60%,
       var(--bg-page-end) 100%
@@ -79,8 +79,8 @@ body{
   max-width: 480px;
   padding: 48px;
   background: var(--bg-auth-card);
-  border: 
-    1px solid 
+  border:
+    1px solid
     var(--border-control);
   border-radius: 18px;
   box-shadow: var(--shadow-card);
@@ -141,8 +141,8 @@ body{
   background:var(--bg-auth-input);
 
   border-radius: 6px;
-  border: 
-    1px solid 
+  border:
+    1px solid
     var(--border-accent-muted);
   color: var(--text-primary);
   outline:none;
@@ -165,7 +165,7 @@ body{
   border-color: var(--accent-focus-strong);
 
     box-shadow:
-      0 0 3px 
+      0 0 3px
       var(--focus-ring-auth);
 }
 
@@ -292,8 +292,8 @@ body{
 .googlebutton{
   width: 100%;
   padding: 12px;
-  border: 
-    1px solid 
+  border:
+    1px solid
     var(--border-accent-muted);
   border-radius: 8px;
   background: transparent;
@@ -430,8 +430,8 @@ body{
   padding: 7px 10px;
 
   background: var(--bg-note-card);
-  border: 
-    1px solid 
+  border:
+    1px solid
     var(--border-subtle);
   border-radius: 6px;
 
@@ -592,7 +592,7 @@ body{
   scrollbar-color:
     var(--page-scrollbar-thumb)
     transparent;
-  
+
 }
 
 /* ================================================== */
@@ -991,8 +991,8 @@ body{
   align-items: center;
   gap: 56px;
   padding: 50px 52px;
-  border: 
-    1px solid 
+  border:
+    1px solid
     var(--border-dashboard);
   border-radius: 11px;
   background: var(--bg-panel);
@@ -1320,8 +1320,8 @@ body{
 }
 
 .navbar-action-button:focus-visible {
-  outline: 
-    2px solid 
+  outline:
+    2px solid
     var(--accent-focus-strong);
   outline-offset: 2px;
 }
@@ -1422,8 +1422,8 @@ body{
 
   background: var(--bg-panel-secondary);
 
-  border: 
-    1px solid 
+  border:
+    1px solid
     var(--border-control);
   border-radius: 12px;
 
@@ -1651,8 +1651,8 @@ body{
   padding: 12px 14px;
 
   background: var(--bg-panel);
-  border: 
-    1px solid 
+  border:
+    1px solid
     var(--graph-border);
   border-top: none;
   border-radius: 0 0 12px 12px;
@@ -1672,8 +1672,8 @@ body{
   overflow: hidden;
 
   background: var(--bg-accent-soft);
-  border: 
-    1px solid 
+  border:
+    1px solid
     var(--graph-node-accent);
   border-radius: 7px;
 
@@ -1703,8 +1703,8 @@ body{
 
   background: var(--graph-control-bg);
 
-  border: 
-    1px solid 
+  border:
+    1px solid
     var(--graph-control-border);
   border-radius: 7px;
 
@@ -1721,8 +1721,8 @@ body{
   background: var(--graph-control-bg);
   color: var(--text-primary);
 
-  border: 
-    1px solid 
+  border:
+    1px solid
     var(--graph-control-border);
   border-radius: 5px;
 }
@@ -1749,8 +1749,8 @@ body{
   padding: 8px 14px;
 
   background: var(--bg-accent-soft);
-  border: 
-    1px solid 
+  border:
+    1px solid
     var(--border-accent-muted);
   border-radius: 8px;
 
@@ -2515,4 +2515,19 @@ body{
       rotate(-2deg)
       scaleY(0.9);
   }
+}
+
+.dashboard-navbar {
+  position: relative;
+  z-index: 4000;
+  overflow: visible;
+}
+
+.dashboard-navbar .profile-menu-container {
+  position: relative;
+  z-index: 4100;
+}
+
+.dashboard-navbar .profile-dropdown {
+  z-index: 4200;
 }

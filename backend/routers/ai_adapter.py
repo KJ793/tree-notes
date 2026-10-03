@@ -104,10 +104,7 @@ router = APIRouter()
 def _require_notes(raw_notes: str) -> str:
     text = (raw_notes or "").strip()
     if not text:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="rawNotes cannot be empty",
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="rawNotes cannot be empty")
     return text
 
 @router.post("/graph/stream")
@@ -162,8 +159,6 @@ def graph(payload: RawNotesRequest, current_user: User = Depends(get_current_use
 @router.post("/summary", response_model=SummaryResponse)
 def summary(payload: RawNotesRequest, current_user: User = Depends(get_current_user)) -> SummaryResponse:
     text = _require_notes(payload.rawNotes)
-
-    print("Payload.")
 
     try:
         # generate_summary requires all three arguments. SummaryPanel sends

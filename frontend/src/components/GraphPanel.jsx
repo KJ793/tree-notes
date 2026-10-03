@@ -29,6 +29,8 @@ import {
   Minus,
   ArrowRight,
   CircleX,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import SquareDottedIcon from "./icons/SquareDottedIcon";
 import VeeIcon from "./icons/VeeIcon";
@@ -594,6 +596,8 @@ const GraphPanel = forwardRef(function GraphPanel(
     noteId,
     initialGraph,
     onNavigateLinkedText,
+    isFocused = false,
+    onToggleFocus,
   },
   ref
 ) {
@@ -686,7 +690,7 @@ const GraphPanel = forwardRef(function GraphPanel(
       edges: [],
     });
 
-  // To link nodes// 
+  // To link nodes//
   const [linkMode, setLinkMode] = useState(false);
 
   // TO save first node clicked to link to second //
@@ -700,7 +704,7 @@ const GraphPanel = forwardRef(function GraphPanel(
   // Hidden native colour picker
   // const nodeColorInputRef = useRef(null);
 
-  // color picker for node text 
+  // color picker for node text
   // const nodeTextColorInputRef = useRef(null);
 
   // Node border colour picker
@@ -995,7 +999,7 @@ const GraphPanel = forwardRef(function GraphPanel(
 
     loadedGraphNoteIdRef.current =
       noteId;
-    
+
     setGraphData({
       nodes: Array.isArray(initialGraph?.nodes)
         ? initialGraph.nodes
@@ -1095,19 +1099,41 @@ useEffect(() => {
       // START STREAMING REQUEST
       // =====================================================
 
-      /* IMPORTANT:
-      rawNotes should already be the plain-text representation supplied by NoteWorkspace.
-      Do not send notes_section_html here. */
-      const response = await fetch("/api/graph/stream", {
+      const response =
+        await fetch(
+          "/api/graph/stream",
+          {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            signal: controller.signal,
-            body: JSON.stringify({
-              noteId: noteId ?? null,
-              rawNotes: notes
-            })
-      });
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            credentials:
+              "include",
+
+            signal:
+              controller.signal,
+
+            body:
+              JSON.stringify({
+                noteId:
+                  noteId ?? null,
+
+                /*
+                  IMPORTANT:
+
+                  rawNotes should already be the plain-text
+                  representation supplied by NoteWorkspace.
+
+                  Do not send notes_section_html here.
+                */
+                rawNotes:
+                  notes,
+              }),
+          }
+        );
 
       // =====================================================
       // HTTP-LEVEL ERRORS
@@ -1118,43 +1144,18 @@ useEffect(() => {
         let message = "Graph generation failed. Please try again.";
 
         try {
+          const contentType = response.headers.get("content-type") || "";
 
-          const contentType =
-            response.headers.get(
-              "content-type"
-            ) || "";
-
-          if (
-            contentType.includes(
-              "application/json"
-            )
-          ) {
-
+          if (contentType.includes("application/json")) {
             const data = await response.json();
 
             if (typeof data?.detail === "string") {
               message = data.detail;
-            } else if (
-              Array.isArray(data?.detail)
-            ) {
-
-              message =
-                data.detail
-                  .map(
-                    (item) =>
-                      String(
-                        item.msg
-                      )
-                        .replace(
-                          /^Value error, /,
-                          ""
-                        )
-                  )
-                  .join(" ");
-
-            } else if (
-              typeof data?.message === "string"
-            ) {
+            }
+            else if (Array.isArray(data?.detail)) {
+              message = data.detail.map((item) =>String(item.msg).replace(/^Value error, /, "")).join(" ");
+            }
+            else if (typeof data?.message === "string") {
               message = data.message;
             }
 
@@ -1177,9 +1178,7 @@ useEffect(() => {
 
         }
 
-        throw new Error(
-          message
-        );
+        throw new Error(message);
 
       }
 
@@ -1196,11 +1195,7 @@ useEffect(() => {
       // =====================================================
 
       const reader = response.body.getReader();
-
-      const decoder =
-        new TextDecoder(
-          "utf-8"
-        );
+      const decoder = new TextDecoder("utf-8");
 
       /*
         Network chunks do NOT necessarily line up with
@@ -1520,82 +1515,31 @@ useEffect(() => {
   {
 
     const cy = cyRef.current;
+    if (!cy || !edgeData) { return false; }
 
-    if (
-      !cy ||
-      !edgeData
-    ) {
+    const sourceId = String(edgeData.source ?? "" );
+    const targetId = String(edgeData.target ?? "" );
+    const edgeLabel = String(edgeData.label ?? "" );
+
+    if (!sourceId || !targetId) {
+      console.warn("Streamed edge is missing source/target:", edgeData);
       return false;
     }
 
-    const sourceId =
-      String(
-        edgeData.source ?? ""
-      );
+    const sourceNode = cy.getElementById(sourceId);
+    const targetNode = cy.getElementById(targetId);
 
+    // An edge cannot safely be added until both of its nodes exist.
 
-    const targetId =
-      String(
-        edgeData.target ?? ""
-      );
+    if (sourceNode.empty() || targetNode.empty()) { return false; }
 
-    if (
-      !sourceId ||
-      !targetId
-    ) {
+    // Hans should ideally provide edge IDs. This fallback gives us something usable during development if he doesn't yet.
 
-      console.warn(
-        "Streamed edge is missing source/target:",
-        edgeData
-      );
+    const edgeId = String(edgeData.id || `ai-edge-${sourceId}-${targetId}-${edgeData.label || "link"}`);
 
-      return false;
-    }
+    const existing = cy.getElementById(edgeId);
 
-    const sourceNode =
-      cy.getElementById(
-        sourceId
-      );
-
-    const targetNode =
-      cy.getElementById(
-        targetId
-      );
-
-    /*
-      An edge cannot safely be added until both
-      of its nodes exist.
-    */
-
-    if (
-      sourceNode.empty() ||
-      targetNode.empty()
-    ) {
-      return false;
-    }
-
-    /*
-      Hans should ideally provide edge IDs.
-
-      This fallback gives us something usable
-      during development if he doesn't yet.
-    */
-
-    const edgeId =
-      String(
-        edgeData.id ||
-        `ai-edge-${sourceId}-${targetId}-${edgeData.relationship || "link"}`
-      );
-
-    const existing =
-      cy.getElementById(
-        edgeId
-      );
-
-    /*
-      If this edge already exists, update it
-      instead of creating a duplicate.
-    */
+    // If this edge already exists, update it instead of creating a duplicate.
 
     if (!existing.empty()) {
 
@@ -1605,26 +1549,20 @@ useEffect(() => {
         id: edgeId,
         source: sourceId,
         target: targetId,
+        label: edgeLabel
       });
-
       return true;
     }
 
     cy.add({
       group: "edges",
-
       data: {
         ...edgeData,
-
-        id:
-          edgeId,
-
-        source:
-          sourceId,
-
-        target:
-          targetId,
-      },
+        id: edgeId,
+        source: sourceId,
+        target: targetId,
+        label: edgeLabel
+      }
     });
 
     return true;
@@ -1794,32 +1732,18 @@ useEffect(() => {
 
       case "start": {
 
-        /*
-          Generate Graph currently replaces the existing
-          generated graph, so preserve that behaviour.
-
-          We clear the graph once when the stream begins,
-          NOT every time an element arrives.
-        */
+          // Generate Graph currently replaces the existing generated graph, so preserve that behaviour.
+          // We clear the graph once when the stream begins, NOT every time an element arrives.
 
         cy.elements().remove();
-
         pendingStreamEdgesRef.current = [];
-
         streamAnchorRef.current = null;
-
         streamNodeIndexRef.current = 0;
-
         cy.elements().unselect();
-
 
         setSelectedNode(null);
         setSelectedEdge(null);
-        setSelectionSummary({
-          nodes: [],
-          edges: [],
-        });
-
+        setSelectionSummary({ nodes: [], edges: [] });
         setShapeMenuOpen(false);
         setNodeBorderStyleMenuOpen(false);
         setEdgeStyleMenuOpen(false);
@@ -1827,7 +1751,6 @@ useEffect(() => {
         setGraphFeedback(null);
 
         console.log("AI graph stream started.");
-
         break;
       }
 
@@ -1849,10 +1772,7 @@ useEffect(() => {
 
         let node;
 
-        /*
-          Update existing node if the backend repeats
-          or enriches it later in the stream.
-        */
+          // Update existing node if the backend repeats or enriches it later in the stream.
 
         if (!existingNode.empty()) {
 
@@ -1869,50 +1789,25 @@ useEffect(() => {
           node =
             cy.add({
               group: "nodes",
-
               data: {
                 ...nodeData,
-
-                id:
-                  nodeId,
-
-                label:
-                  nodeData.label ||
-                  nodeId,
+                id: nodeId,
+                label: nodeData.label || nodeId,
               },
-
-              /*
-                Give the new node a temporary stable position.
-
-                Existing streamed nodes are NOT rearranged.
-              */
-
-              position:
-                getStreamNodePosition(),
+              // Give the new node a temporary stable position. Existing streamed nodes are NOT rearranged.
+              position: getStreamNodePosition(),
             });
-
         }
 
-        /*
-          Apply TreeNotes' existing automatic node sizing.
-        */
-
+        // Apply TreeNotes' existing automatic node sizing.
         resizeNodeToLabel(node);
 
-        /*
-          A newly arrived node might unlock an edge that
-          had to wait for this endpoint.
-        */
+        // A newly arrived node might unlock an edge that had to wait for this endpoint.
         flushPendingStreamEdges();
-
         cy.style().update();
 
-        /*
-          Smoothly move the viewport to the node
-          that has just appeared.
-        */
+        // Smoothly move the viewport to the node that has just appeared.
         focusStreamElements(node);
-
         break;
       }
 
@@ -1924,71 +1819,27 @@ useEffect(() => {
       case "edge": {
 
         const edgeData = event.data;
-
-        if (!edgeData) {
-          break;
-        }
-
+        if (!edgeData) { break; }
         const added = addStreamEdge(edgeData);
 
-        /*
-          If the required nodes have not arrived yet,
-          hold this edge temporarily.
-        */
+        // If the required nodes have not arrived yet, hold this edge temporarily.
 
         if (!added) {
-
           const pendingId = edgeData.id;
+          const alreadyWaiting = pendingStreamEdgesRef.current.some((edge) => pendingId && edge.id === pendingId);
 
-          const alreadyWaiting =
-            pendingStreamEdgesRef.current
-              .some(
-                (edge) =>
-                  pendingId &&
-                  edge.id === pendingId
-              );
-
-          if (!alreadyWaiting) {
-            pendingStreamEdgesRef.current.push(edgeData);
-          }
+          if (!alreadyWaiting) { pendingStreamEdgesRef.current.push(edgeData); }
 
         } else {
-          const sourceNode =
-            cy.getElementById(
-              String(
-                edgeData.source
-              )
-            );
+          const sourceNode = cy.getElementById(String(edgeData.source));
+          const targetNode = cy.getElementById(String(edgeData.target));
 
-          const targetNode =
-            cy.getElementById(
-              String(
-                edgeData.target
-              )
-            );
-
-          if (
-            !sourceNode.empty() &&
-            !targetNode.empty()
-          ) {
-
-            /*
-              A Cytoscape collection containing both
-              endpoints lets the camera centre between them.
-            */
-
-            const connectedNodes =
-              sourceNode.union(
-                targetNode
-              );
-
-            focusStreamElements(
-              connectedNodes
-            );
-
+          if (!sourceNode.empty() && !targetNode.empty()) {
+            // A Cytoscape collection containing both endpoints lets the camera centre between them.
+            const connectedNodes = sourceNode.union(targetNode);
+            focusStreamElements(connectedNodes);
           }
         }
-
         break;
       }
 
@@ -1997,17 +1848,8 @@ useEffect(() => {
       // =====================================================
 
       case "status": {
-
-        console.log(
-          "AI graph status:",
-          event.message
-        );
-
-        /*
-          We can later display this beside the
-          Generate Graph button.
-        */
-
+        console.log("AI graph status:", event.message);
+        // We can later display this beside the Generate Graph button.
         break;
       }
 
@@ -2020,12 +1862,7 @@ useEffect(() => {
         flushPendingStreamEdges();
 
         if (pendingStreamEdgesRef.current.length > 0) {
-
-          console.warn(
-            "Graph stream finished with unresolved edges:",
-            pendingStreamEdgesRef.current
-          );
-
+          console.warn("Graph stream finished with unresolved edges:", pendingStreamEdgesRef.current);
         }
 
         /*
@@ -2035,8 +1872,7 @@ useEffect(() => {
 
         if (!cy.elements().empty()) {
 
-          const finalLayout =
-            cy.layout({
+          const finalLayout = cy.layout({
               name: "cose",
               animate: true,
               fit: true,
@@ -2044,17 +1880,11 @@ useEffect(() => {
               randomize: false,
             });
 
-          finalLayout.one(
-            "layoutstop",
-            () => {
-
+          finalLayout.one("layoutstop", () => {
               cy.resize();
-
               const elements = cy.elements();
 
-              if (elements.empty()) {
-                return;
-              }
+              if (elements.empty()) { return; }
 
               cy.fit(elements, 50);
 
@@ -2067,21 +1897,14 @@ useEffect(() => {
                 cy.zoom(1.35);
                 cy.center(elements);
               }
-
             }
           );
           finalLayout.run();
         }
 
-        showGraphFeedback(
-          `Graph generated: ${cy.nodes().length} nodes, ${cy.edges().length} links`,
-          "success"
-        );
+        showGraphFeedback(`Graph generated: ${cy.nodes().length} nodes, ${cy.edges().length} links`, "success");
 
-        console.log(
-          "AI graph stream complete."
-        );
-
+        console.log("AI graph stream complete.");
         break;
       }
 
@@ -2090,28 +1913,14 @@ useEffect(() => {
       // =====================================================
 
       case "error": {
-
-        const message =
-          event.message ||
-          "Unable to generate graph.";
-
+        const message = event.message || "Unable to generate graph.";
         setError(message);
-
-        console.error(
-          "AI graph stream error:",
-          message
-        );
-
+        console.error("AI graph stream error:", message);
         break;
       }
 
       default: {
-
-        console.warn(
-          "Unknown graph stream event:",
-          event
-        );
-
+        console.warn("Unknown graph stream event:", event);
       }
 
     }
@@ -2119,116 +1928,69 @@ useEffect(() => {
 
   async function testGraphStreaming() {
 
-    const wait =
-      (milliseconds) =>
-        new Promise(
-          (resolve) =>
-            setTimeout(
-              resolve,
-              milliseconds
-            )
-        );
+    const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-
-    handleGraphStreamEvent({
-      type: "start",
-    });
-
+    handleGraphStreamEvent({ type: "start" });
 
     await wait(400);
 
-
     handleGraphStreamEvent({
       type: "node",
-
       data: {
         id: "stream-programming",
-        label: "Programming",
-      },
+        label: "Programming"
+      }
     });
-
 
     await wait(400);
 
-
-    /*
-      Deliberately send this edge BEFORE Java exists.
-
-      This tests our pending-edge system.
-    */
+      // Deliberately send this edge BEFORE Java exists. This tests our pending-edge system.
 
     handleGraphStreamEvent({
       type: "edge",
-
       data: {
         id: "stream-programming-java",
-
-        source:
-          "stream-programming",
-
-        target:
-          "stream-java",
-
-        relationship:
-          "includes",
-      },
+        source: "stream-programming",
+        target: "stream-java",
+        relationship: "includes"
+      }
     });
-
 
     await wait(400);
 
-
     handleGraphStreamEvent({
       type: "node",
-
       data: {
         id: "stream-java",
-        label: "Java",
-      },
+        label: "Java"
+      }
     });
 
-
     await wait(400);
-
 
     handleGraphStreamEvent({
       type: "node",
-
       data: {
         id: "stream-csharp",
-        label: "C#",
-      },
+        label: "C#"
+      }
     });
 
-
     await wait(400);
-
 
     handleGraphStreamEvent({
       type: "edge",
-
       data: {
         id: "stream-programming-csharp",
-
-        source:
-          "stream-programming",
-
-        target:
-          "stream-csharp",
-
-        relationship:
-          "includes",
-      },
+        source: "stream-programming",
+        target: "stream-csharp",
+        relationship: "includes"
+      }
     });
-
 
     await wait(400);
 
-
-    handleGraphStreamEvent({
-      type: "done",
-    });
-
+    handleGraphStreamEvent({ type: "done" });
   }
 
   // =========================================================
@@ -2356,7 +2118,7 @@ useEffect(() => {
               "data(borderStyle)",
           },
         },
-        
+
         /*
           =========================================================
           SELECTED NODE
@@ -2414,7 +2176,7 @@ useEffect(() => {
         /* =====================================================
           SAVED CUSTOM NODE COLOUR
           ===================================================== */
-        
+
         {
           selector: "node[color]",
           style: {
@@ -2475,7 +2237,7 @@ useEffect(() => {
 
             "font-weight":
               "500",
-            
+
             "text-wrap":
               "none",
 
@@ -2829,7 +2591,7 @@ useEffect(() => {
       const currentRelationship =
         edge.data("relationship") ||
         "";
-      
+
       /*
         Keep normal graph selection synchronised.
       */
@@ -3621,12 +3383,12 @@ function addSelectedTextNode() {
   resizeNodeToLabel(
     newNode
   );
-}   
+}
 
-useEffect(() => 
-    { if (addNodeTrigger === 0) 
+useEffect(() =>
+    { if (addNodeTrigger === 0)
         { return; }
-         addSelectedTextNode(); }, 
+         addSelectedTextNode(); },
          [addNodeTrigger]);
 
 // getting latest graph with all the chnages
@@ -4542,7 +4304,7 @@ function createManualNode() {
     data: {
       id: nodeId,
       label: "New Node",
-      color: 
+      color:
         getThemeColour(
           "--graph-node-bg",
           "#6366F1"
@@ -4820,7 +4582,8 @@ function changeSelectedNodeTextColor(newColor) {
 }
 
 async function handleSemanticSearch() {
-  const query = semanticSearchQuery.trim();
+  const query =
+    semanticSearchQuery.trim();
 
   if (!query) { return; }
 
@@ -4836,8 +4599,6 @@ async function handleSemanticSearch() {
 
   try {
     showGraphFeedback(`Searching graph for "${query}"...`, "info");
-
-    console.log(getEditedGraphData());
 
     const result = await semanticSearchGraph(noteId, query, getEditedGraphData() ?? graphData);
 
@@ -4855,12 +4616,14 @@ async function handleSemanticSearch() {
     }
 
     showGraphFeedback(`Closest match to "${query}": ${match.label}`, "success");
+
     setSemanticSearchQuery("");
 
   } catch (error) {
     console.error("Semantic graph search failed:", error);
 
     showGraphFeedback("Unable to search the graph. Please try again.", "error");
+
   } finally {
     setSemanticSearchLoading(false);
   }
@@ -5031,7 +4794,7 @@ useEffect(() => {
       shapeMenuRef.current?.contains(
         event.target
       );
-    
+
     const clickedInsideNodeBorderStyle =
       nodeBorderStyleMenuRef.current &&
       nodeBorderStyleMenuRef.current.contains(
@@ -5148,6 +4911,20 @@ useImperativeHandle(ref, () => ({
 
   getGraphData() {
     return getEditedGraphData();
+  },
+
+
+  resizeGraph() {
+    const cy = cyRef.current;
+
+    if (!cy) {
+      return;
+    }
+
+    // Recalculate Cytoscape's viewport for the new panel size.
+    // Do not fit() here: preserving the user's current pan/zoom
+    // keeps divider dragging visually stable.
+    cy.resize();
   },
 
 
@@ -5291,7 +5068,7 @@ const CurrentArrowShapeIcon =
             </span>
           )}
 
-          
+
 
 
           <button
@@ -5309,6 +5086,38 @@ const CurrentArrowShapeIcon =
                 ? "Generating..."
                 : "Generate Graph"}
             </span>
+          </button>
+
+          <button
+            type="button"
+            className="panel-focus-button tooltip-align-right"
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleFocus?.();
+            }}
+            aria-label={
+              isFocused
+                ? "Exit Graph View focus mode"
+                : "Focus Graph View"
+            }
+            aria-pressed={isFocused}
+            data-tooltip={
+              isFocused
+                ? "Restore layout"
+                : "Focus Graph View"
+            }
+          >
+            {isFocused ? (
+              <Minimize2
+                size={18}
+                strokeWidth={1.9}
+              />
+            ) : (
+              <Maximize2
+                size={18}
+                strokeWidth={1.9}
+              />
+            )}
           </button>
 
         </div>
@@ -6537,186 +6346,202 @@ const CurrentArrowShapeIcon =
 
           )}
 
-          {/* CURRENT GRAPH SELECTION */}
+          {/* TOP GRAPH OVERLAYS */}
 
           {(
             selectionSummary.nodes.length > 0 ||
-            selectionSummary.edges.length > 0
+            selectionSummary.edges.length > 0 ||
+            linkMode
           ) && (
 
-            <div 
-              className="graph-selected-node-overlay"
-              
-              /*
-                Never let wheel input over this panel reach
-                Cytoscape's zoom handling.
-              */
-              onWheel={(event) => {
-                event.stopPropagation();
-              }}
-              
-              onPointerDown={(event) => {
-                event.stopPropagation();
-              }}
-            >
+            <div className="graph-top-overlay-stack">
 
-              <span>
+            {/* CURRENT GRAPH SELECTION */}
 
-                {(
-                  selectionSummary.nodes.length +
-                  selectionSummary.edges.length
-                ) === 1
+            {(
+              selectionSummary.nodes.length > 0 ||
+              selectionSummary.edges.length > 0
+            ) && (
 
-                  ? (
-                      selectionSummary.nodes.length === 1
-                        ? "Selected node"
-                        : "Selected edge"
-                    )
+              <div
+                className="graph-selected-node-overlay"
 
-                  : `Selected ${
-                      selectionSummary.nodes.length +
-                      selectionSummary.edges.length
-                    } items`
-                }
+                /*
+                  Never let wheel input over this panel reach
+                  Cytoscape's zoom handling.
+                */
+                onWheel={(event) => {
+                  event.stopPropagation();
+                }}
 
-              </span>
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                }}
+              >
 
-              {/* SELECTED NODES */}
+                <span>
 
-              {selectionSummary.nodes.length > 0 && (
+                  {(
+                    selectionSummary.nodes.length +
+                    selectionSummary.edges.length
+                  ) === 1
 
-                <div className="graph-selection-group">
+                    ? (
+                        selectionSummary.nodes.length === 1
+                          ? "Selected node"
+                          : "Selected edge"
+                      )
 
-                  {selectionSummary.nodes.length > 1 && (
+                    : `Selected ${
+                        selectionSummary.nodes.length +
+                        selectionSummary.edges.length
+                      } items`
+                  }
 
-                    <div className="graph-selection-group-title">
-                      {selectionSummary.nodes.length} nodes
-                    </div>
+                </span>
 
-                  )}
+                {/* SELECTED NODES */}
 
-                  {selectionSummary.nodes.map(
-                    node => (
+                {selectionSummary.nodes.length > 0 && (
 
-                      <strong
-                        key={node.id}
-                        className="graph-selection-item"
-                      >
-                        {node.label}
-                      </strong>
+                  <div className="graph-selection-group">
 
-                    )
-                  )}
+                    {selectionSummary.nodes.length > 1 && (
 
-                </div>
-
-              )}
-
-              {/* SELECTED EDGES */}
-
-              {selectionSummary.edges.length > 0 && (
-
-                <div className="graph-selection-group">
-
-                  {selectionSummary.edges.length > 1 && (
-
-                    <div className="graph-selection-group-title">
-                      {selectionSummary.edges.length} edges
-                    </div>
-
-                  )}
-
-                  {selectionSummary.edges.map(
-                    edge => (
-
-                      <div
-                        key={edge.id}
-                        className="graph-selection-item"
-                      >
-
-                        <strong>
-                          {edge.sourceLabel}
-                          {" → "}
-                          {edge.targetLabel}
-                        </strong>
-
-                        {edge.relationship?.trim() && (
-
-                          <span className="graph-selected-edge-relationship">
-                            {edge.relationship}
-                          </span>
-
-                        )}
-
+                      <div className="graph-selection-group-title">
+                        {selectionSummary.nodes.length} nodes
                       </div>
 
-                    )
-                  )}
+                    )}
 
-                </div>
+                    {selectionSummary.nodes.map(
+                      node => (
 
-              )}
+                        <strong
+                          key={node.id}
+                          className="graph-selection-item"
+                        >
+                          {node.label}
+                        </strong>
 
-            </div>
+                      )
+                    )}
 
-          )}
+                  </div>
 
-          {/* LINK MODE */}
+                )}
 
-          {linkMode && (
-            <div className="graph-link-mode-overlay">
+                {/* SELECTED EDGES */}
 
-              <Link2
-                size={16}
-                strokeWidth={1.8}
-              />
+                {selectionSummary.edges.length > 0 && (
 
-              <div>
+                  <div className="graph-selection-group">
 
-                {!firstNodeToLink ? (
-                  <>
-                    <strong>
-                      Link nodes
-                    </strong>
+                    {selectionSummary.edges.length > 1 && (
 
-                    <span>
-                      Select the first node
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <strong>
-                      First node:{" "}
-                      {
-                        cyRef.current
-                          ?.getElementById(
-                            firstNodeToLink
-                          )
-                          .data("label")
-                      }
-                    </strong>
+                      <div className="graph-selection-group-title">
+                        {selectionSummary.edges.length} edges
+                      </div>
 
-                    <span>
-                      Select the second node
-                    </span>
-                  </>
+                    )}
+
+                    {selectionSummary.edges.map(
+                      edge => (
+
+                        <div
+                          key={edge.id}
+                          className="graph-selection-item"
+                        >
+
+                          <strong>
+                            {edge.sourceLabel}
+                            {" → "}
+                            {edge.targetLabel}
+                          </strong>
+
+                          {edge.relationship?.trim() && (
+
+                            <span className="graph-selected-edge-relationship">
+                              {edge.relationship}
+                            </span>
+
+                          )}
+
+                        </div>
+
+                      )
+                    )}
+
+                  </div>
+
                 )}
 
               </div>
 
+            )}
 
-              <button
-                type="button"
-                onClick={cancelLinkMode}
-                aria-label="Cancel linking"
-              >
-                <X
-                  size={15}
+            {/* LINK MODE */}
+
+            {linkMode && (
+              <div className="graph-link-mode-overlay">
+
+                <Link2
+                  size={16}
                   strokeWidth={1.8}
                 />
-              </button>
+
+                <div>
+
+                  {!firstNodeToLink ? (
+                    <>
+                      <strong>
+                        Link nodes
+                      </strong>
+
+                      <span>
+                        Select the first node
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <strong>
+                        First node:{" "}
+                        {
+                          cyRef.current
+                            ?.getElementById(
+                              firstNodeToLink
+                            )
+                            .data("label")
+                        }
+                      </strong>
+
+                      <span>
+                        Select the second node
+                      </span>
+                    </>
+                  )}
+
+                </div>
+
+
+                <button
+                  type="button"
+                  onClick={cancelLinkMode}
+                  aria-label="Cancel linking"
+                >
+                  <X
+                    size={15}
+                    strokeWidth={1.8}
+                  />
+                </button>
+
+              </div>
+            )}
+
+
 
             </div>
+
           )}
 
 
@@ -6846,7 +6671,7 @@ const CurrentArrowShapeIcon =
 
               </button>
 
-              
+
 
             )}
 
@@ -6859,6 +6684,6 @@ const CurrentArrowShapeIcon =
     </section>
   );
 
-  }); 
-  
+  });
+
 export default GraphPanel;
