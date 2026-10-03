@@ -343,9 +343,7 @@ function closeTranscriptionAsrSocket({
     setTranscriptionAsrState("finalising");
 
     try {
-      socket.send(
-        JSON.stringify({ eof: 1 })
-      );
+      socket.send('{"eof" : 1}');
 
       // Vosk normally returns its final result and then closes the
       // connection itself. This timeout prevents a stuck socket if a

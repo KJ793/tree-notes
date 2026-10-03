@@ -81,12 +81,20 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    container_name: ollama
+    container_name: tree-notes-ollama
     ports:
       - "11434:11434"
     volumes:
       - ollama:/root/.ollama
     # GPU CONFIG MOVED TO docker-compose.override.yml
+
+  vosk-asr:
+    build:
+      context: ./asr-vosk
+    container_name: tree-notes-vosk-asr
+    ports:
+      - "2700:2700"
+    restart: unless-stopped
 
 volumes:
   postgres_data:
