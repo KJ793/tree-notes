@@ -34,6 +34,7 @@ import {
   Maximize2,
   Minimize2,
   Settings,
+  Info,
 } from "lucide-react";
 import SquareDottedIcon from "./icons/SquareDottedIcon";
 import VeeIcon from "./icons/VeeIcon";
@@ -41,6 +42,97 @@ import VeeNodeIcon from "./icons/VeeNodeIcon";
 import cytoscape from "cytoscape";
 import { semanticSearchGraph,} from "../api/graphApi";
 import TreeNotesColorPicker from "./TreeNotesColorPicker";
+
+/* =========================================================
+   AI PROCESSING / INTERPRETABILITY PREVIEW
+   ========================================================= */
+
+/*
+  Hans can override these by sending title/description in the
+  stream event. These are friendly fallbacks for the minimal
+  { step, content } form discussed for the pipeline.
+*/
+const AI_PROCESSING_STAGE_FALLBACKS = {
+  1: {
+    title: "Source text",
+    description: "Read the original raw notes supplied to graph generation.",
+  },
+  2: {
+    title: "Extract semantic units",
+    description: "Identify candidate entities, actions, conditions, and outcomes.",
+  },
+  3: {
+    title: "Resolve pronouns",
+    description: "Resolve pronouns and references back to the concepts they describe.",
+  },
+  4: {
+    title: "Distribute shared terms",
+    description: "Apply shared subjects and objects to the propositions that inherit them.",
+  },
+  5: {
+    title: "Resolve conditions",
+    description: "Associate conditional phrases with the propositions they govern.",
+  },
+  6: {
+    title: "Resolve relationships",
+    description: "Determine proposition relationships and higher-order causal links.",
+  },
+  7: {
+    title: "Classify graph semantics",
+    description: "Assign qualifiers, classifications, and edge roles used by TreeNotes.",
+  },
+  8: {
+    title: "Validate graph elements",
+    description: "Check the extracted semantic structure before graph elements are emitted.",
+  },
+};
+
+const AI_PROCESSING_MOCK_STEPS = [
+  {
+    step: 1,
+    title: "Source text",
+    description: AI_PROCESSING_STAGE_FALLBACKS[1].description,
+    content: "When the sun rises, lizards bask on rocks, allowing lizards to gain energy.",
+  },
+  {
+    step: 2,
+    title: "Extract semantic units",
+    description: AI_PROCESSING_STAGE_FALLBACKS[2].description,
+    content: "Entities: Lizards, Rocks, Energy\nCondition: When the sun rises\nActions: bask on, gain\nHigher-order relation: allowing",
+  },
+  {
+    step: 3,
+    title: "Resolve pronouns",
+    description: AI_PROCESSING_STAGE_FALLBACKS[3].description,
+    content: "No unresolved pronouns found. Both propositions retain the subject ‘Lizards’.",
+  },
+  {
+    step: 4,
+    title: "Distribute shared terms",
+    description: AI_PROCESSING_STAGE_FALLBACKS[4].description,
+    content: "Shared subject ‘Lizards’ applied to both: ‘bask on Rocks’ and ‘gain Energy’.",
+  },
+  {
+    step: 5,
+    title: "Resolve conditions",
+    description: AI_PROCESSING_STAGE_FALLBACKS[5].description,
+    content: "‘When the sun rises’ governs both extracted propositions and is owned by ‘Lizards’.",
+  },
+  {
+    step: 6,
+    title: "Resolve relationships",
+    description: AI_PROCESSING_STAGE_FALLBACKS[6].description,
+    content: "Proposition A: Lizards — basks on → Rocks\nProposition B: Lizards — gains → Energy\nA allows B.",
+  },
+  {
+    step: 7,
+    title: "Classify graph semantics",
+    description: AI_PROCESSING_STAGE_FALLBACKS[7].description,
+    content: "Condition node: conditional, owner=Lizards\nProposition edges: standard\nALLOWS edge: reification\nNo qualifier or negative/prerequisite classification detected.",
+  },
+];
+
+const SHOW_AI_PROCESSING_MOCK = true;
 
 /* =========================================================
    GRAPH THEME HELPERS
@@ -66,6 +158,7 @@ function getThemeColour(
 
   return value || fallback;
 }
+
 
 function getGraphThemeColours() {
   return {
@@ -1668,6 +1761,16 @@ const GraphPanel = forwardRef(function GraphPanel(
   // Handles graph generation errors //
   const [error, setError] = useState("");
 
+  // =========================================================
+  // AI PROCESSING / INTERPRETABILITY
+  // =========================================================
+
+  const [aiProcessingSteps, setAiProcessingSteps] = useState([]);
+  const [aiProcessingModalOpen, setAiProcessingModalOpen] = useState(false);
+  const [aiProcessingStatus, setAiProcessingStatus] = useState("");
+  const [aiProcessingComplete, setAiProcessingComplete] = useState(false);
+  const [aiProcessingMock, setAiProcessingMock] = useState(false);
+
   // References the HTML div where Cytoscape renders //
   const graphContainerRef = useRef(null);
 
@@ -2195,6 +2298,12 @@ const GraphPanel = forwardRef(function GraphPanel(
     setEdgePropertiesModalOpen(false);
     nodeImageTargetIdRef.current = null;
 
+    setAiProcessingSteps([]);
+    setAiProcessingModalOpen(false);
+    setAiProcessingStatus("");
+    setAiProcessingComplete(false);
+    setAiProcessingMock(false);
+
     // Clear UI state and references belonging to linking mode.
     linkModeRef.current = false;
     firstNodeToLinkRef.current = null;
@@ -2264,6 +2373,9 @@ useEffect(() => {
     setLoading(true);
 
     setError("");
+    setAiProcessingStatus("Starting AI processing…");
+    setAiProcessingComplete(false);
+    setAiProcessingMock(false);
 
     try {
 
@@ -2551,6 +2663,8 @@ useEffect(() => {
       console.error("Graph generation error:", error);
 
       setError(error?.message || "Unable to generate graph. Please try again.");
+      setAiProcessingStatus("Generation stopped");
+      setAiProcessingComplete(false);
 
     } finally {
 
@@ -4803,6 +4917,70 @@ useEffect(() => {
     pendingStreamEdgesRef.current = stillPending;
   }
 
+  function normaliseAiProcessingStep(event) {
+    const data =
+      event?.data && typeof event.data === "object"
+        ? event.data
+        : event || {};
+
+    const stepValue =
+      data.step ?? event?.step ?? data.index ?? event?.index ?? (aiProcessingSteps.length + 1);
+
+    const numericStep =
+      Number.isFinite(Number(stepValue))
+        ? Number(stepValue)
+        : aiProcessingSteps.length + 1;
+
+    const fallback = AI_PROCESSING_STAGE_FALLBACKS[numericStep] || {};
+
+    const contentValue =
+      data.content ?? data.output ?? data.result ?? event?.content ?? event?.message ?? "";
+
+    return {
+      id: String(data.id ?? event?.id ?? `ai-processing-${numericStep}`),
+      step: numericStep,
+      title: String(
+        data.title ?? data.name ?? event?.title ?? fallback.title ?? `Processing step ${numericStep}`
+      ),
+      description: String(
+        data.description ?? data.task ?? event?.description ?? fallback.description ?? "AI processing output"
+      ),
+      content: Array.isArray(contentValue)
+        ? contentValue.map(item => String(item)).join("\n")
+        : String(contentValue ?? ""),
+    };
+  }
+
+  function addAiProcessingStep(event) {
+    const nextStep = normaliseAiProcessingStep(event);
+
+    setAiProcessingSteps(current => {
+      const existingIndex = current.findIndex(
+        item => item.id === nextStep.id || item.step === nextStep.step
+      );
+      const next = [...current];
+
+      if (existingIndex >= 0) {
+        next[existingIndex] = { ...next[existingIndex], ...nextStep };
+      } else {
+        next.push(nextStep);
+      }
+
+      return next.sort((a, b) => a.step - b.step);
+    });
+
+    setAiProcessingStatus(nextStep.title);
+    setAiProcessingComplete(false);
+    setAiProcessingMock(false);
+  }
+
+  function loadAiProcessingMockPreview() {
+    setAiProcessingSteps(AI_PROCESSING_MOCK_STEPS);
+    setAiProcessingStatus("Mock processing preview");
+    setAiProcessingComplete(true);
+    setAiProcessingMock(true);
+  }
+
   function handleGraphStreamEvent(event)
   {
 
@@ -4853,6 +5031,11 @@ useEffect(() => {
         setEdgeStyleMenuOpen(false);
         setArrowShapeMenuOpen(false);
         setGraphFeedback(null);
+
+        setAiProcessingSteps([]);
+        setAiProcessingStatus("Starting AI processing…");
+        setAiProcessingComplete(false);
+        setAiProcessingMock(false);
 
         console.log("AI graph stream started.");
 
@@ -5026,6 +5209,19 @@ useEffect(() => {
       }
 
       // =====================================================
+      // AI PROCESSING / INTERPRETABILITY STEP
+      // =====================================================
+
+      case "processing":
+      case "processing_step":
+      case "process":
+      case "interpretation":
+      case "trace": {
+        addAiProcessingStep(event);
+        break;
+      }
+
+      // =====================================================
       // OPTIONAL STATUS MESSAGE
       // =====================================================
 
@@ -5036,10 +5232,16 @@ useEffect(() => {
           event.message
         );
 
-        /*
-          We can later display this beside the
-          Generate Graph button.
-        */
+        if (
+          event?.step != null ||
+          event?.data?.step != null ||
+          event?.content != null ||
+          event?.data?.content != null
+        ) {
+          addAiProcessingStep(event);
+        } else if (event?.message) {
+          setAiProcessingStatus(String(event.message));
+        }
 
         break;
       }
@@ -5111,6 +5313,9 @@ useEffect(() => {
           "success"
         );
 
+        setAiProcessingStatus("Processing complete");
+        setAiProcessingComplete(true);
+
         console.log(
           "AI graph stream complete."
         );
@@ -5129,6 +5334,8 @@ useEffect(() => {
           "Unable to generate graph.";
 
         setError(message);
+        setAiProcessingStatus("Generation stopped");
+        setAiProcessingComplete(false);
 
         console.error(
           "AI graph stream error:",
@@ -7611,24 +7818,86 @@ function syncGraphSelectionState(preferredElement = null) {
   */
 
   setSelectionSummary({
+    nodes: selectedNodes.map((node) => {
+      const nodeType = normaliseNodeType(
+        node.data("nodeType"),
+        node.data("conditionOwnerId")
+      );
 
-    nodes:
-      selectedNodes.map(
-        node => ({
-          id:
-            node.id(),
+      const ownerId = String(
+        node.data("conditionOwnerId") || ""
+      ).trim();
 
-          label:
-            node.data("label") ||
-            node.id(),
-        })
-      ),
+      let ownerLabel = "";
 
-    edges:
-      selectedEdges.map(
-        edge => ({
-          id:
-            edge.id(),
+      if (ownerId) {
+        const ownerNode =
+          cy.getElementById(ownerId);
+
+        if (
+          ownerNode &&
+          !ownerNode.empty()
+        ) {
+          ownerLabel =
+            ownerNode.data("label") ||
+            ownerNode.id();
+        }
+      }
+
+      return {
+        id: node.id(),
+
+        label:
+          node.data("label") ||
+          node.id(),
+
+        nodeType,
+
+        conditionOwnerId:
+          ownerId,
+
+        conditionOwnerLabel:
+          ownerLabel,
+
+        hasImage:
+          Boolean(
+            node.data("imageSrc")
+          ),
+      };
+    }),
+
+    edges: selectedEdges
+      .filter(
+        edge =>
+          !isInternalConditionOwnerEdge(
+            edge
+          )
+      )
+      .map((edge) => {
+        const conditionId = String(
+          edge.data("conditionId") || ""
+        ).trim();
+
+        let conditionLabel = "";
+
+        if (conditionId) {
+          const conditionNode =
+            cy.getElementById(
+              conditionId
+            );
+
+          if (
+            conditionNode &&
+            !conditionNode.empty()
+          ) {
+            conditionLabel =
+              conditionNode.data("label") ||
+              conditionNode.id();
+          }
+        }
+
+        return {
+          id: edge.id(),
 
           sourceLabel:
             edge.source().data("label") ||
@@ -7641,9 +7910,32 @@ function syncGraphSelectionState(preferredElement = null) {
           relationship:
             edge.data("relationship") ||
             "",
-        })
-      ),
 
+          qualifier:
+            edge.data("qualifier") ||
+            "",
+
+          classification:
+            edge.data(
+              "resolvedClassification"
+            ) ||
+            normaliseEdgeClassification(
+              edge.data("classification")
+            ),
+
+          edgeRole:
+            edge.data(
+              "resolvedEdgeRole"
+            ) ||
+            normaliseEdgeRole(
+              edge.data("edgeRole")
+            ),
+
+          conditionId,
+
+          conditionLabel,
+        };
+      }),
   });
 
   /*
@@ -10224,6 +10516,21 @@ const conditionalPropertyOptions = [
     })),
 ];
 
+// =========================================================
+// CURRENT GRAPH SELECTION DISPLAY
+// =========================================================
+
+const selectedItemCount = selectionSummary.nodes.length + selectionSummary.edges.length;
+
+const singleSelectedNode = selectedItemCount === 1 && selectionSummary.nodes.length === 1
+    ? selectionSummary.nodes[0]
+    : null;
+
+const singleSelectedEdge = selectedItemCount === 1 && selectionSummary.edges.length === 1
+    ? selectionSummary.edges[0]
+    : null;
+
+const isMultiSelection = selectedItemCount > 1;
 
 /* =========================================================
    RENDER
@@ -10251,15 +10558,58 @@ const conditionalPropertyOptions = [
 
         <div className="graph-panel-header-actions">
 
-          {/* Error/status now lives in header */}
-          {error && (
-            <span className="graph-header-error">
-              {error}
-            </span>
-          )}
+          <div className="graph-header-status-slot">
+            {error ? (
+              <span className="graph-header-error" title={error}>
+                {error}
+              </span>
+            ) : loading && aiProcessingStatus ? (
+              <span className="graph-header-status" title={aiProcessingStatus}>
+                {aiProcessingStatus}
+              </span>
+            ) : null}
+          </div>
 
-          
+          <div className="graph-generation-actions">
+            <button
+              type="button"
+              className={`panel-focus-button graph-processing-info-button tooltip-align-right ${
+                loading
+                  ? "graph-processing-info-button-live"
+                  : ""
+              }`}
+              onClick={() =>
+                setAiProcessingModalOpen(true)
+              }
+              aria-label="View AI processing details"
+              aria-haspopup="dialog"
+              aria-expanded={aiProcessingModalOpen}
+              data-tooltip="View AI processing details"
+            >
+              <Info
+                size={18}
+                strokeWidth={1.9}
+                aria-hidden="true"
+              />
 
+              {loading && (
+                <span
+                  className="graph-processing-live-dot"
+                  aria-hidden="true"
+                />
+              )}
+
+              {aiProcessingSteps.length > 0 && (
+                <span
+                  className="graph-processing-step-count"
+                  aria-label={`${aiProcessingSteps.length} processing steps available`}
+                >
+                  {aiProcessingSteps.length > 9
+                    ? "9+"
+                    : aiProcessingSteps.length}
+                </span>
+              )}
+            </button>
 
           <button
             type="button"
@@ -10277,6 +10627,8 @@ const conditionalPropertyOptions = [
                 : "Generate Graph"}
             </span>
           </button>
+
+          </div>
 
           <button
             type="button"
@@ -11165,9 +11517,13 @@ const conditionalPropertyOptions = [
             </button>
 
             <TreeNotesColorPicker
-              open={graphColorPicker === "edge"}
+              open={
+                graphColorPicker === "edge"
+              }
 
-              anchorRef={edgeColorButtonRef}
+              anchorRef={
+                edgeColorButtonRef
+              }
 
               value={
                 selectedEdge?.edgeColor ||
@@ -11177,7 +11533,9 @@ const conditionalPropertyOptions = [
                 )
               }
 
-              onChange={changeSelectedEdgeColor}
+              onChange={
+                changeSelectedEdgeColor
+              }
 
               onClose={() =>
                 setGraphColorPicker(null)
@@ -11202,12 +11560,20 @@ const conditionalPropertyOptions = [
                   : ""
               }`}
 
-              disabled={!selectedEdge}
+              disabled={
+                !selectedEdge
+              }
 
               onClick={() => {
-                setArrowShapeMenuOpen(current => !current);
-                setShapeMenuOpen(false);
-                setEdgeStyleMenuOpen(false);
+                setArrowShapeMenuOpen(
+                  current => !current
+                );
+                setShapeMenuOpen(
+                  false
+                );
+                setEdgeStyleMenuOpen(
+                  false
+                );
               }}
 
               data-tooltip={
@@ -11271,7 +11637,9 @@ const conditionalPropertyOptions = [
                       }`}
 
                       onClick={() =>
-                        changeSelectedArrowShape(value)
+                        changeSelectedArrowShape(
+                          value
+                        )
                       }
 
                       data-tooltip={label}
@@ -11320,7 +11688,9 @@ const conditionalPropertyOptions = [
               disabled={!selectedEdge}
 
               onClick={() =>
-                toggleGraphColorPicker("arrow")
+                toggleGraphColorPicker(
+                  "arrow"
+                )
               }
 
               data-tooltip={
@@ -11331,7 +11701,9 @@ const conditionalPropertyOptions = [
 
               aria-label="Arrow colour"
               aria-haspopup="dialog"
-              aria-expanded={graphColorPicker === "arrow"}
+              aria-expanded={
+                graphColorPicker === "arrow"
+              }
             >
               <span className="graph-toolbar-color-icon">
 
@@ -11356,9 +11728,13 @@ const conditionalPropertyOptions = [
             </button>
 
             <TreeNotesColorPicker
-              open={graphColorPicker === "arrow"}
+              open={
+                graphColorPicker === "arrow"
+              }
 
-              anchorRef={arrowColorButtonRef}
+              anchorRef={
+                arrowColorButtonRef
+              }
 
               value={
                 selectedEdge?.arrowColor ||
@@ -11368,7 +11744,9 @@ const conditionalPropertyOptions = [
                 )
               }
 
-              onChange={changeSelectedArrowColor}
+              onChange={
+                changeSelectedArrowColor
+              }
 
               onClose={() =>
                 setGraphColorPicker(null)
@@ -11469,11 +11847,129 @@ const conditionalPropertyOptions = [
             </div>
           )}
 
-          {nodeImageModalOpen && selectedNode && (
+          {aiProcessingModalOpen && (
             <div
               className="graph-image-modal-backdrop"
               onPointerDown={(event) => {
                 if (event.target === event.currentTarget) {
+                  setAiProcessingModalOpen(false);
+                }
+              }}
+            >
+              <div
+                className="graph-image-modal graph-ai-processing-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="graph-ai-processing-modal-title"
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <div className="graph-image-modal-header">
+                  <div
+                    id="graph-ai-processing-modal-title"
+                    className="graph-image-modal-title"
+                  >
+                    <Info size={18} strokeWidth={1.9} />
+                    <span>AI Processing Details</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="graph-image-modal-close"
+                    onClick={() => setAiProcessingModalOpen(false)}
+                    aria-label="Close AI processing details"
+                  >
+                    <X size={17} strokeWidth={1.9} />
+                  </button>
+                </div>
+
+                <div className="graph-image-modal-body graph-ai-processing-modal-body">
+                  <div className="graph-ai-processing-summary">
+                    <div>
+                      <strong>Graph interpretation trace</strong>
+                      <span>
+                        Read-only feedback showing how the AI interpreted the raw notes before creating graph elements.
+                      </span>
+                    </div>
+
+                    <span
+                      className={`graph-ai-processing-state ${
+                        loading
+                          ? "is-live"
+                          : aiProcessingComplete
+                            ? "is-complete"
+                            : ""
+                      }`}
+                    >
+                      {aiProcessingMock
+                        ? "Mock preview"
+                        : loading
+                          ? "Processing"
+                          : aiProcessingComplete
+                            ? "Complete"
+                            : "Waiting"}
+                    </span>
+                  </div>
+
+                  {aiProcessingSteps.length === 0 ? (
+                    <div className="graph-ai-processing-empty">
+                      <Info size={26} strokeWidth={1.5} />
+                      <strong>
+                        {loading
+                          ? "Waiting for processing details…"
+                          : "No processing trace is available yet."}
+                      </strong>
+                      <span>
+                        Once processing-step events are streamed, they will appear here as read-only stages.
+                      </span>
+
+                      {SHOW_AI_PROCESSING_MOCK && !loading && (
+                        <button
+                          type="button"
+                          className="graph-ai-processing-mock-button"
+                          onClick={loadAiProcessingMockPreview}
+                        >
+                          Preview mock processing data
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="graph-ai-processing-list">
+                      {aiProcessingSteps.map((step, index) => (
+                        <article className="graph-ai-processing-step" key={step.id}>
+                          <div className="graph-ai-processing-step-marker">
+                            {step.step || index + 1}
+                          </div>
+
+                          <div className="graph-ai-processing-step-main">
+                            <div className="graph-ai-processing-step-heading">
+                              <div>
+                                <strong>{step.title}</strong>
+                                <span>{step.description}</span>
+                              </div>
+                              <Check size={16} strokeWidth={2} aria-hidden="true" />
+                            </div>
+
+                            <pre className="graph-ai-processing-output">
+                              {step.content || "No output returned for this stage."}
+                            </pre>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {nodeImageModalOpen && selectedNode && (
+            <div
+              className="graph-image-modal-backdrop"
+              onPointerDown={(event) => {
+                if (
+                  event.target ===
+                  event.currentTarget
+                ) {
                   closeNodeImageModal();
                 }
               }}
@@ -11541,6 +12037,10 @@ const conditionalPropertyOptions = [
                           selectedNode.imagePositionY,
                           NODE_IMAGE_DEFAULT_POSITION_Y
                         );
+
+                      const canDrag =
+                        selectedNode.imageFit !==
+                          "contain";
 
                       return (
                         <div
@@ -11705,7 +12205,9 @@ const conditionalPropertyOptions = [
                                 : ""
                             }
                             onClick={() =>
-                              changeSelectedNodeImageFit("cover")
+                              changeSelectedNodeImageFit(
+                                "cover"
+                              )
                             }
                           >
                             Fill
@@ -11720,7 +12222,9 @@ const conditionalPropertyOptions = [
                                 : ""
                             }
                             onClick={() =>
-                              changeSelectedNodeImageFit("contain")
+                              changeSelectedNodeImageFit(
+                                "contain"
+                              )
                             }
                           >
                             Fit
@@ -11783,9 +12287,14 @@ const conditionalPropertyOptions = [
                         <span>Show node name</span>
                         <input
                           type="checkbox"
-                          checked={selectedNode.showImageLabel !== false}
+                          checked={
+                            selectedNode.showImageLabel !==
+                            false
+                          }
                           onChange={(event) =>
-                            changeSelectedNodeImageLabelVisibility(event.target.checked)
+                            changeSelectedNodeImageLabelVisibility(
+                              event.target.checked
+                            )
                           }
                         />
                       </label>
@@ -11814,7 +12323,10 @@ const conditionalPropertyOptions = [
             <div
               className="graph-image-modal-backdrop"
               onPointerDown={(event) => {
-                if (event.target === event.currentTarget) {
+                if (
+                  event.target ===
+                  event.currentTarget
+                ) {
                   closeNodePropertiesModal();
                 }
               }}
@@ -11870,7 +12382,9 @@ const conditionalPropertyOptions = [
                 <div className="graph-image-modal-body graph-property-modal-body">
                   <GraphSegmentedControl
                     label="Node type"
-                    value={nodePropertiesDraft.nodeType}
+                    value={
+                      nodePropertiesDraft.nodeType
+                    }
                     options={NODE_TYPES}
                     statusText={
                       NODE_TYPES.find(
@@ -11905,10 +12419,17 @@ const conditionalPropertyOptions = [
                       </div>
 
                       <GraphPropertyDropdown
-                        value={nodePropertiesDraft.conditionOwnerId}
-                        options={nodePropertyOwnerOptions}
+                        value={
+                          nodePropertiesDraft.conditionOwnerId
+                        }
+                        options={
+                          nodePropertyOwnerOptions
+                        }
                         placeholder="Select parent node..."
-                        isOpen={propertyDropdownOpen === "nodeOwner"}
+                        isOpen={
+                          propertyDropdownOpen ===
+                          "nodeOwner"
+                        }
                         onToggle={() => {
                           setNodeOwnerSearch("");
                           setPropertyDropdownOpen(
@@ -11975,7 +12496,10 @@ const conditionalPropertyOptions = [
             <div
               className="graph-image-modal-backdrop"
               onPointerDown={(event) => {
-                if (event.target === event.currentTarget) {
+                if (
+                  event.target ===
+                  event.currentTarget
+                ) {
                   closeEdgePropertiesModal();
                 }
               }}
@@ -12073,7 +12597,11 @@ const conditionalPropertyOptions = [
 
                   <GraphSegmentedControl
                     label="Classification"
-                    value={normaliseEdgeClassification(edgePropertiesDraft.classification)}
+                    value={
+                      normaliseEdgeClassification(
+                        edgePropertiesDraft.classification
+                      )
+                    }
                     options={[
                       {
                         value: "normal",
@@ -12113,9 +12641,13 @@ const conditionalPropertyOptions = [
 
                   <GraphSegmentedControl
                     label="Edge role"
-                    value={edgePropertiesDraft.edgeRole}
+                    value={
+                      edgePropertiesDraft.edgeRole
+                    }
                     options={EDGE_ROLES}
-                    statusText={edgePropertiesRoleStatus}
+                    statusText={
+                      edgePropertiesRoleStatus
+                    }
                     onChange={(nextValue) =>
                       setEdgePropertiesDraft(
                         current => ({
@@ -12137,8 +12669,12 @@ const conditionalPropertyOptions = [
                       </div>
 
                       <GraphPropertyDropdown
-                        value={edgePropertiesDraft.conditionId}
-                        options={conditionalPropertyOptions}
+                        value={
+                          edgePropertiesDraft.conditionId
+                        }
+                        options={
+                          conditionalPropertyOptions
+                        }
                         placeholder="Auto / none"
                         isOpen={
                           propertyDropdownOpen ===
@@ -12257,20 +12793,25 @@ const conditionalPropertyOptions = [
               onChange={(event) =>
                 setRenameValue(event.target.value)
               }
-              onPaste={handleNodeRenameImagePaste}
-
+              onPaste={
+                handleNodeRenameImagePaste
+              }
               onBlur={() =>
                 finishNodeRename()
               }
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
+
                   finishNodeRename();
                 }
 
                 if (event.key === "Escape") {
                   event.preventDefault();
-                  finishNodeRename({cancel: true,});
+
+                  finishNodeRename({
+                    cancel: true,
+                  });
                 }
               }}
             />
@@ -12282,7 +12823,9 @@ const conditionalPropertyOptions = [
 
               type="text"
 
-              value={relationshipValue}
+              value={
+                relationshipValue
+              }
 
               autoFocus
 
@@ -12343,14 +12886,29 @@ const conditionalPropertyOptions = [
               onKeyDown={
                 event => {
 
-                  if (event.key ==="Enter") {
+                  if (
+                    event.key ===
+                    "Enter"
+                  ) {
+
                     event.preventDefault();
+
                     finishEdgeRelationship();
+
                   }
 
-                  if (event.key ==="Escape") {
+
+                  if (
+                    event.key ===
+                    "Escape"
+                  ) {
+
                     event.preventDefault();
-                    finishEdgeRelationship({cancel: true,});
+
+                    finishEdgeRelationship({
+                      cancel: true,
+                    });
+
                   }
 
                 }
@@ -12371,126 +12929,152 @@ const conditionalPropertyOptions = [
 
             {/* CURRENT GRAPH SELECTION */}
 
-            {(
-              selectionSummary.nodes.length > 0 ||
-              selectionSummary.edges.length > 0
-            ) && (
+            {selectedItemCount > 0 && (
+              <div className="graph-selection-overlay">
 
-              <div 
-                className="graph-selected-node-overlay"
-                
-                /*
-                  Never let wheel input over this panel reach
-                  Cytoscape's zoom handling.
-                */
-                onWheel={(event) => {
-                  event.stopPropagation();
-                }}
-                
-                onPointerDown={(event) => {
-                  event.stopPropagation();
-                }}
-              >
+                {isMultiSelection ? (
+                  <>
+                    <span className="graph-selection-kicker">
+                      {selectionSummary.nodes.length > 0 &&
+                      selectionSummary.edges.length > 0
+                        ? "Selected items"
+                        : selectionSummary.nodes.length > 0
+                          ? "Selected nodes"
+                          : "Selected edges"}
+                    </span>
 
-                <span>
+                    <strong className="graph-selection-title">
+                      {selectionSummary.nodes.length > 0 && (
+                        <>
+                          {selectionSummary.nodes.length}{" "}
+                          node{
+                            selectionSummary.nodes.length === 1
+                              ? ""
+                              : "s"
+                          }
+                        </>
+                      )}
 
-                  {(
-                    selectionSummary.nodes.length +
-                    selectionSummary.edges.length
-                  ) === 1
+                      {selectionSummary.nodes.length > 0 &&
+                        selectionSummary.edges.length > 0 &&
+                        " · "}
 
-                    ? (
-                        selectionSummary.nodes.length === 1
-                          ? "Selected node"
-                          : "Selected edge"
-                      )
+                      {selectionSummary.edges.length > 0 && (
+                        <>
+                          {selectionSummary.edges.length}{" "}
+                          edge{
+                            selectionSummary.edges.length === 1
+                              ? ""
+                              : "s"
+                          }
+                        </>
+                      )}
+                    </strong>
+                  </>
+                ) : singleSelectedNode ? (
+                  <>
+                    <span className="graph-selection-kicker">
+                      {singleSelectedNode.nodeType ===
+                      "conditional"
+                        ? "Selected conditional node"
+                        : "Selected node"}
+                    </span>
 
-                    : `Selected ${
-                        selectionSummary.nodes.length +
-                        selectionSummary.edges.length
-                      } items`
-                  }
+                    <strong className="graph-selection-title">
+                      {singleSelectedNode.label}
+                    </strong>
 
-                </span>
-
-                {/* SELECTED NODES */}
-
-                {selectionSummary.nodes.length > 0 && (
-
-                  <div className="graph-selection-group">
-
-                    {selectionSummary.nodes.length > 1 && (
-
-                      <div className="graph-selection-group-title">
-                        {selectionSummary.nodes.length} nodes
-                      </div>
-
-                    )}
-
-                    {selectionSummary.nodes.map(
-                      node => (
-
-                        <strong
-                          key={node.id}
-                          className="graph-selection-item"
-                        >
-                          {node.label}
-                        </strong>
-
-                      )
-                    )}
-
-                  </div>
-
-                )}
-
-                {/* SELECTED EDGES */}
-
-                {selectionSummary.edges.length > 0 && (
-
-                  <div className="graph-selection-group">
-
-                    {selectionSummary.edges.length > 1 && (
-
-                      <div className="graph-selection-group-title">
-                        {selectionSummary.edges.length} edges
-                      </div>
-
-                    )}
-
-                    {selectionSummary.edges.map(
-                      edge => (
-
-                        <div
-                          key={edge.id}
-                          className="graph-selection-item"
-                        >
+                    {singleSelectedNode.nodeType ===
+                      "conditional" &&
+                      singleSelectedNode.conditionOwnerLabel && (
+                        <div className="graph-selection-meta">
+                          <span>Parent:</span>
 
                           <strong>
-                            {edge.sourceLabel}
-                            {" → "}
-                            {edge.targetLabel}
+                            {
+                              singleSelectedNode.conditionOwnerLabel
+                            }
                           </strong>
-
-                          {edge.relationship?.trim() && (
-
-                            <span className="graph-selected-edge-relationship">
-                              {edge.relationship}
-                            </span>
-
-                          )}
-
                         </div>
+                      )}
 
-                      )
+                    {singleSelectedNode.nodeType !==
+                      "conditional" &&
+                      singleSelectedNode.hasImage && (
+                        <div className="graph-selection-secondary">
+                          Image node
+                        </div>
+                      )}
+                  </>
+                ) : singleSelectedEdge ? (
+                  <>
+                    <span className="graph-selection-kicker">
+                      Selected edge
+                    </span>
+
+                    <strong className="graph-selection-title">
+                      {singleSelectedEdge.sourceLabel}
+                      {" → "}
+                      {singleSelectedEdge.targetLabel}
+                    </strong>
+
+                    {singleSelectedEdge.relationship && (
+                      <div className="graph-selection-relationship">
+                        {singleSelectedEdge.relationship}
+                      </div>
                     )}
 
-                  </div>
+                    {singleSelectedEdge.qualifier && (
+                      <div className="graph-selection-qualifier">
+                        {singleSelectedEdge.qualifier}
+                      </div>
+                    )}
 
-                )}
+                    {singleSelectedEdge.conditionLabel && (
+                      <div className="graph-selection-meta">
+                        <span>Scope:</span>
+
+                        <strong>
+                          {singleSelectedEdge.conditionLabel}
+                        </strong>
+                      </div>
+                    )}
+
+                    {(singleSelectedEdge.classification ===
+                      "negative" ||
+                      singleSelectedEdge.classification ===
+                        "prerequisite" ||
+                      singleSelectedEdge.edgeRole ===
+                        "reification") && (
+                      <div className="graph-selection-badges">
+
+                        {singleSelectedEdge.classification ===
+                          "negative" && (
+                          <span className="graph-selection-badge">
+                            Negative
+                          </span>
+                        )}
+
+                        {singleSelectedEdge.classification ===
+                          "prerequisite" && (
+                          <span className="graph-selection-badge">
+                            Prerequisite
+                          </span>
+                        )}
+
+                        {singleSelectedEdge.edgeRole ===
+                          "reification" && (
+                          <span className="graph-selection-badge">
+                            Reification
+                          </span>
+                        )}
+
+                      </div>
+                    )}
+                  </>
+                ) : null}
 
               </div>
-
             )}
 
             {/* LINK MODE */}
@@ -12536,6 +13120,7 @@ const conditionalPropertyOptions = [
 
                 </div>
 
+
                 <button
                   type="button"
                   onClick={cancelLinkMode}
@@ -12550,9 +13135,12 @@ const conditionalPropertyOptions = [
               </div>
             )}
 
+
+
             </div>
 
           )}
+
 
           {/* GRAPH FEEDBACK */}
 
@@ -12603,6 +13191,7 @@ const conditionalPropertyOptions = [
                   strokeWidth={1.8}
                   className="graph-semantic-search-icon"
                 />
+
 
                 <input
                   type="text"
@@ -12678,6 +13267,8 @@ const conditionalPropertyOptions = [
                 />
 
               </button>
+
+              
 
             )}
 

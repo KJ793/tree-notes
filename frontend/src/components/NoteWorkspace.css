@@ -2918,13 +2918,11 @@
   min-height: 0;
 }
 
+/* ==================================================
+   Graph Selection Overlay
+   ================================================== */
 
-/* ================================================== */
-/* Selected Node Overlay                              */
-/* ================================================== */
-
-.note-workspace
-.graph-selected-node-overlay {
+.note-workspace .graph-selection-overlay {
   position: absolute;
 
   top: 12px;
@@ -2932,14 +2930,13 @@
 
   z-index: 40;
 
-  min-width: 125px;
-  max-width: 190px;
-  max-height: 180px;
+  min-width: 145px;
+  max-width: 230px;
 
   display: flex;
   flex-direction: column;
 
-  gap: 2px;
+  gap: 3px;
 
   padding: 8px 11px;
 
@@ -2950,37 +2947,42 @@
   border-radius: 7px;
 
   background:
-    var(--bg-panel-elevated);
+    color-mix(
+      in srgb,
+      var(--bg-panel-elevated) 60%,
+      transparent
+    );
+
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
 
   box-shadow:
-    0 0 0 1px
-      color-mix(
-        in srgb,
-        var(--accent-primary) 10%,
-        transparent
-      ),
-    var(--shadow-popover);
+    var(--shadow-panel);
 
-  pointer-events: auto;
+  color:
+    var(--text-primary);
+
+  pointer-events: none;
 }
 
 
-.note-workspace
-.graph-selected-node-overlay span {
+.note-workspace .graph-selection-kicker {
   color:
     var(--text-muted);
 
   font-size: 9px;
   font-weight: 600;
 
-  letter-spacing: 0.06em;
+  line-height: 1.2;
 
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 
-.note-workspace
-.graph-selected-node-overlay strong {
+.note-workspace .graph-selection-title {
+  display: block;
+
   overflow: hidden;
 
   color:
@@ -2989,10 +2991,130 @@
   font-size: 12px;
   font-weight: 600;
 
+  line-height: 1.35;
+
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+
+.note-workspace .graph-selection-relationship {
+  overflow: hidden;
+
+  color:
+    var(--text-secondary);
+
+  font-size: 10px;
+  font-weight: 600;
+
+  line-height: 1.35;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.note-workspace .graph-selection-qualifier,
+.note-workspace .graph-selection-secondary {
+  overflow: hidden;
+
+  color:
+    var(--text-muted);
+
+  font-size: 9.5px;
+  font-weight: 400;
+
+  line-height: 1.35;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.note-workspace .graph-selection-meta {
+  min-width: 0;
+
+  display: flex;
+  align-items: baseline;
+
+  gap: 4px;
+
+  overflow: hidden;
+
+  color:
+    var(--text-muted);
+
+  font-size: 9.5px;
+
+  line-height: 1.35;
+}
+
+
+.note-workspace .graph-selection-meta > span {
+  flex: 0 0 auto;
+
+  color:
+    var(--text-muted);
+}
+
+
+.note-workspace .graph-selection-meta > strong {
+  min-width: 0;
+
+  overflow: hidden;
+
+  color:
+    var(--text-secondary);
+
+  font-size: inherit;
+  font-weight: 500;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.note-workspace .graph-selection-badges {
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 4px;
+
+  margin-top: 2px;
+}
+
+
+.note-workspace .graph-selection-badge {
+  min-height: 18px;
+
+  display: inline-flex;
+  align-items: center;
+
+  padding: 0 6px;
+
+  border:
+    1px solid
+    var(--border-accent-muted);
+
+  border-radius: 999px;
+
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 8%,
+      transparent
+    );
+
+  color:
+    var(--text-accent);
+
+  font-size: 8.5px;
+  font-weight: 600;
+
+  line-height: 1;
+
+  letter-spacing: 0.02em;
+}
 
 /* ================================================== */
 /* Link Mode Overlay                                  */
@@ -3518,26 +3640,82 @@ button[data-tooltip]:hover::after,
     translateY(0);
 }
 
-/* Keep tooltip-producing controls above surrounding content */
+/* ==================================================
+   Tooltip / graph stacking order
+   ================================================== */
 
+/* Normal panel headers */
 .note-workspace .raw-notes-heading,
-.note-workspace .graph-panel-heading,
 .note-workspace .summary-panel-heading {
   position: relative;
   z-index: 100;
+
   overflow: visible;
 }
 
-.note-workspace .raw-notes-heading {
+
+/*
+  Graph header must sit above the ENTIRE graph editor.
+
+  Header tooltips extend downward into the graph editor,
+  so this stacking context needs to outrank the editor.
+*/
+.note-workspace .graph-panel-heading {
   position: relative;
-  z-index: 100;
+  z-index: 300;
+
+  overflow: visible;
 }
 
+
+/* Header action groups may freely display their tooltips */
+.note-workspace .graph-panel-header-actions {
+  position: relative;
+
+  overflow: visible;
+}
+
+.note-workspace .graph-generation-actions {
+  position: relative;
+
+  overflow: visible;
+}
+
+
+/*
+  Put the entire graph editor into a lower stacking context.
+
+  Everything inside it can still layer normally against
+  everything else inside the editor.
+*/
+.note-workspace .graph-editor {
+  position: relative;
+  z-index: 1;
+
+  overflow: visible;
+}
+
+
+/*
+  Toolbar remains above the Cytoscape canvas so its own
+  tooltips and popovers still work correctly.
+*/
 .note-workspace .graph-node-toolbar {
   position: relative;
   z-index: 100;
 
   overflow: visible;
+}
+
+
+/*
+  Cytoscape itself should remain clipped to its viewport.
+*/
+.note-workspace .graph-canvas-shell {
+  position: relative;
+  z-index: 1;
+
+  overflow: hidden;
 }
 
 /* ================================================== */
@@ -8063,4 +8241,390 @@ input[type="checkbox"] {
 > span + span {
   color: var(--text-muted) !important;
   font-weight: 500 !important;
+}
+
+/* =========================================================
+   GRAPH HEADER - AI PROCESSING DETAILS
+   Append to NoteWorkspace.css
+   ========================================================= */
+
+.note-workspace .graph-panel-header-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.note-workspace .graph-header-status-slot {
+  min-width: 0;
+  max-width: min(320px, 32vw);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+
+.note-workspace .graph-header-status,
+.note-workspace .graph-header-error {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.74rem;
+}
+
+.note-workspace .graph-header-status {
+  color: var(--text-muted);
+}
+
+.note-workspace .graph-generation-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* =========================================================
+   AI PROCESSING HEADER BUTTON
+   Uses the same base styling as .panel-focus-button.
+   ========================================================= */
+
+.note-workspace .graph-processing-info-button {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+
+/*
+  While graph generation is active, tint the icon/border
+  without replacing the normal focus-button surface.
+*/
+.note-workspace
+.graph-processing-info-button-live {
+  color: var(--accent-primary);
+  border-color: var(--border-accent);
+}
+
+.note-workspace .graph-processing-info-button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+/* =========================================================
+   LIVE PROCESSING DOT
+   ========================================================= */
+
+.note-workspace .graph-processing-live-dot {
+  position: absolute;
+
+  top: 4px;
+  right: 4px;
+
+  width: 6px;
+  height: 6px;
+
+  border-radius: 50%;
+
+  background:
+    var(--accent-primary);
+
+  box-shadow:
+    0 0 0 3px
+    color-mix(
+      in srgb,
+      var(--accent-primary) 16%,
+      transparent
+    );
+
+  pointer-events: none;
+
+  animation:
+    graph-processing-live-pulse
+    1.45s
+    ease-in-out
+    infinite;
+}
+
+
+@keyframes graph-processing-live-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.9);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+/* =========================================================
+   PROCESSING STEP COUNT BADGE
+   ========================================================= */
+
+.note-workspace .graph-processing-step-count {
+  position: absolute;
+
+  right: -4px;
+  bottom: -4px;
+
+  min-width: 13px;
+  height: 13px;
+
+  box-sizing: border-box;
+
+  display: grid;
+  place-items: center;
+
+  padding: 0 2px;
+
+  border:
+    1.5px solid
+    var(--bg-panel-elevated);
+
+  border-radius: 999px;
+
+  background:
+    var(--accent-primary);
+
+  color:
+    var(--text-on-accent);
+
+  font-size: 7px;
+  font-weight: 700;
+  line-height: 1;
+
+  font-variant-numeric:
+    tabular-nums;
+
+  pointer-events: none;
+
+  z-index: 2;
+}
+
+/* =========================================================
+   AI PROCESSING MODAL
+   Reuses graph-image-modal structure/theme.
+   ========================================================= */
+
+.note-workspace .graph-ai-processing-modal {
+  width: min(620px, calc(100% - 32px));
+  max-height: min(680px, calc(100% - 36px));
+}
+
+.note-workspace .graph-ai-processing-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.note-workspace .graph-ai-processing-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-input) 78%, transparent);
+}
+
+.note-workspace .graph-ai-processing-summary > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.note-workspace .graph-ai-processing-summary strong {
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.note-workspace .graph-ai-processing-summary span:not(.graph-ai-processing-state) {
+  color: var(--text-muted);
+  font-size: 0.71rem;
+  line-height: 1.45;
+}
+
+.note-workspace .graph-ai-processing-state {
+  flex: 0 0 auto;
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border: 1px solid var(--border-control);
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.note-workspace .graph-ai-processing-state.is-live {
+  border-color: var(--border-accent);
+  background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-input));
+  color: var(--accent-primary);
+}
+
+.note-workspace .graph-ai-processing-state.is-complete {
+  border-color: color-mix(in srgb, #22c55e 55%, var(--border-control));
+  background: color-mix(in srgb, #22c55e 9%, var(--bg-input));
+  color: color-mix(in srgb, #22c55e 78%, var(--text-primary));
+}
+
+.note-workspace .graph-ai-processing-empty {
+  min-height: 210px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 28px;
+  border: 1px dashed var(--border-primary);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-input) 60%, transparent);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.note-workspace .graph-ai-processing-empty strong {
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.note-workspace .graph-ai-processing-empty > span {
+  max-width: 390px;
+  font-size: 0.71rem;
+  line-height: 1.5;
+}
+
+.note-workspace .graph-ai-processing-mock-button {
+  margin-top: 6px;
+  min-height: 31px;
+  padding: 0 11px;
+  border: 1px solid var(--border-control);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.note-workspace .graph-ai-processing-mock-button:hover {
+  border-color: var(--border-accent);
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}
+
+.note-workspace .graph-ai-processing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.note-workspace .graph-ai-processing-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.note-workspace .graph-ai-processing-step-marker {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-accent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-input));
+  color: var(--accent-primary);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.note-workspace .graph-ai-processing-step-main {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-input);
+}
+
+.note-workspace .graph-ai-processing-step-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.note-workspace .graph-ai-processing-step-heading > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.note-workspace .graph-ai-processing-step-heading strong {
+  color: var(--text-primary);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.note-workspace .graph-ai-processing-step-heading span {
+  color: var(--text-muted);
+  font-size: 0.69rem;
+  line-height: 1.4;
+}
+
+.note-workspace .graph-ai-processing-step-heading > svg {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, #22c55e 78%, var(--text-primary));
+}
+
+.note-workspace .graph-ai-processing-output {
+  margin: 0;
+  min-height: 36px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-control);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-panel-elevated) 74%, var(--bg-input));
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .note-workspace .graph-header-status-slot {
+    max-width: 180px;
+  }
+}
+
+@media (max-width: 720px) {
+  .note-workspace .graph-header-status-slot {
+    display: none;
+  }
+
+  .note-workspace .graph-ai-processing-summary {
+    flex-direction: column;
+  }
 }
