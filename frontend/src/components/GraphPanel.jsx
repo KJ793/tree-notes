@@ -8,6 +8,7 @@ import {
 import SquareDottedIcon from "./icons/SquareDottedIcon";
 import VeeIcon from "./icons/VeeIcon";
 import VeeNodeIcon from "./icons/VeeNodeIcon";
+import FontColorIcon from "./icons/FontColorIcon";
 import cytoscape from "cytoscape";
 import { semanticSearchGraph } from "../api/graphApi";
 import TreeNotesColorPicker from "./TreeNotesColorPicker";
@@ -6215,7 +6216,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
               : "Select a node first"} aria-label="Text colour" aria-haspopup="dialog" aria-expanded={graphColorPicker === "node-text"}>
             <span className="graph-toolbar-color-icon">
 
-              <Type size={19} strokeWidth={1.8} />
+              <FontColorIcon size={19} strokeWidth={1.8} />
 
               <span className="graph-toolbar-color-indicator" style={{
                 backgroundColor: selectedNode?.textColor || getThemeColour("--graph-node-text", "#ffffff"),

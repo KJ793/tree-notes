@@ -52,6 +52,8 @@ import {
   LayoutSummaryPriorityIcon,
 } from "./icons/WorkspaceLayoutIcons";
 
+import FontColorIcon from "./icons/FontColorIcon";
+
 import "./NoteWorkspace.css";
 
 // =========================================================
@@ -97,6 +99,80 @@ const WORKSPACE_LAYOUT_PRESETS = [
   },
 ];
 
+// =========================================================
+// RAW NOTES TEXT STYLE OPTIONS
+// =========================================================
+
+const TEXT_STYLE_PREVIEW_MAX_PX = 27;
+
+const TEXT_STYLE_OPTIONS = [
+  {
+    value: "p",
+    label: "Normal text",
+  },
+  {
+    value: "h1",
+    label: "Heading 1",
+  },
+  {
+    value: "h2",
+    label: "Heading 2",
+  },
+  {
+    value: "h3",
+    label: "Heading 3",
+  },
+];
+
+const DEFAULT_TEXT_STYLES = {
+  p: {
+    fontFamily: "inherit",
+    fontSize: "16px",
+    fontWeight: "400",
+    fontStyle: "normal",
+    textDecorationLine: "none",
+    color: "var(--text-primary)",
+    lineHeight: "1.55",
+    letterSpacing: "normal",
+    textAlign: "left",
+  },
+
+  h1: {
+    fontFamily: "inherit",
+    fontSize: "27px",
+    fontWeight: "700",
+    fontStyle: "normal",
+    textDecorationLine: "none",
+    color: "var(--text-primary)",
+    lineHeight: "1.25",
+    letterSpacing: "normal",
+    textAlign: "left",
+  },
+
+  h2: {
+    fontFamily: "inherit",
+    fontSize: "23px",
+    fontWeight: "700",
+    fontStyle: "normal",
+    textDecorationLine: "none",
+    color: "var(--text-primary)",
+    lineHeight: "1.3",
+    letterSpacing: "normal",
+    textAlign: "left",
+  },
+
+  h3: {
+    fontFamily: "inherit",
+    fontSize: "19px",
+    fontWeight: "700",
+    fontStyle: "normal",
+    textDecorationLine: "none",
+    color: "var(--text-primary)",
+    lineHeight: "1.35",
+    letterSpacing: "normal",
+    textAlign: "left",
+  },
+};
 
 // =========================================================
 // TRANSCRIPTION AUDIO CAPTURE
@@ -210,6 +286,14 @@ const graphPanelRef = useRef(null);
 
 const layoutDropdownRef = useRef(null);
 const [layoutDropdownOpen, setLayoutDropdownOpen] = useState(false);
+
+// =========================================================
+// RAW NOTES TEXT STYLE MENU
+// =========================================================
+
+const textStyleDropdownRef = useRef(null);
+const [textStyleDropdownOpen, setTextStyleDropdownOpen] = useState(false);
+const [textStyles, setTextStyles] = useState(DEFAULT_TEXT_STYLES);
 
 // =========================================================
 // TRANSCRIPTION REVIEW MODAL
@@ -1380,37 +1464,42 @@ useEffect(() => {
 // Match the Profile preferences dropdown behaviour: click
 // outside or press Escape to close the menu.
 useEffect(() => {
-  function handleLayoutPointerDown(event) {
+  function handleDropdownPointerDown(event) {
     if (layoutDropdownRef.current && !layoutDropdownRef.current.contains(event.target)) {
       setLayoutDropdownOpen(false);
     }
+
+    if (textStyleDropdownRef.current && !textStyleDropdownRef.current.contains(event.target)) {
+      setTextStyleDropdownOpen(false);
+    }
   }
 
-  function handleLayoutEscape(event) {
+  function handleDropdownEscape(event) {
     if (event.key === "Escape") {
       setLayoutDropdownOpen(false);
+      setTextStyleDropdownOpen(false);
     }
   }
 
   document.addEventListener(
     "pointerdown",
-    handleLayoutPointerDown
+    handleDropdownPointerDown
   );
 
   document.addEventListener(
     "keydown",
-    handleLayoutEscape
+    handleDropdownEscape
   );
 
   return () => {
     document.removeEventListener(
       "pointerdown",
-      handleLayoutPointerDown
+      handleDropdownPointerDown
     );
 
     document.removeEventListener(
       "keydown",
-      handleLayoutEscape
+      handleDropdownEscape
     );
   };
 }, []);
@@ -1658,6 +1747,123 @@ useEffect(() => {
   };
 }, [isResizingNotesGraph]);
 
+function getTextStyleStorageKey(noteId) {
+  return `treenotes:text-styles:${noteId}`;
+}
+
+function normaliseStoredTextStyles(
+  storedStyles
+) {
+  return {
+    p: {
+      ...DEFAULT_TEXT_STYLES.p,
+      ...(storedStyles?.p || {}),
+    },
+
+    h1: {
+      ...DEFAULT_TEXT_STYLES.h1,
+      ...(storedStyles?.h1 || {}),
+    },
+
+    h2: {
+      ...DEFAULT_TEXT_STYLES.h2,
+      ...(storedStyles?.h2 || {}),
+    },
+
+    h3: {
+      ...DEFAULT_TEXT_STYLES.h3,
+      ...(storedStyles?.h3 || {}),
+    },
+  };
+}
+
+function persistTextStyles(nextStyles) {
+  if (!note?.id) {
+    return;
+  }
+
+  try {
+    localStorage.setItem(
+      getTextStyleStorageKey(note.id),
+      JSON.stringify(nextStyles)
+    );
+  } catch (error) {
+    console.warn(
+      "Unable to save text styles:",
+      error
+    );
+  }
+}
+
+useEffect(() => {
+  if (!note?.id) {
+    setTextStyles(
+      normaliseStoredTextStyles(null)
+    );
+
+    return;
+  }
+
+  try {
+    const storedValue =
+      localStorage.getItem(
+        getTextStyleStorageKey(note.id)
+      );
+
+    const storedStyles =
+      storedValue
+        ? JSON.parse(storedValue)
+        : null;
+
+    setTextStyles(
+      normaliseStoredTextStyles(
+        storedStyles
+      )
+    );
+  } catch (error) {
+    console.warn(
+      "Unable to load text styles:",
+      error
+    );
+
+    setTextStyles(
+      normaliseStoredTextStyles(null)
+    );
+  }
+}, [note?.id]);
+
+function getTextStylePreview(styleKey) {
+  const style = textStyles[styleKey] || DEFAULT_TEXT_STYLES[styleKey];
+
+  const parsedFontSize = parseFloat(style.fontSize);
+
+  const previewFontSize =
+    Number.isFinite(parsedFontSize)
+      ? Math.min(
+          parsedFontSize,
+          TEXT_STYLE_PREVIEW_MAX_PX
+        )
+      : undefined;
+
+  return {
+    fontFamily:
+      style.fontFamily === "inherit"
+        ? undefined
+        : style.fontFamily,
+    fontSize:
+      previewFontSize
+        ? `${previewFontSize}px`
+        : undefined,
+    fontWeight: style.fontWeight,
+    fontStyle: style.fontStyle,
+    textDecorationLine: style.textDecorationLine,
+    textAlign: style.textAlign,
+    color: style.color,
+    letterSpacing: style.letterSpacing,
+    lineHeight: 1.15,
+  };
+}
+
 function updateNotesGraphSplit(clientX) {
   const layout = notesLayoutRef.current;
 
@@ -1674,9 +1880,7 @@ function updateNotesGraphSplit(clientX) {
   const pointerX = clientX - bounds.left;
   const nextSplit = (pointerX / bounds.width) * 100;
 
-  setNotesGraphSplit(
-    clampNotesGraphSplit(nextSplit)
-  );
+  setNotesGraphSplit(clampNotesGraphSplit(nextSplit));
 }
 
 function finishNotesGraphResize(event) {
@@ -2256,7 +2460,6 @@ function inferGraphLinkPaletteSlot(
 
   const [addNodeTrigger, setAddNodeTrigger] = useState(0);
 
-
   // Tracks the active text formatting //
   const [activeFormats, setActiveFormats] = useState({
   bold: false,
@@ -2268,6 +2471,100 @@ function inferGraphLinkPaletteSlot(
   bulletList: false,
   numberedList: false,
   });
+
+  // =========================================================
+  // CURRENT TEXT STYLE
+  // =========================================================
+
+  const activeTextStyleValue = activeFormats.heading || "p";
+
+  const activeTextStyleLabel =
+    TEXT_STYLE_OPTIONS.find(
+      (option) =>
+        option.value === activeTextStyleValue
+    )?.label || "Normal text";
+
+  // =========================================================
+  // SAVED TEXT STYLE CSS VARIABLES
+  // =========================================================
+
+  const textStyleVariables = {
+    "--note-p-font-family":
+      textStyles.p.fontFamily,
+    "--note-p-font-size":
+      textStyles.p.fontSize,
+    "--note-p-font-weight":
+      textStyles.p.fontWeight,
+    "--note-p-font-style":
+      textStyles.p.fontStyle,
+    "--note-p-text-decoration":
+      textStyles.p.textDecorationLine,
+    "--note-p-color":
+      textStyles.p.color,
+    "--note-p-line-height":
+      textStyles.p.lineHeight,
+    "--note-p-letter-spacing":
+      textStyles.p.letterSpacing,
+    "--note-p-text-align":
+      textStyles.p.textAlign,
+
+    "--note-h1-font-family":
+      textStyles.h1.fontFamily,
+    "--note-h1-font-size":
+      textStyles.h1.fontSize,
+    "--note-h1-font-weight":
+      textStyles.h1.fontWeight,
+    "--note-h1-font-style":
+      textStyles.h1.fontStyle,
+    "--note-h1-text-decoration":
+      textStyles.h1.textDecorationLine,
+    "--note-h1-color":
+      textStyles.h1.color,
+    "--note-h1-line-height":
+      textStyles.h1.lineHeight,
+    "--note-h1-letter-spacing":
+      textStyles.h1.letterSpacing,
+    "--note-h1-text-align":
+      textStyles.h1.textAlign,
+
+    "--note-h2-font-family":
+      textStyles.h2.fontFamily,
+    "--note-h2-font-size":
+      textStyles.h2.fontSize,
+    "--note-h2-font-weight":
+      textStyles.h2.fontWeight,
+    "--note-h2-font-style":
+      textStyles.h2.fontStyle,
+    "--note-h2-text-decoration":
+      textStyles.h2.textDecorationLine,
+    "--note-h2-color":
+      textStyles.h2.color,
+    "--note-h2-line-height":
+      textStyles.h2.lineHeight,
+    "--note-h2-letter-spacing":
+      textStyles.h2.letterSpacing,
+    "--note-h2-text-align":
+      textStyles.h2.textAlign,
+
+    "--note-h3-font-family":
+      textStyles.h3.fontFamily,
+    "--note-h3-font-size":
+      textStyles.h3.fontSize,
+    "--note-h3-font-weight":
+      textStyles.h3.fontWeight,
+    "--note-h3-font-style":
+      textStyles.h3.fontStyle,
+    "--note-h3-text-decoration":
+      textStyles.h3.textDecorationLine,
+    "--note-h3-color":
+      textStyles.h3.color,
+    "--note-h3-line-height":
+      textStyles.h3.lineHeight,
+    "--note-h3-letter-spacing":
+      textStyles.h3.letterSpacing,
+    "--note-h3-text-align":
+      textStyles.h3.textAlign,
+  };
 
   const alignmentIcons = {
     left: AlignLeft,
@@ -2292,53 +2589,345 @@ function inferGraphLinkPaletteSlot(
   }
 
   function updateFormattingState() {
-  let currentBlock = document.queryCommandValue("formatBlock");
+    let currentBlock = document.queryCommandValue("formatBlock");
 
-  if (currentBlock) {
-    currentBlock = currentBlock
-      .toLowerCase()
-      .replace("<", "")
-      .replace(">", "");
+    if (currentBlock) {
+      currentBlock = currentBlock
+        .toLowerCase()
+        .replace("<", "")
+        .replace(">", "");
+    }
+
+    const editorBlock = getCurrentEditorBlock();
+
+    const blockHasUnderline =
+      editorBlock
+        ? window
+            .getComputedStyle(
+              editorBlock
+            )
+            .textDecorationLine
+            .includes("underline")
+        : false;
+
+    setActiveFormats({
+      bold: document.queryCommandState("bold"),
+      italic: document.queryCommandState("italic"),
+      underline: document.queryCommandState("underline") || blockHasUnderline,
+
+      heading:
+        currentBlock === "h1" ||
+        currentBlock === "h2" ||
+        currentBlock === "h3"
+          ? currentBlock
+          : null,
+
+      bulletList:
+        document.queryCommandState("insertUnorderedList"),
+
+      numberedList:
+        document.queryCommandState("insertOrderedList"),
+      });
+
+      // Update alignment state
+      updateAlignmentState();
+
+      // Update text/highlight colour indicators
+      updateActiveColors();
   }
 
-  setActiveFormats({
-    bold: document.queryCommandState("bold"),
-    italic: document.queryCommandState("italic"),
-    underline: document.queryCommandState("underline"),
+  function getCurrentEditorBlock() {
+    const selection = window.getSelection();
 
-    heading:
-      currentBlock === "h1" ||
-      currentBlock === "h2" ||
-      currentBlock === "h3"
-        ? currentBlock
-        : null,
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
 
-    bulletList:
-      document.queryCommandState("insertUnorderedList"),
+    let target = selection.anchorNode;
 
-    numberedList:
-      document.queryCommandState("insertOrderedList"),
+    if (target?.nodeType === Node.TEXT_NODE) {
+      target = target.parentElement;
+    }
+
+    if (!(target instanceof Element) || !editorRef.current?.contains(target)) {
+      return null;
+    }
+
+    return target.closest("p, h1, h2, h3, div");
+  }
+
+  function getTextStyleKeyForBlock(block) {
+    if (!block) {
+      return "p";
+    }
+
+    const tagName = block.tagName.toLowerCase();
+
+    if (tagName === "h1" || tagName === "h2" || tagName === "h3") {
+      return tagName;
+    }
+
+    return "p";
+  }
+
+  function clearTextStyleOverrides(block) {
+    if (!block) {
+      return;
+    }
+
+    /*
+      These are properties controlled by our
+      Normal / Heading style presets.
+
+      Remove old inline character formatting so
+      the newly selected style can inherit its
+      saved values correctly.
+    */
+
+    const managedProperties = [
+      "color",
+      "font-family",
+      "font-size",
+      "font-weight",
+      "font-style",
+      "line-height",
+      "letter-spacing",
+      "text-align",
+      "text-decoration",
+      "text-decoration-line",
+      "text-decoration-color",
+      "text-decoration-style",
+      "text-decoration-thickness",
+    ];
+
+    const elements = [
+      block,
+      ...block.querySelectorAll("*"),
+    ];
+
+    elements.forEach((element) => {
+      if (!(element instanceof HTMLElement)) {
+        return;
+      }
+
+      managedProperties.forEach(
+        (property) => {
+          element.style.removeProperty(
+            property
+          );
+        }
+      );
+
+      /*
+        execCommand can create legacy <font>
+        elements instead of spans.
+
+        Remove the equivalent old HTML attributes
+        as well.
+      */
+      if (element.tagName === "FONT") {
+        element.removeAttribute("color");
+        element.removeAttribute("face");
+        element.removeAttribute("size");
+      }
+
+      /*
+        Avoid leaving empty style="" attributes
+        littered through the saved note HTML.
+      */
+      if (element.hasAttribute("style") && !element.getAttribute("style")?.trim()) {
+        element.removeAttribute("style");
+      }
     });
 
-    // Update alignment state
-    updateAlignmentState();
+    /*
+      execCommand may represent bold / italic / underline
+      as actual HTML elements rather than inline CSS.
 
-    // Update text/highlight colour indicators
-    updateActiveColors();
+      Remove those wrappers while preserving everything
+      inside them.
+    */
+
+    const formattingElements = Array.from(
+      block.querySelectorAll(
+        "b, strong, i, em, u"
+      )
+    );
+
+    formattingElements.forEach((element) => {
+      const parent = element.parentNode;
+
+      if (!parent) {
+        return;
+      }
+
+      while (element.firstChild) {
+        parent.insertBefore(element.firstChild, element);
+      }
+
+      element.remove();
+    });
   }
 
-  function toggleHeading(heading) {
-    const currentBlock = document
-      .queryCommandValue("formatBlock")
-      .toLowerCase()
-      .replace("<", "")
-      .replace(">", "");
+  function applyTextStyle(blockType) {
+    editorRef.current?.focus();
 
-    if (currentBlock === heading) {
-      runFormat("formatBlock", "p");
-    } else {
-      runFormat("formatBlock", heading);
+    /*
+      Change the semantic block first.
+    */
+    document.execCommand(
+      "formatBlock",
+      false,
+      blockType
+    );
+
+    /*
+      Then remove old inline font styling from
+      the converted block.
+
+      This allows the saved target style to take
+      control through the CSS variables.
+    */
+    const currentBlock = getCurrentEditorBlock();
+
+    clearTextStyleOverrides(currentBlock);
+
+    updateRawNotes();
+    updateFormattingState();
+
+    setTextStyleDropdownOpen(false);
+  }
+
+  function getCurrentEditorStyle() {
+    const selection = window.getSelection();
+
+    if (!selection || selection.rangeCount === 0) {
+      return null;
     }
+
+    let target = selection.anchorNode;
+
+    if (target?.nodeType === Node.TEXT_NODE) {
+      target = target.parentElement;
+    }
+
+    if (!(target instanceof Element) || !editorRef.current?.contains(target)) {
+      return null;
+    }
+
+    const block =
+      target.closest(
+        "p, h1, h2, h3, div"
+      );
+
+    if (!block) {
+      return null;
+    }
+
+    const inlineStyle = window.getComputedStyle(target);
+    const blockStyle = window.getComputedStyle(block);
+    const isBold = document.queryCommandState("bold");
+    const isItalic = document.queryCommandState("italic");
+    const isUnderlined = document.queryCommandState("underline");
+
+    return {
+      fontFamily: inlineStyle.fontFamily,
+      fontSize: inlineStyle.fontSize,
+      fontWeight:
+        isBold
+          ? "700"
+          : "400",
+      fontStyle:
+        isItalic
+          ? "italic"
+          : "normal",
+      textDecorationLine:
+        isUnderlined
+          ? "underline"
+          : "none",
+      color: inlineStyle.color,
+      lineHeight: blockStyle.lineHeight,
+      letterSpacing: inlineStyle.letterSpacing,
+      textAlign:  blockStyle.textAlign,
+    };
+  }
+
+  function updateTextStyleToMatch(styleKey) {
+    const currentBlock = getCurrentEditorBlock();
+
+    const capturedStyle = getCurrentEditorStyle();
+
+    if (!capturedStyle) {
+      return;
+    }
+
+    const nextStyles = {
+      ...textStyles,
+
+      [styleKey]: {
+        ...textStyles[styleKey],
+        ...capturedStyle,
+      },
+    };
+
+    setTextStyles(nextStyles);
+    persistTextStyles(nextStyles);
+
+    /*
+      Now that these values live in the saved style,
+      remove the source block's duplicate inline
+      typography.
+
+      The heading will then inherit the same preset
+      as every other heading of this type.
+    */
+    if (currentBlock && getTextStyleKeyForBlock(currentBlock) === styleKey) {
+      clearTextStyleOverrides(currentBlock);
+    }
+
+    updateRawNotes();
+
+    requestAnimationFrame(() => {
+      updateFormattingState();
+    });
+
+    setTextStyleDropdownOpen(false);
+  }
+
+  function resetTextStyle(styleKey) {
+    const currentBlock = getCurrentEditorBlock();
+
+    const nextStyles = {
+      ...textStyles,
+
+      [styleKey]: {
+        ...DEFAULT_TEXT_STYLES[
+          styleKey
+        ],
+      },
+    };
+
+    setTextStyles(nextStyles);
+    persistTextStyles(nextStyles);
+
+    /*
+      If the cursor is currently inside the style
+      being reset, clear its local overrides too.
+
+      This fixes the previous behavior where every
+      other H2 reset but the current H2 did not.
+    */
+    if (currentBlock && getTextStyleKeyForBlock(currentBlock) === styleKey) {
+      clearTextStyleOverrides(currentBlock);
+    }
+
+    updateRawNotes();
+
+    requestAnimationFrame(() => {
+      updateFormattingState();
+    });
+
+    setTextStyleDropdownOpen(false);
   }
 
   function updateRawNotes() {
@@ -2926,6 +3515,70 @@ function inferGraphLinkPaletteSlot(
     updateFormattingState();
 
     saveEditorSelection();
+  }
+
+  function toggleUnderlineFormatting() {
+    editorRef.current?.focus();
+
+    const block = getCurrentEditorBlock();
+
+    if (!block) {
+      return;
+    }
+
+    const styleKey = getTextStyleKeyForBlock(block);
+
+    const presetDecoration =
+      textStyles[
+        styleKey
+      ]?.textDecorationLine || "none";
+
+    const presetHasUnderline =
+      presetDecoration.includes(
+        "underline"
+      );
+
+    /*
+      Underline supplied by a saved paragraph style
+      is painted by the block itself.
+
+      execCommand cannot reliably cancel that, so
+      create a block-level override instead.
+    */
+    if (presetHasUnderline) {
+      const currentlyDisabled =
+        block.style
+          .getPropertyValue(
+            "text-decoration-line"
+          ) === "none";
+
+      if (currentlyDisabled) {
+        /*
+          Removing the override allows the saved
+          style underline to show again.
+        */
+        block.style.removeProperty("text-decoration-line");
+      } else {
+        /*
+          Override this individual heading without
+          modifying the saved style.
+        */
+        block.style.setProperty("text-decoration-line", "none");
+      }
+    } else {
+      /*
+        No saved underline exists, so normal
+        character-level underline behavior is fine.
+      */
+      document.execCommand(
+        "underline",
+        false,
+        null
+      );
+    }
+
+    updateRawNotes();
+    updateFormattingState();
   }
 
   function applyAlignment(alignment) {
@@ -4761,56 +5414,181 @@ function inferGraphLinkPaletteSlot(
               role="toolbar"
               aria-label="Text formatting"
             >
-              {/* Headings */}
-              
-              <button
-                type="button"
-                className={`toolbar-text-button ${
-                  activeFormats.heading === "h1"
-                    ? "toolbar-button-active"
-                    : ""
-                }`}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => toggleHeading("h1")}
-                aria-pressed={activeFormats.heading === "h1"}
-                data-tooltip="Heading 1"
-                aria-label="Heading 1"
+              {/* Text style */}
+
+              <div
+                className="text-style-dropdown"
+                ref={textStyleDropdownRef}
               >
-                H1
-              </button>
-              
-              <button
-                type="button"
-                className={`toolbar-text-button ${
-                  activeFormats.heading === "h2"
-                    ? "toolbar-button-active"
-                    : ""
-                }`}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => toggleHeading("h2")}
-                aria-pressed={activeFormats.heading === "h2"}
-                data-tooltip="Heading 2"
-                aria-label="Heading 2"
-              >
-                H2
-              </button>
-              
-              <button
-                type="button"
-                className={`toolbar-text-button ${
-                  activeFormats.heading === "h3"
-                    ? "toolbar-button-active"
-                    : ""
-                }`}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => toggleHeading("h3")}
-                aria-pressed={activeFormats.heading === "h3"}
-                data-tooltip="Heading 3"
-                aria-label="Heading 3"
-              >
-                H3
-              </button>
-              
+                <button
+                  type="button"
+                  className={`text-style-trigger ${
+                    textStyleDropdownOpen
+                      ? "text-style-trigger-open"
+                      : ""
+                  }`}
+                  aria-haspopup="listbox"
+                  aria-expanded={
+                    textStyleDropdownOpen
+                  }
+                  aria-label={`Text style: ${activeTextStyleLabel}`}
+                  onMouseDown={(event) => {
+                    /*
+                      Prevent the toolbar from stealing the
+                      current editor selection.
+                    */
+                    event.preventDefault();
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+
+                    setLayoutDropdownOpen(false);
+
+                    setTextStyleDropdownOpen(
+                      (current) => !current
+                    );
+                  }}
+                >
+                  <Type
+                    size={15}
+                    strokeWidth={1.8}
+                    className="text-style-trigger-icon"
+                    aria-hidden="true"
+                  />
+
+                  <span className="text-style-trigger-label">
+                    {activeTextStyleLabel}
+                  </span>
+
+                  <ChevronDown
+                    size={14}
+                    strokeWidth={1.8}
+                    className={`text-style-chevron ${
+                      textStyleDropdownOpen
+                        ? "text-style-chevron-open"
+                        : ""
+                    }`}
+                    aria-hidden="true"
+                  />
+                </button>
+
+                {textStyleDropdownOpen && (
+                  <div
+                    className="text-style-menu"
+                    role="listbox"
+                    aria-label="Text style"
+                    onClick={(event) =>
+                      event.stopPropagation()
+                    }
+                  >
+                    {TEXT_STYLE_OPTIONS.map(
+                      (option) => {
+                        const isSelected =
+                          activeTextStyleValue ===
+                          option.value;
+
+                        return (
+                          <div
+                            key={option.value}
+                            className="text-style-option-row"
+                          >
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={isSelected}
+                              className={`text-style-option ${
+                                isSelected
+                                  ? "text-style-option-selected"
+                                  : ""
+                              }`}
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                              }}
+                              onClick={() =>
+                                applyTextStyle(option.value)
+                              }
+                            >
+                              <span
+                                className="text-style-option-preview"
+                                style={getTextStylePreview(option.value)}
+                              >
+                                {option.label}
+                              </span>
+
+                              <span className="text-style-option-icons">
+                                {isSelected && (
+                                  <Check
+                                    size={14}
+                                    strokeWidth={2}
+                                    aria-hidden="true"
+                                  />
+                                )}
+
+                                <ChevronRight
+                                  size={14}
+                                  strokeWidth={1.8}
+                                  aria-hidden="true"
+                                />
+                              </span>
+                            </button>
+
+                            <div
+                              className="text-style-action-menu"
+                              role="menu"
+                              aria-label={`${option.label} actions`}
+                            >
+                              <div className="text-style-action-menu-title">
+                                {option.label}
+                              </div>
+
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onMouseDown={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                }}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+
+                                  updateTextStyleToMatch(option.value);
+                                }}
+                              >
+                                Update to match
+                              </button>
+
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onMouseDown={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                }}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+
+                                  resetTextStyle(option.value);
+                                }}
+                              >
+                                Reset style
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+                    )}
+
+                  </div>
+                )}
+              </div>
+
+              <span className="toolbar-divider" />
+
+              {/* Font type */}
+
+              <span className="toolbar-divider" />
+
+              {/* Font size */}
 
               <span className="toolbar-divider" />
               
@@ -4856,7 +5634,7 @@ function inferGraphLinkPaletteSlot(
                     : ""
                 }`}
                 onMouseDown={(event) => event.preventDefault()}
-                onClick={() => runFormat("underline")}
+                onClick={toggleUnderlineFormatting}
                 aria-pressed={activeFormats.underline}
                 data-tooltip="Underline"
                 aria-label="Underline"
@@ -4916,7 +5694,7 @@ function inferGraphLinkPaletteSlot(
                   aria-haspopup="dialog"
                 >
 
-                  <Type
+                  <FontColorIcon
                     size={18}
                     strokeWidth={1.9}
                   />
@@ -5573,6 +6351,7 @@ function inferGraphLinkPaletteSlot(
             <div
               ref={editorRef}
               className="text-area raw-notes-content"
+              style={textStyleVariables}
               contentEditable
               suppressContentEditableWarning
 

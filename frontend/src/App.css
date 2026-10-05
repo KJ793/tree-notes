@@ -649,6 +649,7 @@ body{
   overflow-x: hidden;
 
   padding-right: 3px;
+  scrollbar-width: thin;
   scrollbar-color:
     var(--page-scrollbar-thumb)
     transparent;
