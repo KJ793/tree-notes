@@ -1984,6 +1984,15 @@
     );
 
   overflow-y: auto;
+
+  scrollbar-width: thin;
+  scrollbar-color:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 72%,
+      transparent
+    )
+    transparent;
 }
 
 .notes-graph-node-menu-item {
@@ -2048,7 +2057,7 @@
 }
 
 .notes-graph-node-menu-list::-webkit-scrollbar {
-  width: 7px;
+  width: 6px;
 }
 
 .notes-graph-node-menu-list::-webkit-scrollbar-track {
@@ -2056,15 +2065,28 @@
 }
 
 .notes-graph-node-menu-list::-webkit-scrollbar-thumb {
+  background:
+    color-mix(
+      in srgb,
+      var(--accent-primary) 68%,
+      transparent
+    );
+
+  border: 1px solid transparent;
   border-radius: 999px;
 
-  background:
-    var(--editor-scrollbar-thumb);
+  background-clip: padding-box;
 }
 
 .notes-graph-node-menu-list::-webkit-scrollbar-thumb:hover {
   background:
-    var(--editor-scrollbar-thumb-hover);
+    color-mix(
+      in srgb,
+      var(--accent-primary) 88%,
+      transparent
+    );
+
+  background-clip: padding-box;
 }
 
 /* Change Link Node Flyout Menu */
@@ -2114,6 +2136,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ==================================================
+   Graph Node Menu Search
+   ================================================== */
+
+.note-workspace .notes-graph-node-search-wrap {
+  margin: 5px 3px 6px;
 }
 
 /* ================================================== */

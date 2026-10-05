@@ -17,6 +17,7 @@ import {
   List,
   ListOrdered,
   Link,
+  Search,
   Notebook,
   CirclePlus,
   Type,
@@ -102,8 +103,7 @@ const WORKSPACE_LAYOUT_PRESETS = [
 // =========================================================
 
 // The AudioWorklet converts the microphone's Float32 samples into
-// signed 16-bit PCM. Stage 4.1 keeps those PCM frames in the frontend
-// only; the next ASR stage can send the exact same frames over WebSocket.
+// signed 16-bit PCM.
 const TRANSCRIPTION_PCM_WORKLET_SOURCE = `
 class TreeNotesPcmCaptureProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -2237,13 +2237,22 @@ function inferGraphLinkPaletteSlot(
   // Initialising Context menu on right click //
   const [contextMenu, setContextMenu] = useState(null);
 
-  // Current live graph nodes shown in the
-  // "Link to existing node" submenu.
+ // Current live graph nodes shown in the graph-node submenus.
   const [graphNodeOptions, setGraphNodeOptions] = useState([]);
-
-  // Controls whether the secondary graph-node
-  // picker menu is visible.
   const [graphNodeMenuOpen, setGraphNodeMenuOpen] = useState(false);
+  const [graphNodeSearch, setGraphNodeSearch] = useState("");
+
+  const filteredGraphNodeOptions = graphNodeOptions.filter((node) => {
+    const query = graphNodeSearch.trim().toLowerCase();
+
+    if (!query) {
+      return true;
+    }
+
+    return String(node.label || "")
+      .toLowerCase()
+      .includes(query);
+  });
 
   const [addNodeTrigger, setAddNodeTrigger] = useState(0);
 
@@ -3142,21 +3151,18 @@ function inferGraphLinkPaletteSlot(
   }
 
   function toggleGraphNodeMenu() {
-
     setLinkHighlightPickerOpen(false);
 
     if (graphNodeMenuOpen) {
       setGraphNodeMenuOpen(false);
+      setGraphNodeSearch("");
       return;
     }
 
-    const currentNodes =
-      getCurrentGraphNodes();
+    const currentNodes = getCurrentGraphNodes();
 
-    setGraphNodeOptions(
-      currentNodes
-    );
-
+    setGraphNodeOptions(currentNodes);
+    setGraphNodeSearch("");
     setGraphNodeMenuOpen(true);
   }
 
@@ -5969,49 +5975,68 @@ function inferGraphLinkPaletteSlot(
 
                             <div className="notes-graph-node-menu-divider" />
 
+                            {graphNodeOptions.length > 0 && (
+                              <div
+                                className="graph-property-dropdown-search-wrap notes-graph-node-search-wrap"
+                                onMouseDown={(event) => {
+                                  event.stopPropagation();
+                                }}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                }}
+                              >
+                                <Search
+                                  size={13}
+                                  strokeWidth={1.8}
+                                  aria-hidden="true"
+                                />
+
+                                <input
+                                  type="text"
+                                  className="graph-property-dropdown-search"
+                                  value={graphNodeSearch}
+                                  onChange={(event) => {
+                                    setGraphNodeSearch(event.target.value);
+                                  }}
+                                  placeholder="Search graph nodes..."
+                                  aria-label="Search graph nodes"
+                                  autoFocus
+                                />
+                              </div>
+                            )}
 
                             <div className="notes-graph-node-menu-list">
-
                               {graphNodeOptions.length > 0 ? (
-
-                                graphNodeOptions.map((node) => (
-
-                                  <button
-                                    key={node.id}
-                                    type="button"
-
-                                    className="notes-graph-node-menu-item"
-
-                                    onMouseDown={(event) => {
-                                      event.preventDefault();
-                                      event.stopPropagation();
-                                    }}
-
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-
-                                      handleLinkSelectedTextToExistingNode(
-                                        node
-                                      );
-                                    }}
-                                  >
-
-                                    <span>
-                                      {node.label}
-                                    </span>
-
-                                  </button>
-
-                                ))
-
+                                filteredGraphNodeOptions.length > 0 ? (
+                                  filteredGraphNodeOptions.map((node) => (
+                                    <button
+                                      key={node.id}
+                                      type="button"
+                                      className="notes-graph-node-menu-item"
+                                      onMouseDown={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                      }}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleLinkSelectedTextToExistingNode(node);
+                                      }}
+                                    >
+                                      <span>
+                                        {node.label}
+                                      </span>
+                                    </button>
+                                  ))
+                                ) : (
+                                  <div className="notes-graph-node-menu-empty">
+                                    No matching graph nodes
+                                  </div>
+                                )
                               ) : (
-
                                 <div className="notes-graph-node-menu-empty">
                                   No graph nodes available
                                 </div>
-
                               )}
-
                             </div>
 
                           </div>
@@ -6193,83 +6218,95 @@ function inferGraphLinkPaletteSlot(
 
                             <div className="notes-graph-node-menu-divider" />
 
+                            {graphNodeOptions.length > 0 && (
+                              <div
+                                className="graph-property-dropdown-search-wrap notes-graph-node-search-wrap"
+                                onMouseDown={(event) => {
+                                  event.stopPropagation();
+                                }}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                }}
+                              >
+                                <Search
+                                  size={13}
+                                  strokeWidth={1.8}
+                                  aria-hidden="true"
+                                />
+
+                                <input
+                                  type="text"
+                                  className="graph-property-dropdown-search"
+                                  value={graphNodeSearch}
+                                  onChange={(event) => {
+                                    setGraphNodeSearch(event.target.value);
+                                  }}
+                                  placeholder="Search graph nodes..."
+                                  aria-label="Search graph nodes"
+                                  autoFocus
+                                />
+                              </div>
+                            )}
 
                             <div className="notes-graph-node-menu-list">
-
                               {graphNodeOptions.length > 0 ? (
+                                filteredGraphNodeOptions.length > 0 ? (
+                                  filteredGraphNodeOptions.map((node) => {
+                                    const isCurrentNode =
+                                      String(node.id) ===
+                                      String(contextMenu.nodeId);
 
-                                graphNodeOptions.map((node) => {
+                                    return (
+                                      <button
+                                        key={node.id}
+                                        type="button"
+                                        className={`notes-graph-node-menu-item ${
+                                          isCurrentNode
+                                            ? "notes-graph-node-menu-item-current"
+                                            : ""
+                                        }`}
+                                        aria-current={
+                                          isCurrentNode
+                                            ? "true"
+                                            : undefined
+                                        }
+                                        onMouseDown={(event) => {
+                                          event.preventDefault();
+                                          event.stopPropagation();
+                                        }}
+                                        onClick={(event) => {
+                                          event.stopPropagation();
 
-                                  const isCurrentNode =
-                                    String(node.id) ===
-                                    String(contextMenu.nodeId);
+                                          handleChangeLinkedNode(node);
+                                        }}
+                                      >
+                                        <span className="notes-graph-node-menu-item-content">
+                                          <span className="notes-graph-node-linked-icon">
+                                            {isCurrentNode && (
+                                              <Link
+                                                size={13}
+                                                strokeWidth={2}
+                                              />
+                                            )}
+                                          </span>
 
-
-                                  return (
-
-                                    <button
-                                      key={node.id}
-                                      type="button"
-
-                                      className={`notes-graph-node-menu-item ${
-                                        isCurrentNode
-                                          ? "notes-graph-node-menu-item-current"
-                                          : ""
-                                      }`}
-
-                                      aria-current={
-                                        isCurrentNode
-                                          ? "true"
-                                          : undefined
-                                      }
-
-                                      onMouseDown={(event) => {
-                                        event.preventDefault();
-                                        event.stopPropagation();
-                                      }}
-
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-
-                                        handleChangeLinkedNode(
-                                          node
-                                        );
-                                      }}
-                                    >
-
-                                      <span className="notes-graph-node-menu-item-content">
-
-                                        <span className="notes-graph-node-linked-icon">
-
-                                          {isCurrentNode && (
-                                            <Link
-                                              size={13}
-                                              strokeWidth={2}
-                                            />
-                                          )}
-
+                                          <span className="notes-graph-node-menu-label">
+                                            {node.label}
+                                          </span>
                                         </span>
-
-                                        <span className="notes-graph-node-menu-label">
-                                          {node.label}
-                                        </span>
-
-                                      </span>
-
-                                    </button>
-
-                                  );
-
-                                })
-
+                                      </button>
+                                    );
+                                  })
+                                ) : (
+                                  <div className="notes-graph-node-menu-empty">
+                                    No matching graph nodes
+                                  </div>
+                                )
                               ) : (
-
                                 <div className="notes-graph-node-menu-empty">
                                   No graph nodes available
                                 </div>
-
                               )}
-
                             </div>
 
                           </div>
