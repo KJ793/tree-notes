@@ -174,6 +174,33 @@ const DEFAULT_TEXT_STYLES = {
   },
 };
 
+const FONT_FAMILY_OPTIONS = [
+  {
+    value: "Arial",
+    label: "Arial",
+  },
+  {
+    value: "Georgia",
+    label: "Georgia",
+  },
+  {
+    value: "Times New Roman",
+    label: "Times New Roman",
+  },
+  {
+    value: "Verdana",
+    label: "Verdana",
+  },
+  {
+    value: "Trebuchet MS",
+    label: "Trebuchet MS",
+  },
+  {
+    value: "Courier New",
+    label: "Courier New",
+  },
+];
+
 // =========================================================
 // TRANSCRIPTION AUDIO CAPTURE
 // =========================================================
@@ -294,6 +321,17 @@ const [layoutDropdownOpen, setLayoutDropdownOpen] = useState(false);
 const textStyleDropdownRef = useRef(null);
 const [textStyleDropdownOpen, setTextStyleDropdownOpen] = useState(false);
 const [textStyles, setTextStyles] = useState(DEFAULT_TEXT_STYLES);
+
+// font family dropdown// 
+const fontFamilyDropdownRef = useRef(null);
+const [fontFamilyDropdownOpen, setFontFamilyDropdownOpen] = useState(false);
+const [activeFontFamily, setActiveFontFamily] = useState("Arial");
+
+// font size dropdown// 
+const MIN_FONT_SIZE = 8;
+const MAX_FONT_SIZE = 72;
+
+const [activeFontSize, setActiveFontSize] = useState(16);
 
 // =========================================================
 // TRANSCRIPTION REVIEW MODAL
@@ -2587,7 +2625,49 @@ function inferGraphLinkPaletteSlot(
     updateRawNotes();
     updateFormattingState();
   }
+  function applyFontFamily(fontFamily) {
+  editorRef.current?.focus();
 
+  document.execCommand(
+    "fontName",
+    false,
+    fontFamily
+  );
+
+  setActiveFontFamily(fontFamily);
+
+  updateRawNotes();
+  updateFormattingState();
+
+  setFontFamilyDropdownOpen(false);
+}
+
+function applyFontSize(fontSize) {
+  const nextSize = Math.min(
+    MAX_FONT_SIZE,
+    Math.max(MIN_FONT_SIZE, fontSize)
+  );
+
+  editorRef.current?.focus();
+
+  document.execCommand("fontSize", false, "7");
+
+  const editor = editorRef.current;
+
+  if (editor) {
+    editor
+      .querySelectorAll('font[size="7"]')
+      .forEach((element) => {
+        element.removeAttribute("size");
+        element.style.fontSize = `${nextSize}px`;
+      });
+  }
+
+  setActiveFontSize(nextSize);
+
+  updateRawNotes();
+  updateFormattingState();
+}
   function updateFormattingState() {
     let currentBlock = document.queryCommandValue("formatBlock");
 
@@ -2609,6 +2689,45 @@ function inferGraphLinkPaletteSlot(
             .textDecorationLine
             .includes("underline")
         : false;
+    if (selectionElement) {
+  const computedStyle =
+    window.getComputedStyle(selectionElement);
+
+  // -----------------------------
+  // Font family
+  // -----------------------------
+  const rawFontFamily =
+    computedStyle.fontFamily || "Arial";
+
+  const cleanFontFamily =
+    rawFontFamily
+      .split(",")[0]
+      .replace(/["']/g, "")
+      .trim();
+
+  const matchedFont =
+    FONT_FAMILY_OPTIONS.find(
+      (font) =>
+        font.value.toLowerCase() ===
+        cleanFontFamily.toLowerCase()
+    );
+
+  setActiveFontFamily(
+    matchedFont?.value || cleanFontFamily
+  );
+
+  // -----------------------------
+  // Font size
+  // -----------------------------
+  const parsedFontSize =
+    parseFloat(computedStyle.fontSize);
+
+  if (Number.isFinite(parsedFontSize)) {
+    setActiveFontSize(
+      Math.round(parsedFontSize)
+    );
+  }
+}
 
     setActiveFormats({
       bold: document.queryCommandState("bold"),
@@ -2635,6 +2754,28 @@ function inferGraphLinkPaletteSlot(
       // Update text/highlight colour indicators
       updateActiveColors();
   }
+
+  const selection = window.getSelection();
+
+let selectionElement = null;
+
+if (
+  selection &&
+  selection.rangeCount > 0
+) {
+  let node = selection.anchorNode;
+
+  if (node?.nodeType === Node.TEXT_NODE) {
+    node = node.parentElement;
+  }
+
+  if (
+    node instanceof Element &&
+    editorRef.current?.contains(node)
+  ) {
+    selectionElement = node;
+  }
+}
 
   function getCurrentEditorBlock() {
     const selection = window.getSelection();
@@ -5583,12 +5724,135 @@ function inferGraphLinkPaletteSlot(
               </div>
 
               <span className="toolbar-divider" />
-
               {/* Font type */}
+
+                <div
+                  className="text-style-dropdown font-family-dropdown"
+                  ref={fontFamilyDropdownRef}
+                >
+                  <button
+                    type="button"
+                    className={`text-style-trigger font-family-trigger ${
+                      fontFamilyDropdownOpen
+                        ? "text-style-trigger-open"
+                        : ""
+                    }`}
+                    aria-haspopup="listbox"
+                    aria-expanded={fontFamilyDropdownOpen}
+                    aria-label={`Font: ${activeFontFamily}`}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                    }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+
+                      setTextStyleDropdownOpen(false);
+
+                      setFontFamilyDropdownOpen(
+                        (current) => !current
+                      );
+                    }}
+                  >
+                    <span className="text-style-trigger-label">
+                      {activeFontFamily}
+                    </span>
+
+                    <ChevronDown
+                      size={14}
+                      strokeWidth={1.8}
+                      className={`text-style-chevron ${
+                        fontFamilyDropdownOpen
+                          ? "text-style-chevron-open"
+                          : ""
+                      }`}
+                      aria-hidden="true"
+                    />
+                  </button>
+
+                  {fontFamilyDropdownOpen && (
+                    <div
+                      className="text-style-menu font-family-menu"
+                      role="listbox"
+                      aria-label="Font family"
+                      onClick={(event) =>
+                        event.stopPropagation()
+                      }
+                    >
+                      {FONT_FAMILY_OPTIONS.map((font) => (
+                        <button
+                          key={font.value}
+                          type="button"
+                          role="option"
+                          aria-selected={
+                            activeFontFamily === font.value
+                          }
+                          className={`text-style-option ${
+                            activeFontFamily === font.value
+                              ? "text-style-option-selected"
+                              : ""
+                          }`}
+                          style={{
+                            fontFamily: font.value,
+                          }}
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                          }}
+                          onClick={() =>
+                            applyFontFamily(font.value)
+                          }
+                        >
+                          <span>{font.label}</span>
+
+                          {activeFontFamily === font.value && (
+                            <Check
+                              size={14}
+                              strokeWidth={2}
+                            />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
               <span className="toolbar-divider" />
 
               {/* Font size */}
+
+                <div className="font-size-control">
+                  <button
+                    type="button"
+                    className="toolbar-icon-button font-size-button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() =>
+                      applyFontSize(activeFontSize - 1)
+                    }
+                    aria-label="Decrease font size"
+                    data-tooltip="Decrease font size"
+                  >
+                    −
+                  </button>
+
+                  <span
+                    className="font-size-value"
+                    aria-label={`Font size ${activeFontSize}`}
+                  >
+                    {activeFontSize}
+                  </span>
+
+                  <button
+                    type="button"
+                    className="toolbar-icon-button font-size-button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() =>
+                      applyFontSize(activeFontSize + 1)
+                    }
+                    aria-label="Increase font size"
+                    data-tooltip="Increase font size"
+                  >
+                    +
+                  </button>
+                </div>
 
               <span className="toolbar-divider" />
               
