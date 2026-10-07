@@ -9284,7 +9284,7 @@ input[type="checkbox"] {
 .font-size-control {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 5px;
   height: 34px;
   flex-shrink: 0;
 }
@@ -9311,4 +9311,65 @@ input[type="checkbox"] {
   font-size: 14px;
   color: var(--text-primary);
   user-select: none;
+}
+
+.font-family-dropdown {
+  width: 100px;
+  flex: 0 0 145px;
+}
+
+.font-family-trigger {
+  width: 100%;
+  min-width: 0;
+}
+
+.font-family-trigger .text-style-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-workspace .font-family-dropdown {
+  width: 135px;
+  flex: 0 0 135px;
+}
+
+.note-workspace
+.raw-notes-toolbar
+.font-family-trigger {
+  width: 100%;
+  min-width: 0;
+}
+
+.note-workspace
+.font-family-trigger
+.text-style-trigger-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-workspace .text-style-dropdown {
+  position: relative;
+  z-index: 120;
+
+  width: 180px;
+  flex: 0 0 180px;
+}
+
+.note-workspace .raw-notes-toolbar .font-size-button {
+  min-width: 22px;
+  width: 22px;
+  padding: 0;
+}
+
+.note-workspace .font-size-value {
+  width: 24px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.note-workspace .font-size-control {
+  gap: 2px;
 }
