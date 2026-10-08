@@ -1551,8 +1551,8 @@
   position: relative;
   z-index: 120;
 
-  width: 220px;
-  flex: 0 0 220px;
+  width: 180px;
+  flex: 0 0 180px;
 }
 
 .note-workspace .text-style-option-preview {
@@ -1560,6 +1560,8 @@
   flex: 1 1 auto;
 
   display: block;
+
+  padding: 1px 0 2px;
 
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1754,10 +1756,7 @@
 
   box-shadow:
     var(--shadow-overlay);
-}
 
-.note-workspace
-.text-style-menu {
   overflow: visible;
 }
 
@@ -1923,7 +1922,7 @@
 .raw-notes-toolbar
 .text-style-option {
   width: 100%;
-  min-height: 34px;
+  min-height: 36px;
   height: auto;
 
   display: flex;
@@ -2004,17 +2003,6 @@
 
   color:
     var(--text-primary);
-}
-
-.note-workspace
-.text-style-option-preview {
-  min-width: 0;
-
-  display: block;
-
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .note-workspace
@@ -9280,58 +9268,13 @@ input[type="checkbox"] {
 }
 
 
-/* Font size control */
-.font-size-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 34px;
-  flex-shrink: 0;
-}
-
-.font-size-button {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  padding: 0;
-  font-size: 18px;
-  line-height: 1;
-}
-
-.font-size-value {
-  width: 30px;
-  min-width: 30px;
-  text-align: center;
-
-  font-size: 14px;
-  color: var(--text-primary);
-  user-select: none;
-}
-
-.font-family-dropdown {
-  width: 100px;
-  flex: 0 0 145px;
-}
-
-.font-family-trigger {
-  width: 100%;
-  min-width: 0;
-}
-
-.font-family-trigger .text-style-trigger-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* =========================================================
+   RAW NOTES FONT FAMILY + SIZE CONTROLS
+   ========================================================= */
 
 .note-workspace .font-family-dropdown {
-  width: 135px;
-  flex: 0 0 135px;
+  width: 148px;
+  flex: 0 0 148px;
 }
 
 .note-workspace
@@ -9345,31 +9288,80 @@ input[type="checkbox"] {
 .font-family-trigger
 .text-style-trigger-label {
   min-width: 0;
+
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.note-workspace .text-style-dropdown {
-  position: relative;
-  z-index: 120;
-
-  width: 180px;
-  flex: 0 0 180px;
+/* The menu inherits the exact width of the 148px dropdown wrapper. */
+.note-workspace .font-family-menu {
+  width: 100%;
+  min-width: 0;
 }
 
-.note-workspace .raw-notes-toolbar .font-size-button {
-  min-width: 22px;
+.note-workspace
+.font-family-menu
+.text-style-option {
+  width: 100%;
+  min-width: 0;
+
+  gap: 8px;
+
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.note-workspace .font-family-option-label {
+  min-width: 0;
+  flex: 1 1 auto;
+
+  white-space: nowrap;
+}
+
+.note-workspace
+.font-family-menu
+.text-style-option > svg {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.note-workspace .font-size-control {
+  height: 34px;
+
+  display: inline-flex;
+  align-items: center;
+
+  gap: 2px;
+
+  flex-shrink: 0;
+}
+
+.note-workspace
+.raw-notes-toolbar
+.font-size-button {
   width: 22px;
+  height: 28px;
+  min-width: 22px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
   padding: 0;
+
+  font-size: 18px;
+  line-height: 1;
 }
 
 .note-workspace .font-size-value {
   width: 24px;
   min-width: 24px;
-  text-align: center;
-}
 
-.note-workspace .font-size-control {
-  gap: 2px;
+  color: var(--text-primary);
+
+  font-size: 14px;
+  text-align: center;
+
+  user-select: none;
 }

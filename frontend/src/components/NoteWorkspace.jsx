@@ -103,7 +103,9 @@ const WORKSPACE_LAYOUT_PRESETS = [
 // RAW NOTES TEXT STYLE OPTIONS
 // =========================================================
 
-const TEXT_STYLE_PREVIEW_MAX_PX = 27;
+const TEXT_STYLE_PREVIEW_SCALE = 0.74;
+const TEXT_STYLE_PREVIEW_MIN_PX = 13.5;
+const TEXT_STYLE_PREVIEW_MAX_PX = 20;
 
 const TEXT_STYLE_OPTIONS = [
   {
@@ -175,6 +177,10 @@ const DEFAULT_TEXT_STYLES = {
 };
 
 const FONT_FAMILY_OPTIONS = [
+  {
+    value: "system-ui",
+    label: "System UI",
+  },
   {
     value: "Arial",
     label: "Arial",
@@ -325,7 +331,12 @@ const [textStyles, setTextStyles] = useState(DEFAULT_TEXT_STYLES);
 // font family dropdown// 
 const fontFamilyDropdownRef = useRef(null);
 const [fontFamilyDropdownOpen, setFontFamilyDropdownOpen] = useState(false);
-const [activeFontFamily, setActiveFontFamily] = useState("Arial");
+const [activeFontFamily, setActiveFontFamily] = useState("system-ui");
+
+const activeFontFamilyLabel =
+  FONT_FAMILY_OPTIONS.find(
+    (font) => font.value === activeFontFamily
+  )?.label || activeFontFamily;
 
 // font size dropdown// 
 const MIN_FONT_SIZE = 8;
@@ -1510,12 +1521,17 @@ useEffect(() => {
     if (textStyleDropdownRef.current && !textStyleDropdownRef.current.contains(event.target)) {
       setTextStyleDropdownOpen(false);
     }
+
+    if (fontFamilyDropdownRef.current && !fontFamilyDropdownRef.current.contains(event.target)) {
+      setFontFamilyDropdownOpen(false);
+    }
   }
 
   function handleDropdownEscape(event) {
     if (event.key === "Escape") {
       setLayoutDropdownOpen(false);
       setTextStyleDropdownOpen(false);
+      setFontFamilyDropdownOpen(false);
     }
   }
 
@@ -1878,8 +1894,11 @@ function getTextStylePreview(styleKey) {
   const previewFontSize =
     Number.isFinite(parsedFontSize)
       ? Math.min(
-          parsedFontSize,
-          TEXT_STYLE_PREVIEW_MAX_PX
+          TEXT_STYLE_PREVIEW_MAX_PX,
+          Math.max(
+            TEXT_STYLE_PREVIEW_MIN_PX,
+            parsedFontSize * TEXT_STYLE_PREVIEW_SCALE
+          )
         )
       : undefined;
 
@@ -1898,7 +1917,7 @@ function getTextStylePreview(styleKey) {
     textAlign: style.textAlign,
     color: style.color,
     letterSpacing: style.letterSpacing,
-    lineHeight: 1.15,
+    lineHeight: 1.24,
   };
 }
 
@@ -2668,6 +2687,29 @@ function applyFontSize(fontSize) {
   updateRawNotes();
   updateFormattingState();
 }
+  function getCurrentEditorSelectionElement() {
+    const selection = window.getSelection();
+
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
+
+    let node = selection.anchorNode;
+
+    if (node?.nodeType === Node.TEXT_NODE) {
+      node = node.parentElement;
+    }
+
+    if (
+      !(node instanceof Element) ||
+      !editorRef.current?.contains(node)
+    ) {
+      return null;
+    }
+
+    return node;
+  }
+
   function updateFormattingState() {
     let currentBlock = document.queryCommandValue("formatBlock");
 
@@ -2683,56 +2725,61 @@ function applyFontSize(fontSize) {
     const blockHasUnderline =
       editorBlock
         ? window
-            .getComputedStyle(
-              editorBlock
-            )
+            .getComputedStyle(editorBlock)
             .textDecorationLine
             .includes("underline")
         : false;
+
+    /*
+      Read the caret/selection target NOW rather than using a value
+      captured during the previous React render. This keeps font family
+      and font size in sync as soon as the cursor enters different text.
+    */
+    const selectionElement =
+      getCurrentEditorSelectionElement();
+
     if (selectionElement) {
-  const computedStyle =
-    window.getComputedStyle(selectionElement);
+      const computedStyle =
+        window.getComputedStyle(selectionElement);
 
-  // -----------------------------
-  // Font family
-  // -----------------------------
-  const rawFontFamily =
-    computedStyle.fontFamily || "Arial";
+      // Font family
+      const rawFontFamily =
+        computedStyle.fontFamily || "Arial";
 
-  const cleanFontFamily =
-    rawFontFamily
-      .split(",")[0]
-      .replace(/["']/g, "")
-      .trim();
+      const cleanFontFamily =
+        rawFontFamily
+          .split(",")[0]
+          .replace(/["']/g, "")
+          .trim();
 
-  const matchedFont =
-    FONT_FAMILY_OPTIONS.find(
-      (font) =>
-        font.value.toLowerCase() ===
-        cleanFontFamily.toLowerCase()
-    );
+      const matchedFont =
+        FONT_FAMILY_OPTIONS.find(
+          (font) =>
+            font.value.toLowerCase() ===
+            cleanFontFamily.toLowerCase()
+        );
 
-  setActiveFontFamily(
-    matchedFont?.value || cleanFontFamily
-  );
+      setActiveFontFamily(
+        matchedFont?.value || cleanFontFamily
+      );
 
-  // -----------------------------
-  // Font size
-  // -----------------------------
-  const parsedFontSize =
-    parseFloat(computedStyle.fontSize);
+      // Font size
+      const parsedFontSize =
+        parseFloat(computedStyle.fontSize);
 
-  if (Number.isFinite(parsedFontSize)) {
-    setActiveFontSize(
-      Math.round(parsedFontSize)
-    );
-  }
-}
+      if (Number.isFinite(parsedFontSize)) {
+        setActiveFontSize(
+          Math.round(parsedFontSize)
+        );
+      }
+    }
 
     setActiveFormats({
       bold: document.queryCommandState("bold"),
       italic: document.queryCommandState("italic"),
-      underline: document.queryCommandState("underline") || blockHasUnderline,
+      underline:
+        document.queryCommandState("underline") ||
+        blockHasUnderline,
 
       heading:
         currentBlock === "h1" ||
@@ -2746,36 +2793,14 @@ function applyFontSize(fontSize) {
 
       numberedList:
         document.queryCommandState("insertOrderedList"),
-      });
+    });
 
-      // Update alignment state
-      updateAlignmentState();
+    // Update alignment state
+    updateAlignmentState();
 
-      // Update text/highlight colour indicators
-      updateActiveColors();
+    // Update text/highlight colour indicators
+    updateActiveColors();
   }
-
-  const selection = window.getSelection();
-
-let selectionElement = null;
-
-if (
-  selection &&
-  selection.rangeCount > 0
-) {
-  let node = selection.anchorNode;
-
-  if (node?.nodeType === Node.TEXT_NODE) {
-    node = node.parentElement;
-  }
-
-  if (
-    node instanceof Element &&
-    editorRef.current?.contains(node)
-  ) {
-    selectionElement = node;
-  }
-}
 
   function getCurrentEditorBlock() {
     const selection = window.getSelection();
@@ -5584,6 +5609,7 @@ if (
                     event.stopPropagation();
 
                     setLayoutDropdownOpen(false);
+                    setFontFamilyDropdownOpen(false);
 
                     setTextStyleDropdownOpen(
                       (current) => !current
@@ -5724,6 +5750,7 @@ if (
               </div>
 
               <span className="toolbar-divider" />
+              
               {/* Font type */}
 
                 <div
@@ -5739,13 +5766,14 @@ if (
                     }`}
                     aria-haspopup="listbox"
                     aria-expanded={fontFamilyDropdownOpen}
-                    aria-label={`Font: ${activeFontFamily}`}
+                    aria-label={`Font: ${activeFontFamilyLabel}`}
                     onMouseDown={(event) => {
                       event.preventDefault();
                     }}
                     onClick={(event) => {
                       event.stopPropagation();
 
+                      setLayoutDropdownOpen(false);
                       setTextStyleDropdownOpen(false);
 
                       setFontFamilyDropdownOpen(
@@ -5754,7 +5782,7 @@ if (
                     }}
                   >
                     <span className="text-style-trigger-label">
-                      {activeFontFamily}
+                      {activeFontFamilyLabel}
                     </span>
 
                     <ChevronDown
@@ -5791,9 +5819,6 @@ if (
                               ? "text-style-option-selected"
                               : ""
                           }`}
-                          style={{
-                            fontFamily: font.value,
-                          }}
                           onMouseDown={(event) => {
                             event.preventDefault();
                           }}
@@ -5801,7 +5826,14 @@ if (
                             applyFontFamily(font.value)
                           }
                         >
-                          <span>{font.label}</span>
+                          <span
+                            className="font-family-option-label"
+                            style={{
+                              fontFamily: font.value,
+                            }}
+                          >
+                            {font.label}
+                          </span>
 
                           {activeFontFamily === font.value && (
                             <Check
@@ -6876,6 +6908,7 @@ if (
                             console.log("Selected text:", text);
                           }}
               onKeyUp={updateFormattingState}
+              onSelect={updateFormattingState}
               onFocus={updateFormattingState}
             >
 

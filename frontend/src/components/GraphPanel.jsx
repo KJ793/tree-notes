@@ -4423,12 +4423,17 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
     if (!node || node.empty()) {
       return false;
     }
+
+    /*
+      Linked Raw Notes navigation is a real graph selection, not
+      just a viewport focus. Keep the newer selectionSummary state
+      in sync as well as Cytoscape itself so the selection panel
+      appears exactly as it does after clicking the node directly.
+    */
     cy.elements().unselect();
     node.select();
-    setSelectedNode({
-      ...node.data(),
-    });
-    setSelectedEdge(null);
+    syncGraphSelectionState(node);
+
     setShapeMenuOpen(false);
     setNodeBorderStyleMenuOpen(false);
     setEdgeStyleMenuOpen(false);
