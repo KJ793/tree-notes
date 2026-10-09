@@ -389,12 +389,25 @@ function normaliseIncomingNodeData(nodeData = {}) {
   };
 }
 
+function normaliseEdgeAdjuncts(value) {
+  const rawItems = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(/[,;\n]+/)
+      : [];
+
+  return Array.from(new Set(rawItems
+    .map(item => String(item ?? "").trim())
+    .filter(Boolean)));
+}
+
 function normaliseIncomingEdgeData(edgeData = {}) {
   const reificationFlag = edgeData.isReification === true || edgeData.reification === true;
   const normalisedClassification = normaliseEdgeClassification(edgeData.classification);
   const conditionId = String(edgeData.conditionId ?? "").trim();
   const fromEdgeId = String(edgeData.fromEdgeId ?? "").trim();
   const toEdgeId = String(edgeData.toEdgeId ?? "").trim();
+  const adjuncts = normaliseEdgeAdjuncts(edgeData.adjuncts ?? edgeData.adjunct ?? []);
   const normalised = {
     ...edgeData,
     relationship: String(edgeData.relationship ?? edgeData.label ?? "").trim(),
@@ -408,6 +421,12 @@ function normaliseIncomingEdgeData(edgeData = {}) {
     classification: normalisedClassification === "normal" ? "" : normalisedClassification,
     edgeRole: normaliseEdgeRole(edgeData.edgeRole, reificationFlag),
   };
+  delete normalised.adjunct;
+  if (adjuncts.length > 0) {
+    normalised.adjuncts = adjuncts;
+  } else {
+    delete normalised.adjuncts;
+  }
   if (conditionId) {
     normalised.conditionId = conditionId;
   } else {
@@ -887,6 +906,7 @@ function getGraphThemeTokens() {
     edge: getThemeToken("--graph-edge", "#465873"),
     edgeArrow: getThemeToken("--graph-edge-arrow", "#7772ff"),
     edgeLabel: getThemeToken("--graph-edge-label", "#cbd5e1"),
+    adjunctLabel: getThemeToken("--text-accent", "#aaa6ff"),
   };
 }
 
@@ -1129,6 +1149,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
     edgeId: "",
     relationship: "",
     qualifier: "",
+    adjunctsText: "",
     classification: "",
     edgeRole: "auto",
     conditionId: "",
@@ -1686,44 +1707,50 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
         const classification = normaliseEdgeClassification(edge.data("classification"));
         const relationship = String(edge.data("displayLabel") || edge.data("relationship") || "");
         const qualifier = String(edge.data("qualifier") || "");
+        const adjunctText = normaliseEdgeAdjuncts(edge.data("adjuncts")).join(" · ");
+        const hasQualifier = Boolean(qualifier.trim());
+        const hasAdjuncts = Boolean(adjunctText);
         let relationshipMarginX = 0;
         let relationshipMarginY = -11;
         let qualifierMarginX = 0;
         let qualifierMarginY = 11;
+        let adjunctMarginX = 0;
+        let adjunctMarginY = hasQualifier ? 24 : 11;
+
         if (classification === "prerequisite") {
           relationshipMarginX = 0;
           relationshipMarginY = 0;
           qualifierMarginY = 18;
+          adjunctMarginY = hasQualifier ? 31 : 18;
         } else if (isVertical) {
 
           /*
-            Keep vertical relationships horizontally readable.  The
-            relationship always lives to the left and the qualifier to
-            the right, regardless of arrow direction, so scanning stays
-            predictable throughout the graph.
+            Keep vertical relationships horizontally readable. The
+            relationship lives to the left. Qualifier and adjunct context
+            share the right-hand side as two compact lines when both exist.
           */
 
           relationshipMarginX = -(measureEdgeLabelHalfWidth(relationship, 12) + 14);
-          qualifierMarginX = measureEdgeLabelHalfWidth(qualifier, 9) + 14;
+          const contextHalfWidth = Math.max(
+            measureEdgeLabelHalfWidth(qualifier, 9),
+            measureEdgeLabelHalfWidth(adjunctText, 9)
+          );
+          qualifierMarginX = contextHalfWidth + 14;
+          adjunctMarginX = contextHalfWidth + 14;
           relationshipMarginY = 0;
-          qualifierMarginY = 0;
+          qualifierMarginY = hasQualifier && hasAdjuncts ? -7 : 0;
+          adjunctMarginY = hasQualifier && hasAdjuncts ? 7 : 0;
         } else if (classification === "negative") {
 
           /*
             Keep negation labels centred on the red cross even when the
-            edge is diagonal. A normal vector moves relationship and
-            qualifier perpendicular to the edge instead of simply moving
-            them up/down in screen space, which caused the diagonal drift.
+            edge is diagonal. Relationship uses one side of the edge;
+            qualifier and adjunct context use the opposite side.
           */
 
           const edgeLength = Math.max(1, Math.hypot(deltaX, deltaY));
           let normalX = -deltaY / edgeLength;
           let normalY = deltaX / edgeLength;
-
-          /*
-            Relationship always occupies the visually upper side of a
-            non-vertical edge; qualifier mirrors it on the lower side.
-          */
 
           if (normalY > 0 || (Math.abs(normalY) < 0.001 && normalX > 0)) {
             normalX *= -1;
@@ -1738,6 +1765,11 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
             negationLabelOffset;
           qualifierMarginY = -normalY *
             negationLabelOffset;
+          const adjunctOffset = hasQualifier ? 31 : negationLabelOffset;
+          adjunctMarginX = -normalX *
+            adjunctOffset;
+          adjunctMarginY = -normalY *
+            adjunctOffset;
         }
         edge.data({
           labelOrientation: isVertical ? "vertical" : "standard",
@@ -1745,6 +1777,8 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
           relationshipMarginY,
           qualifierMarginX,
           qualifierMarginY,
+          adjunctMarginX,
+          adjunctMarginY,
         });
         const qualifierAnnotation = cy.getElementById(`__edge-qualifier__${edge.id()}`);
         if (qualifierAnnotation && !qualifierAnnotation.empty()) {
@@ -1752,6 +1786,14 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
             labelOrientation: isVertical ? "vertical" : "standard",
             qualifierMarginX,
             qualifierMarginY,
+          });
+        }
+        const adjunctAnnotation = cy.getElementById(`__edge-adjunct__${edge.id()}`);
+        if (adjunctAnnotation && !adjunctAnnotation.empty()) {
+          adjunctAnnotation.data({
+            labelOrientation: isVertical ? "vertical" : "standard",
+            adjunctMarginX,
+            adjunctMarginY,
           });
         }
       });
@@ -2043,8 +2085,8 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
 
   function isEdgeAnnotationElement(element) {
     const internalType = String(element?.data?.("graphInternal") || "");
-    return (internalType === "edge-qualifier-label" || internalType === "edge-negative-mark" || internalType ===
-      "edge-prerequisite-tag");
+    return (internalType === "edge-qualifier-label" || internalType === "edge-adjunct-label" ||
+      internalType === "edge-negative-mark" || internalType === "edge-prerequisite-tag");
   }
 
   function clearEdgeAnnotationPresentation(cy = cyRef.current) {
@@ -2066,6 +2108,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
       .filter(edge => !edge.data("graphInternal"))
       .forEach(edge => {
         const qualifier = String(edge.data("qualifier") || "").trim();
+        const adjuncts = normaliseEdgeAdjuncts(edge.data("adjuncts"));
         const classification = normaliseEdgeClassification(edge.data("classification"));
         if (qualifier) {
           annotationEdges.push({
@@ -2076,6 +2119,20 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
               target: edge.target().id(),
               displayLabel: qualifier,
               graphInternal: "edge-qualifier-label",
+              semanticEdgeId: edge.id(),
+            },
+            selectable: false,
+          });
+        }
+        if (adjuncts.length > 0) {
+          annotationEdges.push({
+            group: "edges",
+            data: {
+              id: `__edge-adjunct__${edge.id()}`,
+              source: edge.source().id(),
+              target: edge.target().id(),
+              displayLabel: adjuncts.join(" · "),
+              graphInternal: "edge-adjunct-label",
               semanticEdgeId: edge.id(),
             },
             selectable: false,
@@ -2533,6 +2590,28 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
         events: "no",
       })
       .selector('edge[graphInternal = "edge-qualifier-label"][labelOrientation = "vertical"]')
+      .style({
+        "text-rotation": "none",
+      })
+      .selector('edge[graphInternal = "edge-adjunct-label"]')
+      .style({
+        width: 0.1,
+        "line-opacity": 0,
+        "target-arrow-shape": "none",
+        "source-arrow-shape": "none",
+        opacity: 1,
+        label: "data(displayLabel)",
+        color: graphTheme.adjunctLabel,
+        "text-opacity": 0.88,
+        "font-size": "9px",
+        "font-weight": "500",
+        "font-style": "italic",
+        "text-margin-x": "data(adjunctMarginX)",
+        "text-margin-y": "data(adjunctMarginY)",
+        "text-rotation": "autorotate",
+        events: "no",
+      })
+      .selector('edge[graphInternal = "edge-adjunct-label"][labelOrientation = "vertical"]')
       .style({
         "text-rotation": "none",
       })
@@ -4529,6 +4608,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
     const targetNode = edge.target();
     return {
       ...edge.data(),
+      adjuncts: normaliseEdgeAdjuncts(edge.data("adjuncts")),
       sourceLabel: sourceNode.data("label") || sourceNode.id(),
       targetLabel: targetNode.data("label") || targetNode.id(),
     };
@@ -4621,6 +4701,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
       subject: subjectLabel,
       relationship: String(propositionEdge.data("relationship") || "").trim(),
       qualifier: String(propositionEdge.data("qualifier") || "").trim(),
+      adjuncts: normaliseEdgeAdjuncts(propositionEdge.data("adjuncts")),
       object: endpointNode.data("label") || endpointNode.id(),
       edgeId: propositionEdge.id(),
     };
@@ -4753,6 +4834,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
             conditionOwnerId,
             relationship: String(edge.data("relationship") || "").trim(),
             qualifier: String(edge.data("qualifier") || "").trim(),
+            adjuncts: normaliseEdgeAdjuncts(edge.data("adjuncts")),
             classification: resolvedClassification,
             edgeRole: resolvedEdgeRole,
             conditionId,
@@ -5398,6 +5480,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
       edgeId: edge.id(),
       relationship: String(edge.data("relationship") || ""),
       qualifier: String(edge.data("qualifier") || ""),
+      adjunctsText: normaliseEdgeAdjuncts(edge.data("adjuncts")).join(", "),
       classification: normaliseEdgeClassification(edge.data("classification")),
       edgeRole: normaliseEdgeRole(edge.data("edgeRole"), edge.data("isReification") === true ||
         edge.data("reification") === true),
@@ -5413,6 +5496,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
       return;
     }
     const nextRole = normaliseEdgeRole(edgePropertiesDraft.edgeRole);
+    const nextAdjuncts = normaliseEdgeAdjuncts(edgePropertiesDraft.adjunctsText);
     edge.data({
       relationship: edgePropertiesDraft.relationship.trim(),
       qualifier: edgePropertiesDraft.qualifier.trim(),
@@ -5420,6 +5504,12 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
         : normaliseEdgeClassification(edgePropertiesDraft.classification),
       edgeRole: nextRole,
     });
+    edge.removeData("adjunct");
+    if (nextAdjuncts.length > 0) {
+      edge.data("adjuncts", nextAdjuncts);
+    } else {
+      edge.removeData("adjuncts");
+    }
     const selectedConditionId = String(edgePropertiesDraft.conditionId || "").trim();
     if (selectedConditionId && nextRole !== "standard") {
       edge.data("conditionId", selectedConditionId);
@@ -6113,11 +6203,8 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
 
         <button type="button" className="graph-toolbar-button" onClick={createManualNode} data-tooltip="Create node" aria-label="Create node">
           <span className="graph-create-action-icon">
-
             <Squircle size={18} strokeWidth={1.8} />
-
             <Plus className="graph-create-action-plus" size={9} strokeWidth={2.5} />
-
           </span>
         </button>
 
@@ -6814,16 +6901,23 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
                 {
                   key: "relationship",
                   label: "Relationship",
-                  placeholder: "allows, gains, basks on...",
+                  placeholder: "e.g. causes, contains, supports...",
                 },
                 {
                   key: "qualifier",
                   label: "Qualifier",
-                  placeholder: "without, during, when...",
+                  placeholder: "e.g. quickly, gradually, partially...",
+                },
+                {
+                  key: "adjunctsText",
+                  label: "Adjuncts",
+                  status: "Comma-separated",
+                  placeholder: "e.g. with tools, in water, at night...",
                 },
               ].map(field => (<label key={field.key} className="graph-image-control graph-property-text-control">
                 <div className="graph-image-control-heading">
                   <span>{field.label}</span>
+                  {field.status && (<span>{field.status}</span>)}
                 </div>
 
                 <input type="text" className="graph-property-input" value={edgePropertiesDraft[field.key]} placeholder={field.placeholder} onChange={(event) => setEdgePropertiesDraft(current => ({
@@ -6882,7 +6976,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
                 </div>)}
 
               <div className="graph-image-modal-hint">
-                Auto-detect resolves this edge to <strong>{edgePropertiesRoleStatus.replace("Auto-detect → ", "")}</strong> using the current graph semantics. Reification edges use the conditional colour, a thicker arrow, and a bold relationship label.
+                Qualifiers modify how the relationship occurs. Adjuncts add optional context and are stored as a list. Auto-detect resolves this edge to <strong>{edgePropertiesRoleStatus.replace("Auto-detect → ", "")}</strong> using the current graph semantics.
               </div>
 
               <div className="graph-image-modal-actions">
@@ -7014,6 +7108,11 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
                     {formatProposition(singleSelectedEdge.targetProposition)}
                   </div>
 
+                  {singleSelectedEdge.adjuncts?.length > 0 && (<div className="graph-selection-adjuncts">
+                    <span>Adjuncts:</span>
+                    <strong>{singleSelectedEdge.adjuncts.join(" · ")}</strong>
+                  </div>)}
+
                   {singleSelectedEdge.conditionLabel && (<div className="graph-selection-meta">
                     <span>Scope:</span>
 
@@ -7034,6 +7133,11 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
 
                   {singleSelectedEdge.qualifier && (<div className="graph-selection-qualifier">
                     {singleSelectedEdge.qualifier}
+                  </div>)}
+
+                  {singleSelectedEdge.adjuncts?.length > 0 && (<div className="graph-selection-adjuncts">
+                    <span>Adjuncts:</span>
+                    <strong>{singleSelectedEdge.adjuncts.join(" · ")}</strong>
                   </div>)}
 
                   {singleSelectedEdge.conditionLabel && (<div className="graph-selection-meta">

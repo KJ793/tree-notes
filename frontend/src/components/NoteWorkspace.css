@@ -3232,6 +3232,45 @@
   pointer-events: none;
 }
 
+/* Fixed icon slot so context-menu labels line up */
+.notes-context-menu-icon {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  overflow: visible;
+}
+
+/* Only size the MAIN Squircle */
+.note-workspace
+.graph-create-action-icon.notes-context-menu-icon
+> svg:first-child {
+  width: 17px;
+  height: 17px;
+}
+
+.note-workspace
+.graph-create-action-icon.notes-context-menu-icon
+.graph-create-action-plus {
+  width: 9px;
+  height: 9px;
+
+  position: absolute;
+
+  top: -4px;
+  right: -5px;
+
+  padding: 0;
+
+  background: transparent;
+
+  pointer-events: none;
+}
+
 .note-workspace
 .graph-edge-style-preview {
   display: block;
@@ -3620,6 +3659,45 @@
   font-weight: 400;
 
   line-height: 1.35;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Adjuncts are contextual edge details, so keep them visually
+   separate from the muted qualifier without competing with the
+   primary relationship label. */
+.note-workspace .graph-selection-adjuncts {
+  min-width: 0;
+
+  display: flex;
+  align-items: baseline;
+
+  gap: 4px;
+
+  overflow: hidden;
+
+  font-size: 9.5px;
+  line-height: 1.35;
+
+  white-space: nowrap;
+}
+
+.note-workspace .graph-selection-adjuncts > span {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.note-workspace .graph-selection-adjuncts > strong {
+  min-width: 0;
+
+  overflow: hidden;
+
+  color: var(--text-accent);
+
+  font-weight: 500;
+  font-style: italic;
 
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -7766,7 +7844,7 @@ span {
 }
 
 /* =========================================================
-   RELATIONSHIP / QUALIFIER INPUTS
+   RELATIONSHIP / QUALIFIER / ADJUNCT INPUTS
    ========================================================= */
 
 .note-workspace .graph-property-input {
@@ -8319,6 +8397,7 @@ span {
     Parent / owner node
     Relationship
     Qualifier
+    Adjuncts
     Classification
     Edge role
     Conditional scope

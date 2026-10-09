@@ -19,7 +19,7 @@ import {
   Link,
   Search,
   Notebook,
-  CirclePlus,
+  Squircle,
   Type,
   Highlighter,
   Unlink,
@@ -6970,10 +6970,16 @@ function applyFontSize(fontSize) {
                           handleAddSelectedTextToGraph();
                         }}
                       >
-                        <CirclePlus
-                          size={17}
-                          strokeWidth={1.8}
-                        />
+                        <span className="notes-context-menu-icon">
+                          <span className="graph-create-action-icon">
+                            <Squircle size={18} strokeWidth={1.8} />
+                            <Plus
+                              className="graph-create-action-plus"
+                              size={9}
+                              strokeWidth={2.5}
+                            />
+                          </span>
+                        </span>
 
                         <span>
                           Create as a new node
@@ -7005,10 +7011,12 @@ function applyFontSize(fontSize) {
                             toggleGraphNodeMenu();
                           }}
                         >
-                          <Link
-                            size={17}
-                            strokeWidth={1.8}
-                          />
+                          <span className="notes-context-menu-icon">
+                            <Link
+                              size={17}
+                              strokeWidth={1.8}
+                            />
+                          </span>
 
                           <span>
                             Link to existing node
