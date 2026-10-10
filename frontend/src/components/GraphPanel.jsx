@@ -98,7 +98,7 @@ const AI_PROCESSING_MOCK_STEPS = [
     step: 7,
     title: "Classify graph semantics",
     description: AI_PROCESSING_STAGE_FALLBACKS[7].description,
-    content: "Condition node: conditional, owner=Lizards\nProposition edges: standard\nALLOWS edge: reification\nNo qualifier or negative/prerequisite classification detected.",
+    content: "Condition node: conditional, owner=Lizards\nProposition edges: standard\nALLOWS edge: reification\nNo qualifier or negative/affirmative classification detected.",
   },
 ];
 const SHOW_AI_PROCESSING_MOCK = true;
@@ -350,12 +350,23 @@ function normaliseEdgeClassification(value) {
     return "negative";
   }
   if ([
+    "affirmative",
+    "affirmation",
+    "positive",
+    "asserted",
+
+    /*
+      Backwards compatibility for graphs saved while TreeNotes still used
+      the old prerequisite classification. Those edges now migrate into the
+      affirmative presentation instead of becoming an unknown class.
+    */
+
     "prerequisite",
     "pre-requisite",
     "prereq",
     "requirement",
   ].includes(cleanValue)) {
-    return "prerequisite";
+    return "affirmative";
   }
   return cleanValue;
 }
@@ -907,6 +918,8 @@ function getGraphThemeTokens() {
     edgeArrow: getThemeToken("--graph-edge-arrow", "#7772ff"),
     edgeLabel: getThemeToken("--graph-edge-label", "#cbd5e1"),
     adjunctLabel: getThemeToken("--text-accent", "#aaa6ff"),
+    negativeMark: getThemeToken("--status-error", "#ef4444"),
+    affirmativeMark: getThemeToken("--status-success", "#22c55e"),
   };
 }
 
@@ -1688,21 +1701,91 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
     return context.measureText(cleanText).width / 2;
   }
 
+  function getEdgeCrowdingLaneMap(cy = cyRef.current) {
+    const laneMap = new Map();
+    if (!cy) {
+      return laneMap;
+    }
+
+    /*
+      Edge labels are painted at the midpoint of their edges. Around a busy
+      node several similarly angled edges can therefore place relationship,
+      qualifier and adjunct text into almost the same little corridor.
+
+      Detect those small angular bundles and give neighbouring edges slightly
+      different label lanes. This changes presentation only, never topology.
+    */
+
+    cy.nodes()
+      .filter(node => node.visible() && !node.data("graphInternal"))
+      .forEach(node => {
+        const nodePosition = node.position();
+        const incident = node.connectedEdges()
+          .filter(edge => edge.visible() && !edge.data("graphInternal"))
+          .toArray()
+          .map(edge => {
+            const other = edge.source().id() === node.id() ? edge.target() : edge.source();
+            const otherPosition = other.position();
+            return {
+              edge,
+              angle: Math.atan2(
+                otherPosition.y - nodePosition.y,
+                otherPosition.x - nodePosition.x
+              ),
+            };
+          })
+          .sort((first, second) => first.angle - second.angle);
+
+        if (incident.length < 2) {
+          return;
+        }
+
+        const groups = [];
+        let currentGroup = [incident[0]];
+        const angularThreshold = 0.34; // about 19 degrees
+
+        for (let index = 1; index < incident.length; index += 1) {
+          if (incident[index].angle - incident[index - 1].angle <= angularThreshold) {
+            currentGroup.push(incident[index]);
+          } else {
+            groups.push(currentGroup);
+            currentGroup = [incident[index]];
+          }
+        }
+        groups.push(currentGroup);
+
+        groups.forEach(group => {
+          if (group.length < 2) {
+            return;
+          }
+
+          group.forEach((item, index) => {
+            const currentLane = laneMap.get(item.edge.id()) || 0;
+            laneMap.set(item.edge.id(), Math.max(currentLane, index));
+          });
+        });
+      });
+
+    return laneMap;
+  }
+
   function syncEdgeLabelGeometry(cy = cyRef.current) {
     if (!cy) {
       return;
     }
+
+    const crowdingLaneMap = getEdgeCrowdingLaneMap(cy);
+
     cy.edges()
       .filter(edge => !edge.data("graphInternal"))
       .forEach(edge => {
         const sourcePosition = edge.source().position();
         const targetPosition = edge.target().position();
-        const deltaX = targetPosition.x -
-          sourcePosition.x;
-        const deltaY = targetPosition.y -
-          sourcePosition.y;
+        const deltaX = targetPosition.x - sourcePosition.x;
+        const deltaY = targetPosition.y - sourcePosition.y;
         const absX = Math.abs(deltaX);
         const absY = Math.abs(deltaY);
+        const edgeLength = Math.max(1, Math.hypot(deltaX, deltaY));
         const isVertical = absY > 30 && absX <= Math.max(24, absY * 0.18);
         const classification = normaliseEdgeClassification(edge.data("classification"));
         const relationship = String(edge.data("displayLabel") || edge.data("relationship") || "");
@@ -1710,6 +1793,8 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
         const adjunctText = normaliseEdgeAdjuncts(edge.data("adjuncts")).join(" · ");
         const hasQualifier = Boolean(qualifier.trim());
         const hasAdjuncts = Boolean(adjunctText);
+        const crowdLane = crowdingLaneMap.get(edge.id()) || 0;
+        const crowdExtra = crowdLane * 11;
         let relationshipMarginX = 0;
         let relationshipMarginY = -11;
         let qualifierMarginX = 0;
@@ -1717,38 +1802,30 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
         let adjunctMarginX = 0;
         let adjunctMarginY = hasQualifier ? 24 : 11;
 
-        if (classification === "prerequisite") {
-          relationshipMarginX = 0;
-          relationshipMarginY = 0;
-          qualifierMarginY = 18;
-          adjunctMarginY = hasQualifier ? 31 : 18;
-        } else if (isVertical) {
-
+        if (isVertical) {
           /*
-            Keep vertical relationships horizontally readable. The
-            relationship lives to the left. Qualifier and adjunct context
-            share the right-hand side as two compact lines when both exist.
+            Keep vertical relationships horizontal. Busy neighbouring vertical
+            edges progressively move their annotation lanes farther from the
+            line rather than painting all text into the same strip.
           */
 
-          relationshipMarginX = -(measureEdgeLabelHalfWidth(relationship, 12) + 14);
+          relationshipMarginX = -(measureEdgeLabelHalfWidth(relationship, 12) + 14 + crowdExtra);
           const contextHalfWidth = Math.max(
             measureEdgeLabelHalfWidth(qualifier, 9),
             measureEdgeLabelHalfWidth(adjunctText, 9)
           );
-          qualifierMarginX = contextHalfWidth + 14;
-          adjunctMarginX = contextHalfWidth + 14;
+          qualifierMarginX = contextHalfWidth + 14 + crowdExtra;
+          adjunctMarginX = contextHalfWidth + 14 + crowdExtra;
           relationshipMarginY = 0;
           qualifierMarginY = hasQualifier && hasAdjuncts ? -7 : 0;
           adjunctMarginY = hasQualifier && hasAdjuncts ? 7 : 0;
-        } else if (classification === "negative") {
-
+        } else {
           /*
-            Keep negation labels centred on the red cross even when the
-            edge is diagonal. Relationship uses one side of the edge;
-            qualifier and adjunct context use the opposite side.
+            Use the edge normal for every diagonal/horizontal label. This keeps
+            the three semantic text lanes parallel to the edge and makes the
+            crowding offset work regardless of the edge's angle.
           */
 
-          const edgeLength = Math.max(1, Math.hypot(deltaX, deltaY));
           let normalX = -deltaY / edgeLength;
           let normalY = deltaX / edgeLength;
 
@@ -1756,21 +1833,31 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
             normalX *= -1;
             normalY *= -1;
           }
-          const negationLabelOffset = 19;
-          relationshipMarginX = normalX *
-            negationLabelOffset;
-          relationshipMarginY = normalY *
-            negationLabelOffset;
-          qualifierMarginX = -normalX *
-            negationLabelOffset;
-          qualifierMarginY = -normalY *
-            negationLabelOffset;
-          const adjunctOffset = hasQualifier ? 31 : negationLabelOffset;
-          adjunctMarginX = -normalX *
-            adjunctOffset;
-          adjunctMarginY = -normalY *
-            adjunctOffset;
+
+          const classified = classification === "negative" || classification === "affirmative";
+          const relationshipOffset = (classified ? 19 : 14) + crowdExtra;
+          const contextOffset = (classified ? 19 : 14) + crowdExtra;
+          const adjunctOffset = contextOffset + (hasQualifier ? 12 : 0);
+
+          relationshipMarginX = normalX * relationshipOffset;
+          relationshipMarginY = normalY * relationshipOffset;
+          qualifierMarginX = -normalX * contextOffset;
+          qualifierMarginY = -normalY * contextOffset;
+          adjunctMarginX = -normalX * adjunctOffset;
+          adjunctMarginY = -normalY * adjunctOffset;
         }
+
+        /*
+          Edge text stays in fixed semantic lanes.  Earlier builds attempted
+          to resolve label collisions by repeatedly shifting individual labels
+          after layout.  That made large graphs visibly "chase" their labels
+          and made node dragging expensive.  Layout now creates the whitespace
+          by moving nodes once, so stale presentation shifts are discarded.
+        */
+
+        edge.removeData("labelCollisionShiftX");
+        edge.removeData("labelCollisionShiftY");
+
         edge.data({
           labelOrientation: isVertical ? "vertical" : "standard",
           relationshipMarginX,
@@ -1780,6 +1867,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
           adjunctMarginX,
           adjunctMarginY,
         });
+
         const qualifierAnnotation = cy.getElementById(`__edge-qualifier__${edge.id()}`);
         if (qualifierAnnotation && !qualifierAnnotation.empty()) {
           qualifierAnnotation.data({
@@ -1788,6 +1876,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
             qualifierMarginY,
           });
         }
+
         const adjunctAnnotation = cy.getElementById(`__edge-adjunct__${edge.id()}`);
         if (adjunctAnnotation && !adjunctAnnotation.empty()) {
           adjunctAnnotation.data({
@@ -1836,18 +1925,379 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
       .sort((first, second) => first.id().localeCompare(second.id()));
   }
 
-  function positionSemanticOwnerGroup(ownerNode, cy = cyRef.current) {
+  function getConditionLocalChildNodes(conditionNode) {
+    if (!conditionNode || conditionNode.empty()) {
+      return [];
+    }
+
+    const cy = conditionNode.cy();
+    const conditionId = conditionNode.id();
+    const localChildren = [];
+
+    /*
+      A child can travel with its conditional node only when every semantic
+      edge touching that child belongs to the same conditional scope.
+
+      This keeps a private branch such as:
+
+        When heavy rain falls -> Floodwater -> Flood Risk
+
+      together when the condition is moved next to Wetlands, while a shared
+      node such as Fish can stay anchored to the wider graph if Pond -> Fish
+      also exists outside the drought condition.
+    */
+
+    getConditionChildIds(conditionNode).forEach(childId => {
+      const childNode = cy.getElementById(childId);
+      if (!childNode || childNode.empty()) {
+        return;
+      }
+
+      if (normaliseNodeType(childNode.data("nodeType"), childNode.data("conditionOwnerId")) === "conditional") {
+        return;
+      }
+
+      const semanticEdges = childNode
+        .connectedEdges()
+        .filter(edge => !edge.data("graphInternal"));
+
+      if (semanticEdges.empty()) {
+        return;
+      }
+
+      const belongsOnlyToCondition = semanticEdges.every(edge => {
+        const sourceId = edge.source().id();
+        const targetId = edge.target().id();
+        const directConditionEdge = sourceId === conditionId || targetId === conditionId;
+        const edgeConditionId = String(edge.data("conditionId") || "").trim();
+        return directConditionEdge || edgeConditionId === conditionId;
+      });
+
+      if (belongsOnlyToCondition) {
+        localChildren.push(childNode);
+      }
+    });
+
+    return localChildren;
+  }
+
+  function orientation2d(a, b, c) {
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  }
+
+  function segmentsProperlyIntersect(a, b, c, d) {
+    const o1 = orientation2d(a, b, c);
+    const o2 = orientation2d(a, b, d);
+    const o3 = orientation2d(c, d, a);
+    const o4 = orientation2d(c, d, b);
+    const epsilon = 0.0001;
+
+    /*
+      Count genuine X-style crossings only. Shared endpoints and almost-collinear
+      overlaps are handled by the label-lane pass instead of being treated as
+      topological crossings.
+    */
+
+    return (o1 * o2 < -epsilon) && (o3 * o4 < -epsilon);
+  }
+
+  function getSemanticEdgeSegments(cy = cyRef.current, excludedEdgeIds = new Set()) {
+    if (!cy) {
+      return [];
+    }
+
+    return cy.edges()
+      .filter(edge => edge.visible() && !edge.data("graphInternal") && !excludedEdgeIds.has(edge.id()))
+      .toArray()
+      .map(edge => ({
+        edge,
+        sourceId: edge.source().id(),
+        targetId: edge.target().id(),
+        source: { ...edge.source().position() },
+        target: { ...edge.target().position() },
+      }));
+  }
+
+  function chooseConditionAutoSlot(ownerNode, conditionNode, usedSlotIndexes, fallbackIndex = 0, cy = cyRef.current) {
+    if (!ownerNode || ownerNode.empty() || !conditionNode || conditionNode.empty()) {
+      return fallbackIndex % CONDITION_AUTO_PLACEMENT_SLOTS.length;
+    }
+
+    const ownerPosition = ownerNode.position();
+    const conditionPosition = conditionNode.position();
+    const dx = conditionPosition.x - ownerPosition.x;
+    const dy = conditionPosition.y - ownerPosition.y;
+    const distance = Math.hypot(dx, dy);
+    const naturalDirection = distance > 1
+      ? { x: dx / distance, y: dy / distance }
+      : null;
+
+    const ownerWidth = Number(ownerNode.outerWidth()) || 110;
+    const ownerHeight = Number(ownerNode.outerHeight()) || 52;
+    const conditionWidth = Number(conditionNode.outerWidth()) || 110;
+    const conditionHeight = Number(conditionNode.outerHeight()) || 52;
+    const horizontalRadius = ownerWidth / 2 + conditionWidth / 2 + 76;
+    const verticalRadius = ownerHeight / 2 + conditionHeight / 2 + 68;
+
+    /*
+      CoSE gives us a useful first hint, but a condition also needs an empty
+      *edge corridor*.  A geometrically empty slot can still be a terrible slot
+      when it points directly through one of the owner's normal branches or
+      makes a shared child receive two nearly coincident edges.
+
+      Score every unused compass slot using:
+        - CoSE's natural direction
+        - nearby node clearance
+        - owner's existing edge directions
+        - projected crossings to shared condition children
+        - near-collinearity with owner -> shared-child edges
+    */
+
+    const otherNodes = cy
+      ? cy.nodes()
+          .filter(node => node.visible() && !node.data("graphInternal") &&
+            node.id() !== ownerNode.id() && node.id() !== conditionNode.id())
+          .toArray()
+      : [];
+
+    const conditionEdgeIds = new Set();
+    getConditionPropositionEdges(conditionNode).forEach(edge => conditionEdgeIds.add(edge.id()));
+    if (cy) {
+      cy.edges()
+        .filter(edge => !edge.data("graphInternal") &&
+          String(edge.data("conditionId") || "").trim() === conditionNode.id())
+        .forEach(edge => conditionEdgeIds.add(edge.id()));
+    }
+
+    const externalSegments = getSemanticEdgeSegments(cy, conditionEdgeIds);
+    const localChildIds = new Set(getConditionLocalChildNodes(conditionNode).map(node => node.id()));
+    const sharedChildren = Array.from(getConditionChildIds(conditionNode))
+      .filter(childId => !localChildIds.has(childId))
+      .map(childId => cy?.getElementById(childId))
+      .filter(childNode => childNode && !childNode.empty());
+
+    const ownerIncidentDirections = ownerNode.connectedEdges()
+      .filter(edge => edge.visible() && !edge.data("graphInternal") && !conditionEdgeIds.has(edge.id()))
+      .toArray()
+      .map(edge => {
+        const otherNode = edge.source().id() === ownerNode.id() ? edge.target() : edge.source();
+        const otherPosition = otherNode.position();
+        const edgeDx = otherPosition.x - ownerPosition.x;
+        const edgeDy = otherPosition.y - ownerPosition.y;
+        const edgeLength = Math.hypot(edgeDx, edgeDy);
+        if (edgeLength < 1) {
+          return null;
+        }
+        return {
+          x: edgeDx / edgeLength,
+          y: edgeDy / edgeLength,
+          otherId: otherNode.id(),
+        };
+      })
+      .filter(Boolean);
+
+    let bestIndex = -1;
+    let bestScore = -Infinity;
+
+    CONDITION_AUTO_PLACEMENT_SLOTS.forEach((slot, slotIndex) => {
+      if (usedSlotIndexes.has(slotIndex)) {
+        return;
+      }
+
+      const slotLength = Math.hypot(slot.x, slot.y) || 1;
+      const slotX = slot.x / slotLength;
+      const slotY = slot.y / slotLength;
+      const probeX = ownerPosition.x + slot.x * horizontalRadius;
+      const probeY = ownerPosition.y + slot.y * verticalRadius;
+      const probePosition = { x: probeX, y: probeY };
+      let score = 0;
+
+      if (naturalDirection) {
+        score += (naturalDirection.x * slotX + naturalDirection.y * slotY) * 0.7;
+      }
+
+      let nearestClearance = Infinity;
+      let localCrowding = 0;
+
+      otherNodes.forEach(otherNode => {
+        const otherPosition = otherNode.position();
+        const clearance = Math.hypot(otherPosition.x - probeX, otherPosition.y - probeY);
+        nearestClearance = Math.min(nearestClearance, clearance);
+
+        if (clearance < 390) {
+          localCrowding += (390 - clearance) / 390;
+        }
+      });
+
+      if (Number.isFinite(nearestClearance)) {
+        score += Math.min(1.8, nearestClearance / 240) * 0.9;
+      }
+      score -= localCrowding * 0.68;
+
+      /*
+        Keep automatic conditions out of the same angular corridor already used
+        by ordinary owner edges.  This directly prevents cases such as the
+        predator branch being laid on top of Beavers' direct graph links.
+      */
+
+      ownerIncidentDirections.forEach(direction => {
+        const alignment = direction.x * slotX + direction.y * slotY;
+        if (alignment > 0.2) {
+          const normalised = (alignment - 0.2) / 0.8;
+          score -= normalised * normalised * 4.8;
+        }
+      });
+
+      sharedChildren.forEach(childNode => {
+        const childPosition = childNode.position();
+
+        /*
+          If the owner and condition both point to the same shared target, keep
+          those two edges visibly separated at the target instead of stacking
+          them into one text corridor.
+        */
+
+        const ownerChildDx = ownerPosition.x - childPosition.x;
+        const ownerChildDy = ownerPosition.y - childPosition.y;
+        const conditionChildDx = probeX - childPosition.x;
+        const conditionChildDy = probeY - childPosition.y;
+        const ownerChildLength = Math.hypot(ownerChildDx, ownerChildDy);
+        const conditionChildLength = Math.hypot(conditionChildDx, conditionChildDy);
+
+        if (ownerChildLength > 1 && conditionChildLength > 1) {
+          const alignment = (ownerChildDx * conditionChildDx + ownerChildDy * conditionChildDy) /
+            (ownerChildLength * conditionChildLength);
+          if (alignment > 0.48) {
+            const normalised = (alignment - 0.48) / 0.52;
+            score -= normalised * normalised * 6.2;
+          }
+        }
+
+        externalSegments.forEach(segment => {
+          if (segment.sourceId === childNode.id() || segment.targetId === childNode.id()) {
+            return;
+          }
+          if (segmentsProperlyIntersect(
+            probePosition,
+            childPosition,
+            segment.source,
+            segment.target
+          )) {
+            score -= 7.2;
+          }
+        });
+      });
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = slotIndex;
+      }
+    });
+
+    if (bestIndex >= 0) {
+      return bestIndex;
+    }
+
+    for (let offset = 0; offset < CONDITION_AUTO_PLACEMENT_SLOTS.length; offset += 1) {
+      const candidate = (fallbackIndex + offset) % CONDITION_AUTO_PLACEMENT_SLOTS.length;
+      if (!usedSlotIndexes.has(candidate)) {
+        return candidate;
+      }
+    }
+
+    return fallbackIndex % CONDITION_AUTO_PLACEMENT_SLOTS.length;
+  }
+
+
+  function arrangeConditionLocalBranch(conditionNode, ownerNode, cy = cyRef.current) {
+    if (!cy || !conditionNode || conditionNode.empty() || !ownerNode || ownerNode.empty()) {
+      return;
+    }
+
+    const localChildren = getConditionLocalChildNodes(conditionNode)
+      .sort((first, second) => first.id().localeCompare(second.id()));
+
+    if (localChildren.length === 0) {
+      return;
+    }
+
+    const ownerPosition = ownerNode.position();
+    const conditionPosition = conditionNode.position();
+    let radialX = conditionPosition.x - ownerPosition.x;
+    let radialY = conditionPosition.y - ownerPosition.y;
+    let radialLength = Math.hypot(radialX, radialY);
+
+    if (radialLength < 1) {
+      radialX = 1;
+      radialY = 0;
+      radialLength = 1;
+    }
+
+    const baseAngle = Math.atan2(radialY / radialLength, radialX / radialLength);
+
+    /*
+      Fan condition-private children away from the semantic owner. Translating
+      the whole old CoSE branch preserved its shape, but it could preserve a
+      bad shape too, including children sitting directly on top of the owner.
+
+      A radial fan gives the condition a small readable local hierarchy:
+
+          owner -> condition -> private child nodes
+
+      Shared children are deliberately excluded by getConditionLocalChildNodes.
+    */
+
+    const childCount = localChildren.length;
+
+    /*
+      Reserve angular whitespace for edge annotations as well as the nodes.
+      Three or four outcomes need a visibly wider fan than two short spokes,
+      otherwise the relationship / qualifier / adjunct lanes converge around
+      the conditional node even when the child nodes themselves do not overlap.
+    */
+
+    const totalSpread = childCount <= 1
+      ? 0
+      : Math.min(2.15, 0.72 * (childCount - 1));
+
+    localChildren.forEach((childNode, childIndex) => {
+      const propositionEdge = findConditionPropositionEdge(conditionNode, childNode.id());
+      const edgeDistance = propositionEdge ? getLayoutIdealEdgeLength(propositionEdge) : 240;
+      const ring = Math.floor(childIndex / 4);
+      const distance = Math.max(255, edgeDistance + 36 + ring * 90);
+      const angleOffset = childCount <= 1
+        ? 0
+        : -totalSpread / 2 + totalSpread * (childIndex / (childCount - 1));
+      const angle = baseAngle + angleOffset;
+
+      childNode.position({
+        x: conditionPosition.x + Math.cos(angle) * distance,
+        y: conditionPosition.y + Math.sin(angle) * distance,
+      });
+    });
+  }
+
+  function positionSemanticOwnerGroup(ownerNode, cy = cyRef.current, {
+    arrangeLocalChildren = false,
+  } = {}) {
     if (!cy || !ownerNode || ownerNode.empty()) {
       return;
     }
+
     const conditions = getConditionsForOwner(ownerNode.id(), cy);
     if (conditions.length === 0) {
       return;
     }
+
     const ownerPosition = ownerNode.position();
     const ownerWidth = Number(ownerNode.outerWidth()) || 110;
     const ownerHeight = Number(ownerNode.outerHeight()) || 52;
+    const usedSlotIndexes = new Set();
+
     conditions.forEach((conditionNode, index) => {
+      const previousPosition = {
+        ...conditionNode.position(),
+      };
       const savedOffsetX = Number(conditionNode.data("conditionOffsetX"));
       const savedOffsetY = Number(conditionNode.data("conditionOffsetY"));
       const placementMode = String(conditionNode.data("conditionPlacement") || "auto").toLowerCase();
@@ -1857,8 +2307,6 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
 
       /*
         A manually dragged conditional keeps its exact relative offset.
-        This lets users nudge conditions around the owner while the whole
-        cluster can still move as one semantic compound.
       */
 
       if (placementMode === "manual" && hasSavedOffset) {
@@ -1867,36 +2315,42 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
       } else {
         const conditionWidth = Number(conditionNode.outerWidth()) || 110;
         const conditionHeight = Number(conditionNode.outerHeight()) || 52;
-        const slot = CONDITION_AUTO_PLACEMENT_SLOTS[index %
-          CONDITION_AUTO_PLACEMENT_SLOTS.length];
-        const ring = Math.floor(index /
-          CONDITION_AUTO_PLACEMENT_SLOTS.length);
-        const horizontalRadius = ownerWidth / 2 +
-          conditionWidth / 2 +
-          38 +
-          ring * 140;
-        const verticalRadius = ownerHeight / 2 +
-          conditionHeight / 2 +
-          34 +
-          ring * 100;
+        const slotIndex = chooseConditionAutoSlot(ownerNode, conditionNode, usedSlotIndexes, index, cy);
+        const slot = CONDITION_AUTO_PLACEMENT_SLOTS[slotIndex];
+        usedSlotIndexes.add(slotIndex);
+
+        const ring = Math.floor(index / CONDITION_AUTO_PLACEMENT_SLOTS.length);
+
+        /*
+          Leave enough breathing room for owner/condition labels, but keep the
+          condition close enough that the visual ownership remains obvious.
+        */
+
+        const horizontalRadius = ownerWidth / 2 + conditionWidth / 2 + 76 + ring * 145;
+        const verticalRadius = ownerHeight / 2 + conditionHeight / 2 + 68 + ring * 110;
         offsetX = slot.x * horizontalRadius;
         offsetY = slot.y * verticalRadius;
+
         conditionNode.data({
           conditionPlacement: "auto",
           conditionOffsetX: offsetX,
           conditionOffsetY: offsetY,
         });
       }
-      conditionNode.position({
-        x: ownerPosition.x +
-          offsetX,
-        y: ownerPosition.y +
-          offsetY,
-      });
+
+      const nextPosition = {
+        x: ownerPosition.x + offsetX,
+        y: ownerPosition.y + offsetY,
+      };
+      conditionNode.position(nextPosition);
+
+      if (arrangeLocalChildren) {
+        arrangeConditionLocalBranch(conditionNode, ownerNode, cy);
+      }
     });
   }
 
-  function positionAllSemanticOwnerGroups(cy = cyRef.current) {
+  function positionAllSemanticOwnerGroups(cy = cyRef.current, options = {}) {
     if (!cy) {
       return;
     }
@@ -1911,7 +2365,680 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
         return;
       }
       positionedOwnerIds.add(ownerId);
-      positionSemanticOwnerGroup(ownerNode, cy);
+      positionSemanticOwnerGroup(ownerNode, cy, options);
+    });
+  }
+
+
+  function getSemanticOwnerClusters(cy = cyRef.current) {
+    if (!cy) {
+      return [];
+    }
+
+    const ownerIds = new Set();
+    getConditionalNodes(cy).forEach(conditionNode => {
+      const ownerId = String(conditionNode.data("conditionOwnerId") || "").trim();
+      if (ownerId) {
+        ownerIds.add(ownerId);
+      }
+    });
+
+    return Array.from(ownerIds)
+      .map(ownerId => {
+        const ownerNode = cy.getElementById(ownerId);
+        if (!ownerNode || ownerNode.empty()) {
+          return null;
+        }
+
+        const memberMap = new Map([[ownerNode.id(), ownerNode]]);
+        getConditionsForOwner(ownerId, cy).forEach(conditionNode => {
+          memberMap.set(conditionNode.id(), conditionNode);
+
+          getConditionLocalChildNodes(conditionNode).forEach(childNode => {
+            /*
+              A semantic node that owns its own conditions is the anchor of
+              another cluster. Do not let two cluster translations fight over it.
+            */
+            if (ownerIds.has(childNode.id()) && childNode.id() !== ownerId) {
+              return;
+            }
+            memberMap.set(childNode.id(), childNode);
+          });
+        });
+
+        return {
+          owner: ownerNode,
+          members: Array.from(memberMap.values()),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function getSemanticClusterBounds(cluster, padding = 0) {
+    if (!cluster?.members?.length) {
+      return null;
+    }
+
+    let x1 = Infinity;
+    let y1 = Infinity;
+    let x2 = -Infinity;
+    let y2 = -Infinity;
+
+    cluster.members.forEach(node => {
+      if (!node || node.empty() || node.removed()) {
+        return;
+      }
+
+      const position = node.position();
+      const halfWidth = (Number(node.outerWidth()) || 110) / 2;
+      const halfHeight = (Number(node.outerHeight()) || 52) / 2;
+      x1 = Math.min(x1, position.x - halfWidth);
+      y1 = Math.min(y1, position.y - halfHeight);
+      x2 = Math.max(x2, position.x + halfWidth);
+      y2 = Math.max(y2, position.y + halfHeight);
+    });
+
+    if (!Number.isFinite(x1)) {
+      return null;
+    }
+
+    return {
+      x1: x1 - padding,
+      y1: y1 - padding,
+      x2: x2 + padding,
+      y2: y2 + padding,
+      width: x2 - x1 + padding * 2,
+      height: y2 - y1 + padding * 2,
+    };
+  }
+
+  function translateSemanticCluster(cluster, deltaX, deltaY) {
+    if (!cluster?.members?.length || (!deltaX && !deltaY)) {
+      return;
+    }
+
+    cluster.members.forEach(node => {
+      if (!node || node.empty() || node.removed()) {
+        return;
+      }
+      const position = node.position();
+      node.position({
+        x: position.x + deltaX,
+        y: position.y + deltaY,
+      });
+    });
+  }
+
+  function separateSemanticOwnerClusters(cy = cyRef.current, {
+    padding = 105,
+    iterations = 18,
+  } = {}) {
+    if (!cy) {
+      return;
+    }
+
+    const clusters = getSemanticOwnerClusters(cy);
+    if (clusters.length < 2) {
+      return;
+    }
+
+    /*
+      CoSE lays out individual nodes. TreeNotes then deliberately turns each
+      condition into a small owner-centred mini graph. The missing piece was a
+      second level of layout for those mini graphs themselves.
+
+      Treat each owner + conditions + private condition children as one movable
+      island and separate overlapping island envelopes. Internal geometry stays
+      intact, so readable condition fans do not get torn apart again.
+    */
+
+    for (let pass = 0; pass < iterations; pass += 1) {
+      let moved = false;
+
+      for (let firstIndex = 0; firstIndex < clusters.length; firstIndex += 1) {
+        for (let secondIndex = firstIndex + 1; secondIndex < clusters.length; secondIndex += 1) {
+          const firstCluster = clusters[firstIndex];
+          const secondCluster = clusters[secondIndex];
+          const firstBounds = getSemanticClusterBounds(firstCluster, padding);
+          const secondBounds = getSemanticClusterBounds(secondCluster, padding);
+
+          if (!firstBounds || !secondBounds) {
+            continue;
+          }
+
+          const overlapX = Math.min(firstBounds.x2, secondBounds.x2) -
+            Math.max(firstBounds.x1, secondBounds.x1);
+          const overlapY = Math.min(firstBounds.y2, secondBounds.y2) -
+            Math.max(firstBounds.y1, secondBounds.y1);
+
+          if (overlapX <= 0 || overlapY <= 0) {
+            continue;
+          }
+
+          moved = true;
+          const firstOwnerPosition = firstCluster.owner.position();
+          const secondOwnerPosition = secondCluster.owner.position();
+
+          if (overlapX <= overlapY) {
+            let direction = secondOwnerPosition.x >= firstOwnerPosition.x ? 1 : -1;
+            if (Math.abs(secondOwnerPosition.x - firstOwnerPosition.x) < 1) {
+              direction = secondIndex % 2 === 0 ? 1 : -1;
+            }
+            const push = overlapX / 2 + 12;
+            translateSemanticCluster(firstCluster, -direction * push, 0);
+            translateSemanticCluster(secondCluster, direction * push, 0);
+          } else {
+            let direction = secondOwnerPosition.y >= firstOwnerPosition.y ? 1 : -1;
+            if (Math.abs(secondOwnerPosition.y - firstOwnerPosition.y) < 1) {
+              direction = secondIndex % 2 === 0 ? 1 : -1;
+            }
+            const push = overlapY / 2 + 12;
+            translateSemanticCluster(firstCluster, 0, -direction * push);
+            translateSemanticCluster(secondCluster, 0, direction * push);
+          }
+        }
+      }
+
+      if (!moved) {
+        break;
+      }
+    }
+  }
+
+
+  function getConditionReservationBounds(conditionNode, padding = 58) {
+    if (!conditionNode || conditionNode.empty()) {
+      return null;
+    }
+
+    const members = [conditionNode, ...getConditionLocalChildNodes(conditionNode)];
+    let x1 = Infinity;
+    let y1 = Infinity;
+    let x2 = -Infinity;
+    let y2 = -Infinity;
+
+    members.forEach(node => {
+      if (!node || node.empty() || node.removed()) {
+        return;
+      }
+
+      const position = node.position();
+      const halfWidth = (Number(node.outerWidth()) || 110) / 2;
+      const halfHeight = (Number(node.outerHeight()) || 52) / 2;
+      x1 = Math.min(x1, position.x - halfWidth);
+      y1 = Math.min(y1, position.y - halfHeight);
+      x2 = Math.max(x2, position.x + halfWidth);
+      y2 = Math.max(y2, position.y + halfHeight);
+    });
+
+    if (!Number.isFinite(x1)) {
+      return null;
+    }
+
+    return {
+      x1: x1 - padding,
+      y1: y1 - padding,
+      x2: x2 + padding,
+      y2: y2 + padding,
+    };
+  }
+
+  function separateForeignNodesFromConditionReservations(cy = cyRef.current, {
+    padding = 64,
+    iterations = 7,
+  } = {}) {
+    if (!cy) {
+      return;
+    }
+
+    const conditions = getConditionalNodes(cy).toArray();
+    if (conditions.length === 0) {
+      return;
+    }
+
+    /*
+      A conditional branch needs whitespace of its own, not merely non-overlap
+      between the visible node rectangles.  Direct branches from a neighbouring
+      semantic owner used to be allowed to drift through the empty middle of a
+      condition + private-child group because that space contained no node for
+      the ordinary overlap resolver to collide with.
+
+      Reserve that local branch envelope and gently evict unrelated nodes.  The
+      condition owner and every proposition target of the condition are exempt,
+      so legitimate shared-target triangles remain possible.
+    */
+
+    for (let pass = 0; pass < iterations; pass += 1) {
+      let moved = false;
+
+      conditions.forEach(conditionNode => {
+        const bounds = getConditionReservationBounds(conditionNode, padding);
+        if (!bounds) {
+          return;
+        }
+
+        const protectedIds = new Set([
+          conditionNode.id(),
+          String(conditionNode.data("conditionOwnerId") || "").trim(),
+          ...Array.from(getConditionChildIds(conditionNode)),
+          ...getConditionLocalChildNodes(conditionNode).map(node => node.id()),
+        ].filter(Boolean));
+
+        cy.nodes()
+          .filter(node => node.visible() && !node.data("graphInternal") && !protectedIds.has(node.id()))
+          .forEach(node => {
+            if (normaliseNodeType(node.data("nodeType"), node.data("conditionOwnerId")) === "conditional") {
+              return;
+            }
+
+            const position = node.position();
+            const halfWidth = (Number(node.outerWidth()) || 110) / 2;
+            const halfHeight = (Number(node.outerHeight()) || 52) / 2;
+            const nodeBounds = {
+              x1: position.x - halfWidth,
+              y1: position.y - halfHeight,
+              x2: position.x + halfWidth,
+              y2: position.y + halfHeight,
+            };
+
+            const overlapX = Math.min(nodeBounds.x2, bounds.x2) - Math.max(nodeBounds.x1, bounds.x1);
+            const overlapY = Math.min(nodeBounds.y2, bounds.y2) - Math.max(nodeBounds.y1, bounds.y1);
+            if (overlapX <= 0 || overlapY <= 0) {
+              return;
+            }
+
+            const escapePadding = 16;
+            const candidates = [
+              { dx: bounds.x1 - nodeBounds.x2 - escapePadding, dy: 0 },
+              { dx: bounds.x2 - nodeBounds.x1 + escapePadding, dy: 0 },
+              { dx: 0, dy: bounds.y1 - nodeBounds.y2 - escapePadding },
+              { dx: 0, dy: bounds.y2 - nodeBounds.y1 + escapePadding },
+            ].sort((first, second) =>
+              Math.hypot(first.dx, first.dy) - Math.hypot(second.dx, second.dy));
+
+            const escape = candidates[0];
+            if (!escape) {
+              return;
+            }
+
+            node.position({
+              x: position.x + escape.dx,
+              y: position.y + escape.dy,
+            });
+            moved = true;
+          });
+      });
+
+      if (!moved) {
+        break;
+      }
+    }
+  }
+
+  function normaliseAngleRadians(angle) {
+    let value = angle;
+    while (value <= -Math.PI) {
+      value += Math.PI * 2;
+    }
+    while (value > Math.PI) {
+      value -= Math.PI * 2;
+    }
+    return value;
+  }
+
+  function angularDistanceRadians(first, second) {
+    return Math.abs(normaliseAngleRadians(first - second));
+  }
+
+  function getSimpleDirectBranchNodes(ownerNode, rootNode, cy = cyRef.current) {
+    if (!cy || !ownerNode || ownerNode.empty() || !rootNode || rootNode.empty()) {
+      return [];
+    }
+
+    const branch = [];
+    const visited = new Set([ownerNode.id()]);
+    const queue = [rootNode];
+
+    while (queue.length > 0 && branch.length < 10) {
+      const node = queue.shift();
+      if (!node || node.empty() || visited.has(node.id())) {
+        continue;
+      }
+
+      visited.add(node.id());
+      branch.push(node);
+
+      node.connectedEdges()
+        .filter(edge => edge.visible() && !edge.data("graphInternal"))
+        .forEach(edge => {
+          const other = edge.source().id() === node.id() ? edge.target() : edge.source();
+          if (!other || other.empty() || visited.has(other.id()) || other.id() === ownerNode.id()) {
+            return;
+          }
+
+          if (normaliseNodeType(other.data("nodeType"), other.data("conditionOwnerId")) === "conditional") {
+            return;
+          }
+
+          if (getConditionsForOwner(other.id(), cy).length > 0) {
+            return;
+          }
+
+          /*
+            Translate only light chain/leaf continuations with the root.  A
+            high-degree hub remains where the wider graph placed it rather than
+            having an entire unrelated component dragged around an owner.
+          */
+          if (getSemanticNodeDegree(other) <= 2 && !other.data("imageSrc")) {
+            queue.push(other);
+          }
+        });
+    }
+
+    return branch;
+  }
+
+  function translateNodeBranch(nodes, deltaX, deltaY) {
+    if (!nodes?.length || (!deltaX && !deltaY)) {
+      return;
+    }
+
+    nodes.forEach(node => {
+      if (!node || node.empty() || node.removed()) {
+        return;
+      }
+      const position = node.position();
+      node.position({
+        x: position.x + deltaX,
+        y: position.y + deltaY,
+      });
+    });
+  }
+
+  function spreadOwnerDirectBranchesAwayFromConditions(cy = cyRef.current) {
+    if (!cy) {
+      return;
+    }
+
+    const allNodes = cy.nodes()
+      .filter(node => node.visible() && !node.data("graphInternal"))
+      .toArray();
+    const allSegments = getSemanticEdgeSegments(cy);
+
+    cy.nodes()
+      .filter(ownerNode => ownerNode.visible() && !ownerNode.data("graphInternal") &&
+        getConditionsForOwner(ownerNode.id(), cy).length > 0)
+      .forEach(ownerNode => {
+        const conditions = getConditionsForOwner(ownerNode.id(), cy);
+        const ownerPosition = ownerNode.position();
+        const blockedAngles = conditions.map(conditionNode => {
+          const conditionPosition = conditionNode.position();
+          return Math.atan2(
+            conditionPosition.y - ownerPosition.y,
+            conditionPosition.x - ownerPosition.x
+          );
+        });
+
+        const directBranches = ownerNode.connectedEdges()
+          .filter(edge => {
+            if (!edge.visible() || edge.data("graphInternal")) {
+              return false;
+            }
+            if (normaliseEdgeRole(edge.data("edgeRole"), edge.data("isReification") === true ||
+              edge.data("reification") === true) === "reification") {
+              return false;
+            }
+            const other = edge.source().id() === ownerNode.id() ? edge.target() : edge.source();
+            if (!other || other.empty()) {
+              return false;
+            }
+            return normaliseNodeType(other.data("nodeType"), other.data("conditionOwnerId")) !== "conditional";
+          })
+          .toArray()
+          .map(edge => ({
+            edge,
+            node: edge.source().id() === ownerNode.id() ? edge.target() : edge.source(),
+          }))
+          .filter(item => getCorridorNodeMobility(item.node, cy) >= 0.3);
+
+        if (directBranches.length === 0) {
+          return;
+        }
+
+        const assignedAngles = [];
+
+        directBranches.forEach(({ edge, node }) => {
+          const nodePosition = node.position();
+          const dx = nodePosition.x - ownerPosition.x;
+          const dy = nodePosition.y - ownerPosition.y;
+          const currentRadius = Math.max(
+            Math.hypot(dx, dy),
+            getLayoutIdealEdgeLength(edge) * 0.92,
+            185
+          );
+          const currentAngle = Math.atan2(dy, dx);
+          const candidateOffsets = [
+            0,
+            Math.PI / 12, -Math.PI / 12,
+            Math.PI / 6, -Math.PI / 6,
+            Math.PI / 4, -Math.PI / 4,
+            Math.PI / 3, -Math.PI / 3,
+            Math.PI / 2, -Math.PI / 2,
+            Math.PI,
+          ];
+
+          let best = {
+            score: -Infinity,
+            angle: currentAngle,
+            position: nodePosition,
+          };
+
+          candidateOffsets.forEach(offset => {
+            const angle = normaliseAngleRadians(currentAngle + offset);
+            const candidatePosition = {
+              x: ownerPosition.x + Math.cos(angle) * currentRadius,
+              y: ownerPosition.y + Math.sin(angle) * currentRadius,
+            };
+            let score = Math.cos(offset) * 0.7;
+
+            blockedAngles.forEach(blockedAngle => {
+              const gap = angularDistanceRadians(angle, blockedAngle);
+              if (gap < 0.92) {
+                score -= (0.92 - gap) * 7.5;
+              } else {
+                score += Math.min(1.1, gap - 0.92) * 0.35;
+              }
+            });
+
+            assignedAngles.forEach(assignedAngle => {
+              const gap = angularDistanceRadians(angle, assignedAngle);
+              if (gap < 0.48) {
+                score -= (0.48 - gap) * 5.2;
+              }
+            });
+
+            let nearestNodeClearance = Infinity;
+            allNodes.forEach(otherNode => {
+              if (otherNode.id() === ownerNode.id() || otherNode.id() === node.id()) {
+                return;
+              }
+              const otherPosition = otherNode.position();
+              nearestNodeClearance = Math.min(
+                nearestNodeClearance,
+                Math.hypot(otherPosition.x - candidatePosition.x, otherPosition.y - candidatePosition.y)
+              );
+            });
+            if (Number.isFinite(nearestNodeClearance) && nearestNodeClearance < 170) {
+              score -= (170 - nearestNodeClearance) / 34;
+            }
+
+            allSegments.forEach(segment => {
+              if (segment.edge.id() === edge.id() || segment.sourceId === ownerNode.id() ||
+                segment.targetId === ownerNode.id() || segment.sourceId === node.id() ||
+                segment.targetId === node.id()) {
+                return;
+              }
+              if (segmentsProperlyIntersect(
+                ownerPosition,
+                candidatePosition,
+                segment.source,
+                segment.target
+              )) {
+                score -= 3.8;
+              }
+            });
+
+            if (score > best.score) {
+              best = {
+                score,
+                angle,
+                position: candidatePosition,
+              };
+            }
+          });
+
+          const deltaX = best.position.x - nodePosition.x;
+          const deltaY = best.position.y - nodePosition.y;
+          if (Math.hypot(deltaX, deltaY) > 4) {
+            translateNodeBranch(
+              getSimpleDirectBranchNodes(ownerNode, node, cy),
+              deltaX,
+              deltaY
+            );
+          }
+          assignedAngles.push(best.angle);
+        });
+      });
+  }
+
+  function getAngleAtVertex(vertex, firstPoint, secondPoint) {
+    const firstX = firstPoint.x - vertex.x;
+    const firstY = firstPoint.y - vertex.y;
+    const secondX = secondPoint.x - vertex.x;
+    const secondY = secondPoint.y - vertex.y;
+    const firstLength = Math.hypot(firstX, firstY);
+    const secondLength = Math.hypot(secondX, secondY);
+    if (firstLength < 1 || secondLength < 1) {
+      return 0;
+    }
+    const cosine = Math.max(-1, Math.min(1,
+      (firstX * secondX + firstY * secondY) / (firstLength * secondLength)));
+    return Math.acos(cosine);
+  }
+
+  function resolveSharedConditionTargetCorridors(cy = cyRef.current, {
+    minimumAngle = 0.58,
+  } = {}) {
+    if (!cy) {
+      return;
+    }
+
+    /*
+      A frequent dense case is:
+
+          owner --------> shared target
+             \
+              condition -> shared target
+
+      Both edges can be long enough yet still carry their labels through almost
+      exactly the same corridor. Generic spoke spreading cannot fix this because
+      both the semantic owner and the conditional are intentional anchors.
+
+      Rotate the automatic condition around its owner just enough to form a
+      readable triangle at the shared target, then rebuild its private fan.
+    */
+
+    getConditionalNodes(cy).forEach(conditionNode => {
+      if (String(conditionNode.data("conditionPlacement") || "auto").toLowerCase() === "manual") {
+        return;
+      }
+
+      const ownerId = String(conditionNode.data("conditionOwnerId") || "").trim();
+      const ownerNode = ownerId ? cy.getElementById(ownerId) : null;
+      if (!ownerNode || ownerNode.empty()) {
+        return;
+      }
+
+      const localChildIds = new Set(getConditionLocalChildNodes(conditionNode).map(node => node.id()));
+      const sharedChildren = Array.from(getConditionChildIds(conditionNode))
+        .filter(childId => !localChildIds.has(childId))
+        .map(childId => cy.getElementById(childId))
+        .filter(childNode => childNode && !childNode.empty())
+        .filter(childNode => ownerNode.connectedEdges()
+          .filter(edge => edge.visible() && !edge.data("graphInternal"))
+          .some(edge => {
+            const other = edge.source().id() === ownerNode.id() ? edge.target() : edge.source();
+            return other && !other.empty() && other.id() === childNode.id();
+          }));
+
+      if (sharedChildren.length === 0) {
+        return;
+      }
+
+      const ownerPosition = ownerNode.position();
+      const conditionPosition = conditionNode.position();
+      const radius = Math.max(
+        150,
+        Math.hypot(conditionPosition.x - ownerPosition.x, conditionPosition.y - ownerPosition.y)
+      );
+      const baseAngle = Math.atan2(
+        conditionPosition.y - ownerPosition.y,
+        conditionPosition.x - ownerPosition.x
+      );
+
+      const scorePosition = candidatePosition => {
+        let score = 0;
+        sharedChildren.forEach(childNode => {
+          const childPosition = childNode.position();
+          const angle = getAngleAtVertex(childPosition, ownerPosition, candidatePosition);
+          score += Math.min(1.2, angle / minimumAngle) * 4.6;
+          if (angle < minimumAngle) {
+            score -= (minimumAngle - angle) * 9;
+          }
+        });
+
+        cy.nodes()
+          .filter(node => node.visible() && !node.data("graphInternal") &&
+            node.id() !== ownerNode.id() && node.id() !== conditionNode.id())
+          .forEach(node => {
+            const position = node.position();
+            const clearance = Math.hypot(position.x - candidatePosition.x, position.y - candidatePosition.y);
+            if (clearance < 145) {
+              score -= (145 - clearance) / 28;
+            }
+          });
+
+        return score;
+      };
+
+      const offsets = [0, 0.22, -0.22, 0.4, -0.4, 0.62, -0.62, 0.82, -0.82];
+      let bestPosition = conditionPosition;
+      let bestScore = scorePosition(conditionPosition);
+
+      offsets.forEach(offset => {
+        const angle = baseAngle + offset;
+        const candidatePosition = {
+          x: ownerPosition.x + Math.cos(angle) * radius,
+          y: ownerPosition.y + Math.sin(angle) * radius,
+        };
+        const score = scorePosition(candidatePosition) - Math.abs(offset) * 0.45;
+        if (score > bestScore + 0.12) {
+          bestScore = score;
+          bestPosition = candidatePosition;
+        }
+      });
+
+      if (Math.hypot(
+        bestPosition.x - conditionPosition.x,
+        bestPosition.y - conditionPosition.y
+      ) > 3) {
+        conditionNode.position(bestPosition);
+        arrangeConditionLocalBranch(conditionNode, ownerNode, cy);
+        conditionNode.data({
+          conditionOffsetX: bestPosition.x - ownerPosition.x,
+          conditionOffsetY: bestPosition.y - ownerPosition.y,
+        });
+      }
     });
   }
 
@@ -1919,60 +3046,27 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
     if (!cy) {
       return;
     }
-    clearSemanticOwnerCompounds(cy);
 
     /*
-      The old invisible owner -> condition layout edge is unnecessary in
-      semantic mode once both nodes share an actual compound parent.
+      The function name is retained so the existing call sites stay small,
+      but conditional groups no longer use Cytoscape compound parents.
+
+      COSE treats compound bounds as physical bodies. On larger AI graphs a
+      parent containing an owner plus several satellite conditions can become
+      enormous, which then pushes unrelated nodes and components far apart.
+
+      conditionOwnerId is already the semantic source of truth, so TreeNotes
+      can keep the same visual grouping by positioning conditions around the
+      owner without introducing a compound node into the physics simulation.
     */
+
+    clearSemanticOwnerCompounds(cy);
 
     cy.edges()
       .filter(edge => isInternalConditionOwnerEdge(edge))
       .remove();
-    const conditionsByOwner = new Map();
-    getConditionalNodes(cy).forEach(conditionNode => {
-      const ownerId = String(conditionNode.data("conditionOwnerId") || "").trim();
-      if (!ownerId) {
-        return;
-      }
-      const ownerNode = cy.getElementById(ownerId);
-      if (!ownerNode || ownerNode.empty() || ownerNode.id() === conditionNode.id() || ownerNode.data("graphInternal")) {
-        return;
-      }
-      if (!conditionsByOwner.has(ownerId)) {
-        conditionsByOwner.set(ownerId, []);
-      }
-      conditionsByOwner
-        .get(ownerId)
-        .push(conditionNode);
-    });
-    conditionsByOwner.forEach((conditionNodes, ownerId) => {
-      const ownerNode = cy.getElementById(ownerId);
-      if (!ownerNode || ownerNode.empty()) {
-        return;
-      }
-      const groupId = `__semantic-owner-group__${ownerId}`;
-      const ownerGroup = cy.add({
-        group: "nodes",
-        data: {
-          id: groupId,
-          label: "",
-          graphInternal: "semantic-owner-group",
-          semanticOwnerId: ownerId,
-        },
-        selectable: false,
-        grabbable: false,
-      });
-      ownerNode.move({
-        parent: ownerGroup.id(),
-      });
-      conditionNodes.forEach(conditionNode => {
-        conditionNode.move({
-          parent: ownerGroup.id(),
-        });
-      });
-      positionSemanticOwnerGroup(ownerNode, cy);
-    });
+
+    positionAllSemanticOwnerGroups(cy);
     cy.style().update();
   }
 
@@ -2086,7 +3180,8 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
   function isEdgeAnnotationElement(element) {
     const internalType = String(element?.data?.("graphInternal") || "");
     return (internalType === "edge-qualifier-label" || internalType === "edge-adjunct-label" ||
-      internalType === "edge-negative-mark" || internalType === "edge-prerequisite-tag");
+      internalType === "edge-negative-mark" || internalType === "edge-affirmative-mark" ||
+      internalType === "edge-prerequisite-tag");
   }
 
   function clearEdgeAnnotationPresentation(cy = cyRef.current) {
@@ -2138,19 +3233,16 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
             selectable: false,
           });
         }
-        if (classification === "prerequisite") {
-          const badgeColour = edge.data("prerequisiteBadgeColor") || getThemeColour("--graph-node-bg", "#6366F1");
+        if (classification === "affirmative") {
           annotationEdges.push({
             group: "edges",
             data: {
-              id: `__edge-prerequisite-tag__${edge.id()}`,
+              id: `__edge-affirmative__${edge.id()}`,
               source: edge.source().id(),
               target: edge.target().id(),
-              displayLabel: "requires",
-              graphInternal: "edge-prerequisite-tag",
+              displayLabel: "✓",
+              graphInternal: "edge-affirmative-mark",
               semanticEdgeId: edge.id(),
-              prerequisiteBadgeColor: badgeColour,
-              prerequisiteBadgeTextColor: edge.data("prerequisiteBadgeTextColor") || getReadableTextColour(badgeColour),
             },
             selectable: false,
           });
@@ -2180,7 +3272,14 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
     if (!cy) {
       return null;
     }
-    return cy.elements().filter(element => element.visible());
+
+    /*
+      Fit only the semantic graph. Renderer-only annotation edges and legacy
+      compound helpers can otherwise enlarge the calculated bounding box even
+      though the user cannot see them as graph content.
+    */
+
+    return cy.elements().filter(element => element.visible() && !element.data("graphInternal"));
   }
 
   function fitVisibleGraph(cy = cyRef.current, padding = 50) {
@@ -2198,6 +3297,815 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
     }
   }
 
+  function measureLayoutLabelWidth(text, fontSize = 12, fontWeight = 500) {
+    const cleanText = String(text || "").trim();
+    if (!cleanText) {
+      return 0;
+    }
+
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return cleanText.length * fontSize * 0.56;
+    }
+
+    context.font = `${fontWeight} ${fontSize}px Inter, system-ui, sans-serif`;
+    return context.measureText(cleanText).width;
+  }
+
+  function getLayoutNodeRadius(node) {
+    if (!node || node.empty()) {
+      return 58;
+    }
+
+    const width = Number(node.outerWidth()) || 110;
+    const height = Number(node.outerHeight()) || 52;
+
+    /*
+      CoSE works with node centre points. Give every endpoint enough radial
+      clearance for its real rendered body before we reserve any room for
+      relationship / qualifier / adjunct text.
+    */
+
+    return Math.max(38, Math.max(width, height) * 0.56);
+  }
+
+  function getLayoutIdealEdgeLength(edge) {
+    if (!edge || edge.empty()) {
+      return 220;
+    }
+
+    const relationship = String(
+      edge.data("displayLabel") ||
+      getEdgeDisplayLabel(edge) ||
+      edge.data("relationship") ||
+      ""
+    ).trim();
+    const qualifier = String(edge.data("qualifier") || "").trim();
+    const adjunctText = normaliseEdgeAdjuncts(edge.data("adjuncts")).join(" · ");
+    const resolvedRole = edge.data("resolvedEdgeRole") || normaliseEdgeRole(edge.data("edgeRole"));
+    const sourceNode = edge.source();
+    const targetNode = edge.target();
+    const touchesCondition =
+      normaliseNodeType(sourceNode.data("nodeType"), sourceNode.data("conditionOwnerId")) === "conditional" ||
+      normaliseNodeType(targetNode.data("nodeType"), targetNode.data("conditionOwnerId")) === "conditional";
+
+    /*
+      Reserve actual pixel room for the visible annotation lanes.
+
+      The previous implementation capped every edge at about 205 graph units.
+      That is shorter than the combined radii of a medium image node and a
+      normal node, before a single character of edge text is considered.
+    */
+
+    const relationshipWidth = measureLayoutLabelWidth(relationship, 12, resolvedRole === "reification" ? 700 : 500);
+    const qualifierWidth = measureLayoutLabelWidth(qualifier, 9, 400);
+    const adjunctWidth = measureLayoutLabelWidth(adjunctText, 9, 500);
+    const annotationWidth = Math.max(relationshipWidth, qualifierWidth, adjunctWidth);
+
+    const endpointClearance =
+      getLayoutNodeRadius(sourceNode) +
+      getLayoutNodeRadius(targetNode);
+
+    const textCorridor = Math.max(70, Math.min(240, annotationWidth + 34));
+    let idealLength = endpointClearance + textCorridor;
+
+    if (touchesCondition) {
+      idealLength += 24;
+    }
+    if (resolvedRole === "reification") {
+      idealLength += 30;
+    }
+
+    return Math.max(210, Math.min(520, idealLength));
+  }
+
+  function getLayoutNodeRepulsion(node) {
+    if (!node || node.empty()) {
+      return 14000;
+    }
+
+    const width = Number(node.outerWidth()) || 110;
+    const height = Number(node.outerHeight()) || 52;
+    const area = width * height;
+    const sizeAllowance = Math.min(14000, area * 0.18);
+
+    /*
+      Keep normal nodes separated while giving picture nodes extra room.
+      fitVisibleGraph() handles the final viewport scale, so readability wins
+      over forcing every centre point unnaturally close together.
+    */
+
+    return 12500 + sizeAllowance;
+  }
+
+  function getEdgeAnnotationCorridorWidth(edge) {
+    if (!edge || edge.empty()) {
+      return 70;
+    }
+
+    const relationship = String(
+      edge.data("displayLabel") ||
+      getEdgeDisplayLabel(edge) ||
+      edge.data("relationship") ||
+      ""
+    ).trim();
+    const qualifier = String(edge.data("qualifier") || "").trim();
+    const adjunctText = normaliseEdgeAdjuncts(edge.data("adjuncts")).join(" · ");
+    const resolvedRole = edge.data("resolvedEdgeRole") || normaliseEdgeRole(edge.data("edgeRole"));
+
+    return Math.max(
+      70,
+      measureLayoutLabelWidth(relationship, 12, resolvedRole === "reification" ? 700 : 500),
+      measureLayoutLabelWidth(qualifier, 9, 400),
+      measureLayoutLabelWidth(adjunctText, 9, 500)
+    );
+  }
+
+  function getSemanticNodeDegree(node) {
+    if (!node || node.empty()) {
+      return 0;
+    }
+
+    return node.connectedEdges()
+      .filter(edge => edge.visible() && !edge.data("graphInternal"))
+      .length;
+  }
+
+  function getCorridorNodeMobility(node, cy = cyRef.current) {
+    if (!node || node.empty() || node.data("graphInternal")) {
+      return 0;
+    }
+
+    const nodeType = normaliseNodeType(node.data("nodeType"), node.data("conditionOwnerId"));
+    if (nodeType === "conditional") {
+      return 0;
+    }
+
+    /*
+      Owners are anchors for their condition satellites.  Moving an owner as a
+      single endpoint would tear its semantic mini-graph apart, so owner-group
+      spacing is handled by separateSemanticOwnerClusters() instead.
+    */
+
+    if (getConditionsForOwner(node.id(), cy).length > 0) {
+      return 0;
+    }
+
+    const degree = getSemanticNodeDegree(node);
+    let mobility = degree <= 1 ? 1 : degree === 2 ? 0.72 : degree === 3 ? 0.36 : 0.12;
+
+    if (node.data("imageSrc")) {
+      mobility *= 0.28;
+    }
+
+    return mobility;
+  }
+
+  function spreadSemanticEdgeCorridors(cy = cyRef.current, {
+    iterations = 4,
+    minimumAngle = 0.34,
+    maximumAngle = 0.9,
+  } = {}) {
+    if (!cy) {
+      return;
+    }
+
+    /*
+      Label readability is primarily a NODE placement problem.  Two incident
+      edges can have perfectly adequate length yet still paint their text over
+      one another when they leave a hub at nearly the same angle.
+
+      This pass runs only after the force layout has finished.  It opens those
+      crowded spokes by rotating movable low-degree endpoints around the hub,
+      preserving their distance from the hub.  No label is independently moved,
+      and this routine is never run during a drag gesture.
+    */
+
+    const hubs = cy.nodes()
+      .filter(node => node.visible() && !node.data("graphInternal"))
+      .toArray();
+
+    for (let pass = 0; pass < iterations; pass += 1) {
+      let changed = false;
+
+      hubs.forEach(hub => {
+        if (hub.removed()) {
+          return;
+        }
+
+        const hubPosition = hub.position();
+        const incident = hub.connectedEdges()
+          .filter(edge => edge.visible() && !edge.data("graphInternal"))
+          .toArray()
+          .map(edge => {
+            const other = edge.source().id() === hub.id() ? edge.target() : edge.source();
+            const otherPosition = other.position();
+            const dx = otherPosition.x - hubPosition.x;
+            const dy = otherPosition.y - hubPosition.y;
+            return {
+              edge,
+              other,
+              radius: Math.max(1, Math.hypot(dx, dy)),
+              angle: Math.atan2(dy, dx),
+              corridor: getEdgeAnnotationCorridorWidth(edge),
+            };
+          })
+          .sort((first, second) => first.angle - second.angle);
+
+        if (incident.length < 2) {
+          return;
+        }
+
+        for (let index = 0; index < incident.length; index += 1) {
+          const first = incident[index];
+          const second = incident[(index + 1) % incident.length];
+          let secondAngle = second.angle;
+          if (index === incident.length - 1) {
+            secondAngle += Math.PI * 2;
+          }
+
+          const currentGap = secondAngle - first.angle;
+          const midpointRadius = Math.max(70, Math.min(first.radius, second.radius) * 0.5);
+          const textDemand = (first.corridor + second.corridor) * 0.28 + 24;
+          const geometryAngle = Math.min(
+            maximumAngle,
+            Math.max(minimumAngle, textDemand / midpointRadius)
+          );
+
+          if (currentGap >= geometryAngle) {
+            continue;
+          }
+
+          const firstMobility = getCorridorNodeMobility(first.other, cy);
+          const secondMobility = getCorridorNodeMobility(second.other, cy);
+          const mobilityTotal = firstMobility + secondMobility;
+          if (mobilityTotal <= 0.001) {
+            continue;
+          }
+
+          const deficit = Math.min(0.42, geometryAngle - currentGap);
+          const firstShare = firstMobility / mobilityTotal;
+          const secondShare = secondMobility / mobilityTotal;
+          const nextFirstAngle = first.angle - deficit * firstShare;
+          const nextSecondAngle = secondAngle + deficit * secondShare;
+
+          if (firstMobility > 0) {
+            first.other.position({
+              x: hubPosition.x + Math.cos(nextFirstAngle) * first.radius,
+              y: hubPosition.y + Math.sin(nextFirstAngle) * first.radius,
+            });
+            first.angle = nextFirstAngle;
+          }
+
+          if (secondMobility > 0) {
+            const normalisedAngle = nextSecondAngle > Math.PI
+              ? nextSecondAngle - Math.PI * 2
+              : nextSecondAngle;
+            second.other.position({
+              x: hubPosition.x + Math.cos(normalisedAngle) * second.radius,
+              y: hubPosition.y + Math.sin(normalisedAngle) * second.radius,
+            });
+            second.angle = normalisedAngle;
+          }
+
+          changed = true;
+        }
+      });
+
+      if (!changed) {
+        break;
+      }
+    }
+  }
+
+  function countSemanticEdgeCrossings(cy = cyRef.current, onlyEdgeIds = null) {
+    if (!cy) {
+      return 0;
+    }
+
+    const allEdges = cy.edges()
+      .filter(edge => edge.visible() && !edge.data("graphInternal"))
+      .toArray();
+    const primaryEdges = onlyEdgeIds
+      ? allEdges.filter(edge => onlyEdgeIds.has(edge.id()))
+      : allEdges;
+    const seenPairs = new Set();
+    let crossings = 0;
+
+    primaryEdges.forEach(edge => {
+      const sourceId = edge.source().id();
+      const targetId = edge.target().id();
+      const sourcePosition = edge.source().position();
+      const targetPosition = edge.target().position();
+
+      allEdges.forEach(other => {
+        if (edge.id() === other.id()) {
+          return;
+        }
+
+        const pairKey = [edge.id(), other.id()].sort().join("::");
+        if (seenPairs.has(pairKey)) {
+          return;
+        }
+        seenPairs.add(pairKey);
+
+        if (sourceId === other.source().id() || sourceId === other.target().id() ||
+          targetId === other.source().id() || targetId === other.target().id()) {
+          return;
+        }
+
+        if (segmentsProperlyIntersect(
+          sourcePosition,
+          targetPosition,
+          other.source().position(),
+          other.target().position()
+        )) {
+          crossings += 1;
+        }
+      });
+    });
+
+    return crossings;
+  }
+
+  function reduceSemanticEdgeCrossings(cy = cyRef.current, {
+    iterations = 2,
+    angleStep = 0.22,
+  } = {}) {
+    if (!cy) {
+      return;
+    }
+
+    /*
+      CoSE minimises energy, not crossings.  Make a small, deterministic final
+      pass over low-degree nodes only.  For a node involved in a crossing, try
+      a few rotations around one of its neighbours and keep the candidate only
+      when it reduces the number of genuine semantic edge intersections.
+
+      The pass is intentionally bounded and runs only once at layout completion,
+      so it improves topology without bringing back the v4 performance problem.
+    */
+
+    for (let pass = 0; pass < iterations; pass += 1) {
+      let improved = false;
+      const edges = cy.edges()
+        .filter(edge => edge.visible() && !edge.data("graphInternal"))
+        .toArray();
+
+      for (let firstIndex = 0; firstIndex < edges.length; firstIndex += 1) {
+        const first = edges[firstIndex];
+        for (let secondIndex = firstIndex + 1; secondIndex < edges.length; secondIndex += 1) {
+          const second = edges[secondIndex];
+          const ids = new Set([
+            first.source().id(),
+            first.target().id(),
+            second.source().id(),
+            second.target().id(),
+          ]);
+          if (ids.size < 4) {
+            continue;
+          }
+
+          if (!segmentsProperlyIntersect(
+            first.source().position(),
+            first.target().position(),
+            second.source().position(),
+            second.target().position()
+          )) {
+            continue;
+          }
+
+          const candidates = [
+            { node: first.source(), anchor: first.target() },
+            { node: first.target(), anchor: first.source() },
+            { node: second.source(), anchor: second.target() },
+            { node: second.target(), anchor: second.source() },
+          ]
+            .map(candidate => ({
+              ...candidate,
+              mobility: getCorridorNodeMobility(candidate.node, cy),
+            }))
+            .filter(candidate => candidate.mobility >= 0.35)
+            .sort((a, b) => b.mobility - a.mobility);
+
+          if (candidates.length === 0) {
+            continue;
+          }
+
+          const candidate = candidates[0];
+          const node = candidate.node;
+          const anchor = candidate.anchor;
+          const original = { ...node.position() };
+          const anchorPosition = anchor.position();
+          const dx = original.x - anchorPosition.x;
+          const dy = original.y - anchorPosition.y;
+          const radius = Math.max(80, Math.hypot(dx, dy));
+          const baseAngle = Math.atan2(dy, dx);
+          const incidentIds = new Set(
+            node.connectedEdges()
+              .filter(edge => edge.visible() && !edge.data("graphInternal"))
+              .map(edge => edge.id())
+          );
+          const originalCrossings = countSemanticEdgeCrossings(cy, incidentIds);
+          let bestCrossings = originalCrossings;
+          let bestPosition = original;
+
+          [-2, -1, 1, 2].forEach(multiplier => {
+            const angle = baseAngle + angleStep * multiplier;
+            node.position({
+              x: anchorPosition.x + Math.cos(angle) * radius,
+              y: anchorPosition.y + Math.sin(angle) * radius,
+            });
+            const crossings = countSemanticEdgeCrossings(cy, incidentIds);
+            if (crossings < bestCrossings) {
+              bestCrossings = crossings;
+              bestPosition = { ...node.position() };
+            }
+          });
+
+          node.position(bestPosition);
+          if (bestCrossings < originalCrossings) {
+            improved = true;
+          } else {
+            node.position(original);
+          }
+        }
+      }
+
+      if (!improved) {
+        break;
+      }
+    }
+  }
+
+  function placeConditionsFromSavedOffsets(ownerNode, cy = cyRef.current) {
+    if (!cy || !ownerNode || ownerNode.empty()) {
+      return;
+    }
+
+    const ownerPosition = ownerNode.position();
+    getConditionsForOwner(ownerNode.id(), cy).forEach(conditionNode => {
+      const offsetX = Number(conditionNode.data("conditionOffsetX"));
+      const offsetY = Number(conditionNode.data("conditionOffsetY"));
+      if (!Number.isFinite(offsetX) || !Number.isFinite(offsetY)) {
+        return;
+      }
+      conditionNode.position({
+        x: ownerPosition.x + offsetX,
+        y: ownerPosition.y + offsetY,
+      });
+    });
+  }
+
+  function enforceSemanticEdgeClearance(cy = cyRef.current, {
+    iterations = 4,
+    minimumRatio = 0.9,
+  } = {}) {
+    if (!cy) {
+      return;
+    }
+
+    const edges = cy.edges()
+      .filter(edge => edge.visible() && !edge.data("graphInternal"))
+      .toArray();
+
+    for (let pass = 0; pass < iterations; pass += 1) {
+      let moved = false;
+
+      edges.forEach((edge, edgeIndex) => {
+        if (edge.removed()) {
+          return;
+        }
+
+        const source = edge.source();
+        const target = edge.target();
+        const sourcePosition = source.position();
+        const targetPosition = target.position();
+        let dx = targetPosition.x - sourcePosition.x;
+        let dy = targetPosition.y - sourcePosition.y;
+        let distance = Math.hypot(dx, dy);
+
+        if (distance < 0.001) {
+          const angle = (edgeIndex + 1) * 2.399963229728653;
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          distance = 1;
+        }
+
+        const minimumDistance = getLayoutIdealEdgeLength(edge) * minimumRatio;
+        if (distance >= minimumDistance) {
+          return;
+        }
+
+        moved = true;
+        const unitX = dx / distance;
+        const unitY = dy / distance;
+        const deficit = minimumDistance - distance;
+
+        const sourceArea = Math.max(1, source.outerWidth() * source.outerHeight());
+        const targetArea = Math.max(1, target.outerWidth() * target.outerHeight());
+        let sourceMobility = 1 / Math.sqrt(sourceArea);
+        let targetMobility = 1 / Math.sqrt(targetArea);
+
+        const sourceIsCondition = normaliseNodeType(
+          source.data("nodeType"),
+          source.data("conditionOwnerId")
+        ) === "conditional";
+        const targetIsCondition = normaliseNodeType(
+          target.data("nodeType"),
+          target.data("conditionOwnerId")
+        ) === "conditional";
+
+        /*
+          Keep condition satellites close to their semantic owner. When a
+          condition edge is too short, push the proposition node outward much
+          more than the conditional node itself.
+        */
+
+        if (sourceIsCondition && !targetIsCondition) {
+          sourceMobility *= 0.18;
+        } else if (targetIsCondition && !sourceIsCondition) {
+          targetMobility *= 0.18;
+        }
+
+        const mobilityTotal = sourceMobility + targetMobility || 1;
+        const sourceShare = sourceMobility / mobilityTotal;
+        const targetShare = targetMobility / mobilityTotal;
+
+        source.position({
+          x: sourcePosition.x - unitX * deficit * sourceShare,
+          y: sourcePosition.y - unitY * deficit * sourceShare,
+        });
+        target.position({
+          x: targetPosition.x + unitX * deficit * targetShare,
+          y: targetPosition.y + unitY * deficit * targetShare,
+        });
+      });
+
+      if (!moved) {
+        break;
+      }
+    }
+  }
+
+  function resolveSemanticNodeOverlaps(cy = cyRef.current, {
+    padding = 30,
+    iterations = 18,
+  } = {}) {
+    if (!cy) {
+      return;
+    }
+
+    const nodes = cy.nodes()
+      .filter(node => node.visible() && !node.data("graphInternal"))
+      .toArray();
+
+    if (nodes.length < 2) {
+      return;
+    }
+
+    /*
+      TreeNotes performs semantic positioning after CoSE. That post-layout pass
+      can create fresh collisions, especially beside large image nodes. Resolve
+      only those final bounding-box overlaps here.
+    */
+
+    for (let pass = 0; pass < iterations; pass += 1) {
+      let moved = false;
+
+      for (let firstIndex = 0; firstIndex < nodes.length; firstIndex += 1) {
+        const first = nodes[firstIndex];
+        if (first.removed()) {
+          continue;
+        }
+
+        for (let secondIndex = firstIndex + 1; secondIndex < nodes.length; secondIndex += 1) {
+          const second = nodes[secondIndex];
+          if (second.removed()) {
+            continue;
+          }
+
+          const firstPosition = first.position();
+          const secondPosition = second.position();
+          let dx = secondPosition.x - firstPosition.x;
+          let dy = secondPosition.y - firstPosition.y;
+
+          if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
+            const angle = ((firstIndex + 1) * 1.618 + (secondIndex + 1) * 0.73) * Math.PI;
+            dx = Math.cos(angle);
+            dy = Math.sin(angle);
+          }
+
+          const firstHalfWidth = (Number(first.outerWidth()) || 110) / 2;
+          const firstHalfHeight = (Number(first.outerHeight()) || 52) / 2;
+          const secondHalfWidth = (Number(second.outerWidth()) || 110) / 2;
+          const secondHalfHeight = (Number(second.outerHeight()) || 52) / 2;
+
+          const overlapX = firstHalfWidth + secondHalfWidth + padding - Math.abs(dx);
+          const overlapY = firstHalfHeight + secondHalfHeight + padding - Math.abs(dy);
+
+          if (overlapX <= 0 || overlapY <= 0) {
+            continue;
+          }
+
+          moved = true;
+
+          const firstArea = Math.max(1, first.outerWidth() * first.outerHeight());
+          const secondArea = Math.max(1, second.outerWidth() * second.outerHeight());
+          const firstMobility = 1 / Math.sqrt(firstArea);
+          const secondMobility = 1 / Math.sqrt(secondArea);
+          const mobilityTotal = firstMobility + secondMobility;
+          const firstShare = firstMobility / mobilityTotal;
+          const secondShare = secondMobility / mobilityTotal;
+
+          if (overlapX < overlapY) {
+            const direction = dx >= 0 ? 1 : -1;
+            const push = overlapX + 3;
+            first.position("x", firstPosition.x - direction * push * firstShare);
+            second.position("x", secondPosition.x + direction * push * secondShare);
+          } else {
+            const direction = dy >= 0 ? 1 : -1;
+            const push = overlapY + 3;
+            first.position("y", firstPosition.y - direction * push * firstShare);
+            second.position("y", secondPosition.y + direction * push * secondShare);
+          }
+        }
+      }
+
+      if (!moved) {
+        break;
+      }
+    }
+
+    getConditionalNodes(cy).forEach(conditionNode => {
+      if (String(conditionNode.data("conditionPlacement") || "auto").toLowerCase() === "manual") {
+        return;
+      }
+
+      const ownerId = String(conditionNode.data("conditionOwnerId") || "").trim();
+      const ownerNode = ownerId ? cy.getElementById(ownerId) : null;
+      if (!ownerNode || ownerNode.empty()) {
+        return;
+      }
+
+      const conditionPosition = conditionNode.position();
+      const ownerPosition = ownerNode.position();
+      conditionNode.data({
+        conditionOffsetX: conditionPosition.x - ownerPosition.x,
+        conditionOffsetY: conditionPosition.y - ownerPosition.y,
+      });
+    });
+  }
+
+  function runCompactGraphLayout(cy = cyRef.current, {
+    animate = true,
+    padding = 50,
+    randomize = true,
+  } = {}) {
+    if (!cy) {
+      return null;
+    }
+
+    /*
+      Layout only real semantic elements. Qualifier/adjunct/classification
+      annotations are duplicate renderer edges and should never contribute
+      extra forces to COSE.
+    */
+
+    const semanticElements = getVisibleGraphElements(cy);
+    if (!semanticElements || semanticElements.empty()) {
+      return null;
+    }
+
+    const layout = semanticElements.layout({
+      name: "cose",
+      animate: animate ? "end" : false,
+      animationDuration: animate ? 420 : 0,
+      fit: false,
+      padding,
+      randomize,
+
+      /*
+        Edge springs are sized from rendered node bodies and annotation text.
+        Moderate repulsion keeps separate concepts readable, while the final
+        viewport fit prevents the graph from escaping the visible canvas.
+      */
+
+      idealEdgeLength: getLayoutIdealEdgeLength,
+      nodeRepulsion: getLayoutNodeRepulsion,
+      edgeElasticity: () => 95,
+      nodeOverlap: 42,
+      componentSpacing: 68,
+      gravity: 1.15,
+      numIter: 1800,
+      nodeDimensionsIncludeLabels: true,
+    });
+
+    layout.one("layoutstop", () => {
+      cy.resize();
+
+      /*
+        All expensive geometry is now a ONE-TIME post-layout operation.  Batch
+        it so Cytoscape does not repaint after every small correction.  This is
+        the opposite of the retired label-collision system, which repeatedly
+        moved text while the graph was settling and during node dragging.
+      */
+
+      cy.batch(() => {
+        positionAllSemanticOwnerGroups(cy, {
+          arrangeLocalChildren: true,
+        });
+
+        separateSemanticOwnerClusters(cy, {
+          padding: 112,
+          iterations: 16,
+        });
+
+        /*
+          Re-score condition directions once cluster neighbourhoods are known,
+          then reserve angular corridors around busy hubs for edge annotation
+          text.  Nodes move; labels remain in their normal semantic lanes.
+        */
+
+        positionAllSemanticOwnerGroups(cy, {
+          arrangeLocalChildren: true,
+        });
+
+        /*
+          Give each semantic owner two kinds of territory:
+            1. its conditional branch sectors, and
+            2. separate sectors for ordinary direct graph links.
+
+          This keeps a Wetlands -> Pollution style branch from wandering through
+          the Beavers predator-condition group when there is open space elsewhere.
+        */
+
+        spreadOwnerDirectBranchesAwayFromConditions(cy);
+        resolveSharedConditionTargetCorridors(cy, {
+          minimumAngle: 0.6,
+        });
+        separateForeignNodesFromConditionReservations(cy, {
+          padding: 70,
+          iterations: 7,
+        });
+
+        spreadSemanticEdgeCorridors(cy, {
+          iterations: 4,
+          minimumAngle: 0.42,
+          maximumAngle: 0.94,
+        });
+
+        reduceSemanticEdgeCrossings(cy, {
+          iterations: 2,
+          angleStep: 0.24,
+        });
+
+        enforceSemanticEdgeClearance(cy, {
+          iterations: 4,
+          minimumRatio: 1.0,
+        });
+
+        resolveSemanticNodeOverlaps(cy, {
+          padding: 48,
+          iterations: 16,
+        });
+
+        separateSemanticOwnerClusters(cy, {
+          padding: 96,
+          iterations: 8,
+        });
+
+        /*
+          Re-assert the reserved conditional branch envelopes after the generic
+          cleanup passes.  Unlike moving edge labels, this is a small one-time
+          node correction and therefore does not create drag-time lag.
+        */
+
+        separateForeignNodesFromConditionReservations(cy, {
+          padding: 62,
+          iterations: 4,
+        });
+        resolveSharedConditionTargetCorridors(cy, {
+          minimumAngle: 0.56,
+        });
+
+        spreadSemanticEdgeCorridors(cy, {
+          iterations: 2,
+          minimumAngle: 0.4,
+          maximumAngle: 0.84,
+        });
+      });
+
+      syncEdgeLabelGeometry(cy);
+      cy.style().update();
+      fitVisibleGraph(cy, padding);
+    });
+
+    layout.run();
+    return layout;
+  }
+
   function syncConditionalGraphSemantics(cy = cyRef.current) {
     if (!cy) {
       return;
@@ -2205,12 +4113,12 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
 
     /*
       Rebuild renderer-only semantic helpers from the real saved graph.
-      Conditional nodes and their semantic owner share an invisible
-      Cytoscape compound parent; annotation edges are presentation-only.
+      Conditions are positioned relative to their semantic owner without
+      becoming Cytoscape compound children; annotation edges remain
+      presentation-only.
     */
 
     clearEdgeAnnotationPresentation(cy);
-    clearSemanticOwnerCompounds(cy);
     syncSemanticOwnerCompounds(cy);
     const conditionalNodes = getConditionalNodes(cy);
     conditionalNodes.forEach((conditionNode, conditionIndex) => {
@@ -2255,17 +4163,10 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
       edge.data("resolvedEdgeRole", resolvedRole);
       const resolvedClassification = normaliseEdgeClassification(edge.data("classification"));
       edge.data("resolvedClassification", resolvedClassification);
-      if (resolvedClassification === "prerequisite") {
-        const badgeColour = edge.data("badgeColor") || edge.data("edgeColor") ||
-          getThemeColour("--graph-node-bg", "#6366F1");
-        edge.data({
-          prerequisiteBadgeColor: badgeColour,
-          prerequisiteBadgeTextColor: getReadableTextColour(badgeColour),
-        });
-      } else {
-        edge.removeData("prerequisiteBadgeColor");
-        edge.removeData("prerequisiteBadgeTextColor");
-      }
+
+      /* Remove presentation data left behind by the retired prerequisite style. */
+      edge.removeData("prerequisiteBadgeColor");
+      edge.removeData("prerequisiteBadgeTextColor");
       const sourceNode = edge.source();
       const targetNode = edge.target();
       const sourceIsConditional = normaliseNodeType(sourceNode.data("nodeType"), sourceNode.data("conditionOwnerId")) === "conditional";
@@ -2558,20 +4459,6 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
       .style({
         "line-style": "dashed",
       })
-      .selector('edge[resolvedClassification = "prerequisite"]')
-      .style({
-        "line-style": "dashed",
-        "text-rotation": "none",
-        "text-background-color": "data(prerequisiteBadgeColor)",
-        "text-background-opacity": 1,
-        "text-background-padding": 5,
-        "text-background-shape": "roundrectangle",
-        "text-border-color": "data(prerequisiteBadgeColor)",
-        "text-border-width": 1,
-        "text-border-opacity": 1,
-        color: "data(prerequisiteBadgeTextColor)",
-        "font-weight": "650",
-      })
       .selector('edge[graphInternal = "edge-qualifier-label"]')
       .style({
         width: 0.1,
@@ -2615,7 +4502,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
       .style({
         "text-rotation": "none",
       })
-      .selector('edge[graphInternal = "edge-prerequisite-tag"]')
+      .selector('edge[graphInternal = "edge-affirmative-mark"]')
       .style({
         width: 0.1,
         "line-opacity": 0,
@@ -2623,18 +4510,13 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
         "source-arrow-shape": "none",
         opacity: 1,
         label: "data(displayLabel)",
-        color: "data(prerequisiteBadgeTextColor)",
-        "font-size": "8px",
-        "font-weight": "700",
-        "text-margin-y": -15,
+        color: graphTheme.affirmativeMark,
+        "font-size": "16px",
+        "font-weight": "800",
+        "text-margin-y": 0,
         "text-rotation": "none",
-        "text-background-color": "data(prerequisiteBadgeColor)",
-        "text-background-opacity": 1,
-        "text-background-padding": 1,
-        "text-background-shape": "roundrectangle",
-        "text-border-color": "data(prerequisiteBadgeColor)",
-        "text-border-width": 1,
-        "text-border-opacity": 1,
+        "text-outline-color": "#111827",
+        "text-outline-width": 2,
         events: "no",
       })
       .selector('edge[graphInternal = "edge-negative-mark"]')
@@ -2645,7 +4527,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
         "source-arrow-shape": "none",
         opacity: 1,
         label: "data(displayLabel)",
-        color: "#ef4444",
+        color: graphTheme.negativeMark,
         "font-size": "16px",
         "font-weight": "800",
         "text-margin-y": 0,
@@ -2673,12 +4555,6 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
         color: "data(conditionColor)",
       })
 
-      /* Classification wins over user/role line style. */
-
-      .selector('edge[resolvedClassification = "prerequisite"]')
-      .style({
-        "line-style": "dashed",
-      })
       // =====================================================
       // SELECTED EDGE
       // Must come AFTER custom edge styles.
@@ -3083,19 +4959,11 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
         */
 
         if (!cy.elements().empty()) {
-          const finalLayout = cy.layout({
-            name: "cose",
+          runCompactGraphLayout(cy, {
             animate: true,
-            fit: true,
             padding: 50,
-            randomize: false,
+            randomize: true,
           });
-          finalLayout.one("layoutstop", () => {
-            cy.resize();
-            positionAllSemanticOwnerGroups(cy);
-            fitVisibleGraph(cy, 50);
-          });
-          finalLayout.run();
         }
         const semanticNodeCount = cy.nodes().filter(node => !node.data("graphInternal")).length;
         const semanticEdgeCount = cy.edges().filter(edge => !edge.data("graphInternal")).length;
@@ -3122,65 +4990,1110 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
     }
   }
   async function testGraphStreaming() {
-    const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
-    handleGraphStreamEvent({
-      type: "start",
-    });
-    await wait(400);
-    handleGraphStreamEvent({
-      type: "node",
-      data: {
-        id: "stream-programming",
-        label: "Programming",
-      },
-    });
-    await wait(400);
+    const wait = (milliseconds) =>
+      new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-    /*
-      Deliberately send this edge BEFORE Java exists.
+    const emit = async (event, delay = 180) => {
+      handleGraphStreamEvent(event);
+      await wait(delay);
+    };
 
-      This tests our pending-edge system.
-    */
+    const makeMockImage = (title, background, accent) =>
+      `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+          <defs>
+            <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="${background}"/>
+              <stop offset="100%" stop-color="${accent}"/>
+            </linearGradient>
+          </defs>
+          <rect width="800" height="500" fill="url(#bg)"/>
+          <circle cx="150" cy="140" r="90" fill="rgba(255,255,255,0.14)"/>
+          <circle cx="660" cy="360" r="130" fill="rgba(255,255,255,0.10)"/>
+          <text x="400" y="265" text-anchor="middle" fill="white"
+            font-family="Arial, sans-serif" font-size="62" font-weight="700">
+            ${title}
+          </text>
+        </svg>
+      `)}`;
 
-    handleGraphStreamEvent({
-      type: "edge",
-      data: {
-        id: "stream-programming-java",
-        source: "stream-programming",
-        target: "stream-java",
-        relationship: "includes",
+    setLoading(true);
+    setError("");
+
+    try {
+      await emit({ type: "start" }, 250);
+
+      // -----------------------------------------------------
+      // Processing / interpretability events
+      // -----------------------------------------------------
+
+      await emit({
+        type: "processing",
+        data: {
+          step: 1,
+          title: "Source text",
+          description: "Read mock ecosystem notes.",
+          content:
+            "Beavers build dams with mud and sticks. Wetlands absorb floodwater. During drought, ponds retain deeper water. When predators are nearby, beavers retreat to lodges and avoid open banks.",
+        },
+      });
+
+      await emit({
+        type: "processing",
+        data: {
+          step: 2,
+          title: "Extract semantic units",
+          description: "Identify entities, conditions, and relationships.",
+          content:
+            "Entities: Beavers, Dam, Pond, River, Wetlands, Fish, Frogs, Floodwater, Flood Risk, Lodge, Predators, Open Bank. Conditions: heavy rain, drought, predators nearby.",
+        },
+      });
+
+      await emit({
+        type: "processing",
+        data: {
+          step: 7,
+          title: "Classify graph semantics",
+          description: "Assign conditions, classifications, adjuncts, and reification roles.",
+          content:
+            "Includes standard, negative, affirmative, conditional and reification edges.",
+        },
+      });
+
+      // -----------------------------------------------------
+      // Core nodes
+      // -----------------------------------------------------
+
+      await emit({
+        type: "node",
+        data: {
+          id: "beavers",
+          label: "Beavers",
+          nodeType: "standard",
+          shape: "round-rectangle",
+          imageSrc: makeMockImage("BEAVERS", "#315c4c", "#183b32"),
+          imageWidth: 800,
+          imageHeight: 500,
+          imageFit: "cover",
+          imagePositionX: "50%",
+          imagePositionY: "50%",
+          imageSize: "medium",
+          showImageLabel: true,
+        },
+      });
+
+      // Intentionally arrives before Dam to test the pending-edge queue.
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-beavers-dam",
+          source: "beavers",
+          target: "dam",
+          relationship: "build",
+          qualifier: "across streams",
+          adjuncts: ["with mud", "with sticks"],
+          classification: "affirmative",
+          edgeRole: "standard",
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "dam",
+          label: "Dam",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "river",
+          label: "River",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-dam-river",
+          source: "dam",
+          target: "river",
+          relationship: "slows",
+          adjuncts: ["during strong flow"],
+          classification: "",
+          edgeRole: "standard",
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "pond",
+          label: "Pond",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-dam-pond",
+          source: "dam",
+          target: "pond",
+          relationship: "creates",
+          qualifier: "behind the dam",
+          classification: "",
+          edgeRole: "standard",
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "wetlands",
+          label: "Wetlands",
+          nodeType: "standard",
+          shape: "round-rectangle",
+          imageSrc: makeMockImage("WETLAND", "#176b6b", "#1f3f67"),
+          imageWidth: 800,
+          imageHeight: 500,
+          imageFit: "cover",
+          imagePositionX: "50%",
+          imagePositionY: "50%",
+          imageSize: "medium",
+          showImageLabel: true,
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "pollution",
+          label: "Pollution",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-wetlands-pollution",
+          source: "wetlands",
+          target: "pollution",
+          relationship: "filter",
+          qualifier: "before it reaches the river",
+          adjuncts: ["through vegetation", "over time"],
+          classification: "affirmative",
+          edgeRole: "standard",
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "fish",
+          label: "Fish",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "frogs",
+          label: "Frogs",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-pond-fish",
+          source: "pond",
+          target: "fish",
+          relationship: "supports",
+          qualifier: "as habitat",
+          adjuncts: ["among submerged vegetation"],
+          classification: "affirmative",
+          edgeRole: "standard",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-pond-frogs",
+          source: "pond",
+          target: "frogs",
+          relationship: "supports",
+          adjuncts: ["among reeds"],
+          classification: "",
+          edgeRole: "standard",
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "vegetation",
+          label: "Aquatic Vegetation",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "oxygen",
+          label: "Dissolved Oxygen",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-vegetation-oxygen",
+          source: "vegetation",
+          target: "oxygen",
+          relationship: "increases",
+          qualifier: "during daylight",
+          adjuncts: ["through photosynthesis"],
+          classification: "affirmative",
+          edgeRole: "standard",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-pollution-oxygen",
+          source: "pollution",
+          target: "oxygen",
+          relationship: "improves",
+          qualifier: "in heavily polluted water",
+          classification: "negative",
+          edgeRole: "standard",
+        },
+      });
+
+      // -----------------------------------------------------
+      // Conditional group 1: Heavy rain
+      // -----------------------------------------------------
+
+      await emit({
+        type: "node",
+        data: {
+          id: "cond-heavy-rain",
+          label: "When heavy rain falls",
+          nodeType: "conditional",
+          conditionOwnerId: "wetlands",
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "floodwater",
+          label: "Floodwater",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "flood-risk",
+          label: "Flood Risk",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-heavy-absorb",
+          source: "cond-heavy-rain",
+          target: "floodwater",
+          relationship: "absorb",
+          qualifier: "rapidly",
+          adjuncts: ["across the floodplain"],
+          classification: "affirmative",
+          edgeRole: "standard",
+          conditionId: "cond-heavy-rain",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-heavy-risk",
+          source: "cond-heavy-rain",
+          target: "flood-risk",
+          relationship: "reduce",
+          qualifier: "downstream",
+          adjuncts: ["by storing excess water"],
+          classification: "affirmative",
+          edgeRole: "standard",
+          conditionId: "cond-heavy-rain",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-heavy-reification",
+          source: "floodwater",
+          target: "flood-risk",
+          relationship: "therefore reduces",
+          qualifier: "as water is retained",
+          adjuncts: ["during peak rainfall"],
+          classification: "",
+          edgeRole: "reification",
+          conditionId: "cond-heavy-rain",
+          fromEdgeId: "e-heavy-absorb",
+          toEdgeId: "e-heavy-risk",
+        },
+      });
+
+      // -----------------------------------------------------
+      // Conditional group 2: Drought
+      // -----------------------------------------------------
+
+      await emit({
+        type: "node",
+        data: {
+          id: "cond-drought",
+          label: "During drought",
+          nodeType: "conditional",
+          conditionOwnerId: "pond",
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "deep-water",
+          label: "Deeper Water",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-drought-water",
+          source: "cond-drought",
+          target: "deep-water",
+          relationship: "retain",
+          adjuncts: ["in shaded pools", "near the lodge"],
+          classification: "affirmative",
+          edgeRole: "standard",
+          conditionId: "cond-drought",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-drought-fish",
+          source: "cond-drought",
+          target: "fish",
+          relationship: "support",
+          qualifier: "for longer",
+          adjuncts: ["despite lower river flow"],
+          classification: "affirmative",
+          edgeRole: "standard",
+          conditionId: "cond-drought",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-drought-frogs",
+          source: "cond-drought",
+          target: "frogs",
+          relationship: "support",
+          qualifier: "in exposed shallows",
+          adjuncts: ["when pools shrink"],
+          classification: "negative",
+          edgeRole: "standard",
+          conditionId: "cond-drought",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-drought-reification",
+          source: "deep-water",
+          target: "fish",
+          relationship: "helps preserve",
+          adjuncts: ["through the dry period"],
+          classification: "",
+          edgeRole: "reification",
+          conditionId: "cond-drought",
+          fromEdgeId: "e-drought-water",
+          toEdgeId: "e-drought-fish",
+        },
+      });
+
+      // -----------------------------------------------------
+      // Conditional group 3: Predators nearby
+      // -----------------------------------------------------
+
+      await emit({
+        type: "node",
+        data: {
+          id: "predators",
+          label: "Predators",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "lodge",
+          label: "Lodge",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "open-bank",
+          label: "Open Bank",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-beavers-predators",
+          source: "beavers",
+          target: "predators",
+          relationship: "approach",
+          qualifier: "normally",
+          classification: "negative",
+          edgeRole: "standard",
+        },
+      });
+
+      await emit({
+        type: "node",
+        data: {
+          id: "cond-predators",
+          label: "When predators are nearby",
+          nodeType: "conditional",
+          conditionOwnerId: "beavers",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-predators-lodge",
+          source: "cond-predators",
+          target: "lodge",
+          relationship: "retreat to",
+          qualifier: "quickly",
+          adjuncts: ["through the underwater entrance"],
+          classification: "affirmative",
+          edgeRole: "standard",
+          conditionId: "cond-predators",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-predators-bank",
+          source: "cond-predators",
+          target: "open-bank",
+          relationship: "forage on",
+          qualifier: "while exposed",
+          adjuncts: ["near the waterline"],
+          classification: "negative",
+          edgeRole: "standard",
+          conditionId: "cond-predators",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-predators-reification",
+          source: "open-bank",
+          target: "lodge",
+          relationship: "instead favours",
+          classification: "",
+          edgeRole: "reification",
+          conditionId: "cond-predators",
+          fromEdgeId: "e-predators-bank",
+          toEdgeId: "e-predators-lodge",
+        },
+      });
+
+      // One final unrelated branch so layout is not just three stars.
+      await emit({
+        type: "node",
+        data: {
+          id: "insects",
+          label: "Aquatic Insects",
+          nodeType: "standard",
+        },
+      });
+
+      await emit({
+        type: "edge",
+        data: {
+          id: "e-frogs-insects",
+          source: "frogs",
+          target: "insects",
+          relationship: "consume",
+          adjuncts: ["at the pond edge"],
+          classification: "",
+          edgeRole: "standard",
+        },
+      });
+
+      await emit({
+        type: "processing",
+        data: {
+          step: 8,
+          title: "Validate graph elements",
+          description: "Confirm streamed nodes and edges can be resolved.",
+          content:
+            "Mock graph complete. Verify pending edges, conditional placement, classifications, adjuncts, image nodes and reification links.",
+        },
+      });
+
+      await emit({ type: "done" }, 0);
+    } catch (error) {
+      console.error("Mock graph stream failed:", error);
+      handleGraphStreamEvent({
+        type: "error",
+        message: error?.message || "Mock graph stream failed.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+  async function testGraphStreamingHans() {
+    const wait = (milliseconds) =>
+      new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+    const emit = async (event, delay = 180) => {
+      handleGraphStreamEvent(event);
+      await wait(delay);
+    };
+
+    const events = [
+      {
+        type: "start",
       },
-    });
-    await wait(400);
-    handleGraphStreamEvent({
-      type: "node",
-      data: {
-        id: "stream-java",
-        label: "Java",
+
+      // ============================================================
+      // Nodes
+      // ============================================================
+
+      {
+        type: "node",
+        data: {
+          id: "beavers",
+          label: "Beavers",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
       },
-    });
-    await wait(400);
-    handleGraphStreamEvent({
-      type: "node",
-      data: {
-        id: "stream-csharp",
-        label: "C#",
+      {
+        type: "node",
+        data: {
+          id: "dams",
+          label: "Dams",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
       },
-    });
-    await wait(400);
-    handleGraphStreamEvent({
-      type: "edge",
-      data: {
-        id: "stream-programming-csharp",
-        source: "stream-programming",
-        target: "stream-csharp",
-        relationship: "includes",
+      {
+        type: "node",
+        data: {
+          id: "wolves",
+          label: "Wolves",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
       },
-    });
-    await wait(400);
-    handleGraphStreamEvent({
-      type: "done",
-    });
+      {
+        type: "node",
+        data: {
+          id: "it-easily",
+          label: "It easily",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
+      },
+      {
+        type: "node",
+        data: {
+          id: "bears",
+          label: "Bears",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
+      },
+      {
+        type: "node",
+        data: {
+          id: "underwater-entrance",
+          label: "Underwater entrance",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
+      },
+      {
+        type: "node",
+        data: {
+          id: "bark",
+          label: "Bark",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
+      },
+      {
+        type: "node",
+        data: {
+          id: "twigs",
+          label: "Twigs",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
+      },
+      {
+        type: "node",
+        data: {
+          id: "trees",
+          label: "Trees",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
+      },
+      {
+        type: "node",
+        data: {
+          id: "can-break",
+          label: "Can break",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
+      },
+      {
+        type: "node",
+        data: {
+          id: "pond",
+          label: "Pond",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
+      },
+      {
+        type: "node",
+        data: {
+          id: "drains",
+          label: "Drains",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
+      },
+      {
+        type: "node",
+        data: {
+          id: "mud",
+          label: "Mud",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
+      },
+      {
+        type: "node",
+        data: {
+          id: "sticks",
+          label: "Sticks",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
+      },
+      {
+        type: "node",
+        data: {
+          id: "people",
+          label: "People",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
+      },
+      {
+        type: "node",
+        data: {
+          id: "strong-front-teeth",
+          label: "Strong front teeth",
+          nodeType: "standard",
+          conditionOwnerId: "",
+        },
+      },
+
+      // Conditional nodes
+
+      {
+        type: "node",
+        data: {
+          id: "condition-dams-when-the-stream-floods",
+          label: "When the stream floods",
+          nodeType: "conditional",
+          conditionOwnerId: "dams",
+        },
+      },
+      {
+        type: "node",
+        data: {
+          id: "condition-pond-when-the-stream-floods",
+          label: "When the stream floods",
+          nodeType: "conditional",
+          conditionOwnerId: "pond",
+        },
+      },
+      {
+        type: "node",
+        data: {
+          id: "condition-beavers-if-the-dam-leaks",
+          label: "If the dam leaks",
+          nodeType: "conditional",
+          conditionOwnerId: "beavers",
+        },
+      },
+
+      // ============================================================
+      // Standard edges
+      // ============================================================
+
+      {
+        type: "edge",
+        data: {
+          id: "beavers-build-dams",
+          source: "beavers",
+          target: "dams",
+          relationship: "build",
+          qualifier: "",
+          classification: "",
+          edgeRole: "standard",
+          conditionId: "",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: ["across streams"],
+        },
+      },
+
+      {
+        type: "edge",
+        data: {
+          id: "beavers-building-dams",
+          source: "beavers",
+          target: "dams",
+          relationship: "building",
+          qualifier: "",
+          classification: "",
+          edgeRole: "standard",
+          conditionId: "",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: [
+            "across streams",
+            "slows the water down",
+          ],
+        },
+      },
+
+      {
+        type: "edge",
+        data: {
+          id: "wolves-cannot-reach-it-easily",
+          source: "wolves",
+          target: "it-easily",
+          relationship: "cannot reach",
+          qualifier: "",
+          classification: "negative",
+          edgeRole: "standard",
+          conditionId: "",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: [],
+        },
+      },
+
+      {
+        type: "edge",
+        data: {
+          id: "bears-cannot-reach-it-easily",
+          source: "bears",
+          target: "it-easily",
+          relationship: "cannot reach",
+          qualifier: "",
+          classification: "negative",
+          edgeRole: "standard",
+          conditionId: "",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: [],
+        },
+      },
+
+      {
+        type: "edge",
+        data: {
+          id: "beavers-have-underwater-entrance",
+          source: "beavers",
+          target: "underwater-entrance",
+          relationship: "have",
+          qualifier: "",
+          classification: "",
+          edgeRole: "standard",
+          conditionId: "",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: [],
+        },
+      },
+
+      {
+        type: "edge",
+        data: {
+          id: "beavers-having-underwater-entrance",
+          source: "beavers",
+          target: "underwater-entrance",
+          relationship: "having",
+          qualifier: "",
+          classification: "",
+          edgeRole: "standard",
+          conditionId: "",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: [
+            "keeps the family warm in winter",
+          ],
+        },
+      },
+
+      {
+        type: "edge",
+        data: {
+          id: "beavers-eat-bark",
+          source: "beavers",
+          target: "bark",
+          relationship: "eat",
+          qualifier: "",
+          classification: "",
+          edgeRole: "standard",
+          conditionId: "",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: [],
+        },
+      },
+
+      {
+        type: "edge",
+        data: {
+          id: "beavers-eat-twigs",
+          source: "beavers",
+          target: "twigs",
+          relationship: "eat",
+          qualifier: "",
+          classification: "",
+          edgeRole: "standard",
+          conditionId: "",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: [],
+        },
+      },
+
+      {
+        type: "edge",
+        data: {
+          id: "beavers-cut-down-trees",
+          source: "beavers",
+          target: "trees",
+          relationship: "cut down",
+          qualifier: "",
+          classification: "",
+          edgeRole: "standard",
+          conditionId: "",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: [
+            "with strong front teeth",
+          ],
+        },
+      },
+
+      // ============================================================
+      // Conditional edges
+      // ============================================================
+
+      {
+        type: "edge",
+        data: {
+          id: "condition-dams-when-the-stream-floods-can-break",
+          source: "condition-dams-when-the-stream-floods",
+          target: "can-break",
+          relationship: "",
+          qualifier: "",
+          classification: "",
+          edgeRole: "standard",
+          conditionId: "condition-dams-when-the-stream-floods",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: [],
+        },
+      },
+
+      {
+        type: "edge",
+        data: {
+          id: "condition-pond-when-the-stream-floods-drains",
+          source: "condition-pond-when-the-stream-floods",
+          target: "drains",
+          relationship: "",
+          qualifier: "",
+          classification: "",
+          edgeRole: "standard",
+          conditionId: "condition-pond-when-the-stream-floods",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: [],
+        },
+      },
+
+      {
+        type: "edge",
+        data: {
+          id: "condition-beavers-if-the-dam-leaks-patch-it-with-mud",
+          source: "condition-beavers-if-the-dam-leaks",
+          target: "mud",
+          relationship: "patch it with",
+          qualifier: "",
+          classification: "",
+          edgeRole: "standard",
+          conditionId: "condition-beavers-if-the-dam-leaks",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: [],
+        },
+      },
+
+      {
+        type: "edge",
+        data: {
+          id: "condition-beavers-if-the-dam-leaks-patch-it-with-sticks",
+          source: "condition-beavers-if-the-dam-leaks",
+          target: "sticks",
+          relationship: "patch it with",
+          qualifier: "",
+          classification: "",
+          edgeRole: "standard",
+          conditionId: "condition-beavers-if-the-dam-leaks",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: [],
+        },
+      },
+
+      // ============================================================
+      // Remaining standard edges
+      // ============================================================
+
+      {
+        type: "edge",
+        data: {
+          id: "beavers-cause-problems-for-people",
+          source: "beavers",
+          target: "people",
+          relationship: "cause problems for",
+          qualifier: "",
+          classification: "",
+          edgeRole: "standard",
+          conditionId: "",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: [],
+        },
+      },
+
+      {
+        type: "edge",
+        data: {
+          id: "beavers-strong-front-teeth",
+          source: "beavers",
+          target: "strong-front-teeth",
+          relationship: "",
+          qualifier: "",
+
+          // Preserved from Hans's original stream.
+          // Current TreeNotes may normalise this to a neutral edge.
+          classification: "possession",
+
+          edgeRole: "standard",
+          conditionId: "",
+          fromEdgeId: "",
+          toEdgeId: "",
+          adjuncts: [],
+        },
+      },
+
+      // ============================================================
+      // Reification edge
+      // ============================================================
+
+      {
+        type: "edge",
+        data: {
+          id: "reif-beavers-have-underwater-entrance-allowing-beavers-having-underwater-entrance",
+          source: "underwater-entrance",
+          target: "underwater-entrance",
+          relationship: "allowing",
+          qualifier: "",
+          classification: "",
+          edgeRole: "reification",
+          conditionId: "",
+          fromEdgeId: "beavers-have-underwater-entrance",
+          toEdgeId: "beavers-having-underwater-entrance",
+          adjuncts: [],
+        },
+      },
+
+      // Actual events replayed above:
+      // 19 nodes, 16 valid edges.
+      {
+        type: "done",
+        nodes: 19,
+        edges: 16,
+      },
+    ];
+
+    for (const event of events) {
+      await emit(
+        event,
+        event.type === "done" ? 0 : 180
+      );
+    }
   }
   // =========================================================
   // CYTOSCAPE INITIALISATION
@@ -3576,22 +6489,6 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
           },
         },
         {
-          selector: 'edge[resolvedClassification = "prerequisite"]',
-          style: {
-            "line-style": "dashed",
-            "text-rotation": "none",
-            "text-background-color": "data(prerequisiteBadgeColor)",
-            "text-background-opacity": 1,
-            "text-background-padding": 5,
-            "text-background-shape": "roundrectangle",
-            "text-border-color": "data(prerequisiteBadgeColor)",
-            "text-border-width": 1,
-            "text-border-opacity": 1,
-            color: "data(prerequisiteBadgeTextColor)",
-            "font-weight": "650",
-          },
-        },
-        {
           selector: 'edge[graphInternal = "edge-qualifier-label"]',
           style: {
             width: 0.1,
@@ -3617,7 +6514,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
           },
         },
         {
-          selector: 'edge[graphInternal = "edge-prerequisite-tag"]',
+          selector: 'edge[graphInternal = "edge-affirmative-mark"]',
           style: {
             width: 0.1,
             "line-opacity": 0,
@@ -3625,18 +6522,13 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
             "source-arrow-shape": "none",
             opacity: 1,
             label: "data(displayLabel)",
-            color: "data(prerequisiteBadgeTextColor)",
-            "font-size": "8px",
-            "font-weight": "700",
-            "text-margin-y": -15,
+            color: graphTheme.affirmativeMark,
+            "font-size": "16px",
+            "font-weight": "800",
+            "text-margin-y": 0,
             "text-rotation": "none",
-            "text-background-color": "data(prerequisiteBadgeColor)",
-            "text-background-opacity": 1,
-            "text-background-padding": 1,
-            "text-background-shape": "roundrectangle",
-            "text-border-color": "data(prerequisiteBadgeColor)",
-            "text-border-width": 1,
-            "text-border-opacity": 1,
+            "text-outline-color": "#111827",
+            "text-outline-width": 2,
             events: "no",
           },
         },
@@ -3649,7 +6541,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
             "source-arrow-shape": "none",
             opacity: 1,
             label: "data(displayLabel)",
-            color: "#ef4444",
+            color: graphTheme.negativeMark,
             "font-size": "16px",
             "font-weight": "800",
             "text-margin-y": 0,
@@ -3679,12 +6571,6 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
             "line-color": "data(conditionColor)",
             "target-arrow-color": "data(conditionColor)",
             color: "data(conditionColor)",
-          },
-        },
-        {
-          selector: 'edge[resolvedClassification = "prerequisite"]',
-          style: {
-            "line-style": "dashed",
           },
         },
 
@@ -4123,8 +7009,11 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
     cy.on("zoom pan", syncRenameOverlay);
     cy.on("zoom pan", syncRelationshipOverlay);
     cy.on("drag position", "node", () => {
+      /*
+        Keep overlays attached during drag, but do not run any graph-wide
+        geometry optimiser here.  Dragging must remain a cheap interaction.
+      */
       syncRelationshipOverlay();
-      syncEdgeLabelGeometry(cy);
     });
 
     /*
@@ -4145,7 +7034,11 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
 
       if (!event.target.data("graphInternal") &&
         normaliseNodeType(event.target.data("nodeType"), event.target.data("conditionOwnerId")) !== "conditional") {
-        positionSemanticOwnerGroup(event.target, cy);
+        /*
+          Owner drag uses the already chosen condition offsets.  Crossing-aware
+          slot scoring is deliberately reserved for automatic layout only.
+        */
+        placeConditionsFromSavedOffsets(event.target, cy);
       }
     });
     cy.on("free", "node", (event) => {
@@ -4182,7 +7075,7 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
           at their saved automatic/manual offsets around it.
         */
 
-        positionSemanticOwnerGroup(releasedNode, cy);
+        placeConditionsFromSavedOffsets(releasedNode, cy);
       }
       syncRelationshipOverlay();
       syncEdgeLabelGeometry(cy);
@@ -4281,28 +7174,23 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
     }
 
     /*
-      Saved graphs retain their positions.
-
-      Fresh AI graphs get automatically arranged. Renderer-only semantic
-      owner compounds are rebuilt from conditionOwnerId before layout.
+      Saved graphs retain their exact user positions. Fresh AI graphs use the
+      same compact semantic-only COSE pass as streamed generation.
     */
 
-    const layout = cy.layout(hasSavedPositions ? {
-        name: "preset",
-        fit: true,
-        padding: 50,
-      } : {
-        name: "cose",
-        animate: true,
-        fit: true,
-        padding: 50,
-      });
-    layout.one("layoutstop", () => {
+    if (hasSavedPositions) {
       cy.resize();
       positionAllSemanticOwnerGroups(cy);
+      syncEdgeLabelGeometry(cy);
       fitVisibleGraph(cy, 50);
+      return;
+    }
+
+    runCompactGraphLayout(cy, {
+      animate: true,
+      padding: 50,
+      randomize: true,
     });
-    layout.run();
   }, [graphData]);
 
   function addSelectedTextNode() {
@@ -4356,10 +7244,9 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
         };
 
         /*
-          Cytoscape stores compound membership in data.parent. The invisible
-          semantic owner group is presentation-only, so never persist that
-          renderer-only ID in graph_json. conditionOwnerId remains the semantic
-          source of truth and rebuilds the grouping when the graph loads.
+          Older builds could attach renderer-only semantic compound parents.
+          Never persist those IDs in graph_json. conditionOwnerId remains the
+          semantic source of truth for owner-relative condition placement.
         */
 
         delete data.parent;
@@ -6936,13 +9823,13 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
                   label: "Negative",
                 },
                 {
-                  value: "prerequisite",
-                  label: "Prerequisite",
+                  value: "affirmative",
+                  label: "Affirmative",
                 },
               ]} statusText={{
                 normal: "Normal",
                 negative: "Negative",
-                prerequisite: "Prerequisite",
+                affirmative: "Affirmative",
               }[normaliseEdgeClassification(edgePropertiesDraft.classification)]} onChange={(nextValue) => setEdgePropertiesDraft(current => ({
                 ...current,
                 classification: nextValue,
@@ -7150,15 +10037,15 @@ const GraphPanel = forwardRef(function GraphPanel({ rawNotes, selectedText, addN
                 </>)}
 
                 {(singleSelectedEdge.classification === "negative" || singleSelectedEdge.classification ===
-                  "prerequisite" || singleSelectedEdge.edgeRole ===
+                  "affirmative" || singleSelectedEdge.edgeRole ===
                   "reification") && (<div className="graph-selection-badges">
 
-                    {singleSelectedEdge.classification === "negative" && (<span className="graph-selection-badge">
+                    {singleSelectedEdge.classification === "negative" && (<span className="graph-selection-badge graph-selection-badge-negative">
                         Negative
                       </span>)}
 
-                    {singleSelectedEdge.classification === "prerequisite" && (<span className="graph-selection-badge">
-                        Prerequisite
+                    {singleSelectedEdge.classification === "affirmative" && (<span className="graph-selection-badge graph-selection-badge-affirmative">
+                        Affirmative
                       </span>)}
 
                     {singleSelectedEdge.edgeRole === "reification" && (<span className="graph-selection-badge">

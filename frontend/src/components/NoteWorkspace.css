@@ -3789,6 +3789,46 @@
   letter-spacing: 0.02em;
 }
 
+.note-workspace .graph-selection-badge-negative {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--status-error) 70%,
+      var(--border-primary)
+    );
+
+  background:
+    color-mix(
+      in srgb,
+      var(--status-error) 10%,
+      transparent
+    );
+
+  color:
+    var(--status-error);
+}
+
+
+.note-workspace .graph-selection-badge-affirmative {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--status-success) 70%,
+      var(--border-primary)
+    );
+
+  background:
+    color-mix(
+      in srgb,
+      var(--status-success) 10%,
+      transparent
+    );
+
+  color:
+    var(--status-success);
+}
+
+
 /* ================================================== */
 /* Link Mode Overlay                                  */
 /* ================================================== */
